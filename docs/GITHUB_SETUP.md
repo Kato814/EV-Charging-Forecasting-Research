@@ -62,7 +62,7 @@ git remote -v
 
 ```text
 v0.1.0-seed
-v0.3.0-round2-review
+v0.4.0-round2-extension
 ```
 
 ## 推荐 GitHub 设置

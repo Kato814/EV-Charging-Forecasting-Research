@@ -2,9 +2,9 @@
 
 面向**电动汽车充电功率/需求预测、概率预测、分布外泛化、冷启动、潜在需求识别、预测—优化耦合及可信联邦学习**的长期研究库。
 
-> 当前版本：`v0.3.0-round2-review`
+> 当前版本：`v0.4.0-round2-extension`
 > 最近核验日期：2026-08-27
-> 状态：完成两轮证据审查；主线进入最小门控实验设计，尚未冻结最终论文题目。
+> 状态：完成第二轮及两组扩展证据审查；启动结构 OOD、运营车队和 performative 三条门控，尚未冻结最终论文题目。
 
 ## 这个仓库解决什么问题
 
@@ -19,31 +19,37 @@
 
 ## 当前内容
 
-- 正式同行评议/高可信条目：**46** 篇；
-- 前沿观察条目（预印本/工作论文）：**14** 篇；
-- 通用及相邻方法基础：**33** 篇；
-- 第二轮最近邻证据记录：**18** 项；
-- 候选数据集/仿真器：**10** 个，其中 **4** 个完成用途级字段审计；
-- 相关开源仓库：**15** 个；
-- 结构化重点阅读笔记：**17** 份；
-- 第二轮候选方向：**8** 条；
+- 正式同行评议/高可信条目：**61** 篇；
+- 前沿观察条目（预印本/工作论文）：**18** 篇；
+- 通用及相邻方法基础：**44** 篇；
+- 第二轮直接证据：**32** 项；反馈、结构变化与运营车队扩展证据：**21** 项；
+- 第二轮检索簇：**11** 组；扩展检索簇：**8** 组；
+- 候选数据集/仿真器：**14** 个；用途级字段审计 **10** 条，详细 Markdown 审计 **8** 份；
+- 相关开源仓库：**22** 个；
+- 结构化重点阅读笔记：**33** 份；
+- 第二轮宽域候选方向：**13** 条；进一步扩展评分方向：**8** 条；
 - 已配置离线校验脚本和 GitHub Actions 工作流。
 
-## 第二轮核心结论
+## 第二轮扩展核心结论
 
-第二轮将检索范围扩展到时间序列 OOD 泛化、选择性保形预测、冷启动与检索适配、供给删失与潜在需求、学习增强调度、因果策略响应及异构联邦预测。当前判断为：
+本轮审查了严格 OOD 与校准、极端峰值、服务删失、数据可靠性、仿真—真实迁移、决策诱导分布变化、网络扩建反馈、逆向偏好学习以及运营车队场站。当前判断为：
 
-1. **推进主线**：支持域感知的新站点/新城市选择性概率预测，并将原型检索和冷启动适配并入同一机制；
-2. **只做可识别性门控**：潜在需求—服务功率—流失需求联合预测；
-3. **作为第二阶段**：不可信预测下的学习增强鲁棒调度；
-4. **暂缓**：策略条件因果预测与可信异构联邦；
-5. **不作为独立主线**：基础模型替换、扩散模型替换、普通 OOD 模块、普通保形校准、普通聚类蒸馏式联邦。
+1. **主门控**：网络扩建下的支持域感知结构 OOD 概率预测。必须联合描述新旧站需求再分配，并允许拒绝/回退；
+2. **平行门控**：运营车队的路线—返回—能耗联合概率预测与鲁棒场站调度；
+3. **高风险门控**：决策诱导分布变化下的 performative 闭环预测。先验证行动—需求响应是否可识别；
+4. **数据硬门控**：排队、故障、放弃和站间替代下的服务可实现负荷；
+5. **横向评价模块**：峰值/尾部风险、整轨迹覆盖、选择性预警和安全回退；
+6. **继续暂缓**：逆向灵活性、完整决策聚焦场景学习及可信联邦集成。
 
 详见：
 
-- [`research/evidence_synthesis_v0.3.md`](research/evidence_synthesis_v0.3.md)
-- [`research/decision_recommendation_v0.3.md`](research/decision_recommendation_v0.3.md)
+- [`research/evidence_synthesis_v0.4.md`](research/evidence_synthesis_v0.4.md)
+- [`research/decision_recommendation_v0.4.md`](research/decision_recommendation_v0.4.md)
+- [`research/extended_direction_landscape_v0.4.md`](research/extended_direction_landscape_v0.4.md)
+- [`research/expanded_candidate_directions_v0.4.md`](research/expanded_candidate_directions_v0.4.md)
 - [`research/round2_direction_scorecard.csv`](research/round2_direction_scorecard.csv)
+- [`research/round2b_direction_scorecard.csv`](research/round2b_direction_scorecard.csv)
+- [`research/minimum_gate_plan_v0.4.md`](research/minimum_gate_plan_v0.4.md)
 - [`research/novelty_red_lines.md`](research/novelty_red_lines.md)
 
 ## 重要边界
@@ -53,15 +59,16 @@
 - “未检索到”不等于“文献空白”；任何创新主张仍需完成系统检索、全文核验和最近邻对比。
 - 仓库不收录未经许可的付费 PDF。合法全文管理规则见 [`docs/COPYRIGHT_AND_ACCESS.md`](docs/COPYRIGHT_AND_ACCESS.md)。
 - 数据集尚未全部下载并固定版本。字段可用性、缺失率、单位和许可必须以实际文件审计为准。
+- 半合成网络扩建、队列或行为反馈只能用于门控和机制压力测试，不能替代独立真实验证。
 - 研究方向须通过最小门控实验后才能冻结。
 
 ## 推荐使用顺序
 
-1. 阅读 [`docs/ROUND2_REVIEW_PROTOCOL.md`](docs/ROUND2_REVIEW_PROTOCOL.md)；
-2. 查看 [`literature/round2_evidence_matrix.csv`](literature/round2_evidence_matrix.csv)；
+1. 阅读 [`docs/ROUND2_REVIEW_PROTOCOL.md`](docs/ROUND2_REVIEW_PROTOCOL.md)、[`docs/ROUND2_EXTENSION_PROTOCOL.md`](docs/ROUND2_EXTENSION_PROTOCOL.md) 与 [`docs/ROUND2B_EXTENSION_PROTOCOL.md`](docs/ROUND2B_EXTENSION_PROTOCOL.md)；
+2. 查看 [`literature/round2_evidence_matrix.csv`](literature/round2_evidence_matrix.csv) 与 [`literature/round2b_evidence_matrix.csv`](literature/round2b_evidence_matrix.csv)；
 3. 按 [`literature/reading_queue.md`](literature/reading_queue.md) 完成 P0 全文审读；
 4. 审计 [`datasets/dataset_catalog.csv`](datasets/dataset_catalog.csv) 与 [`datasets/field_audit.csv`](datasets/field_audit.csv)；
-5. 执行 [`research/evidence_synthesis_v0.3.md`](research/evidence_synthesis_v0.3.md) 中的 GATE-A 至 GATE-D；
+5. 执行 [`research/minimum_gate_plan_v0.4.md`](research/minimum_gate_plan_v0.4.md) 中的 Gate S、F、P 和 C；
 6. 通过 [`research/decision_log.md`](research/decision_log.md) 冻结首个实验协议；
 7. 在 `code/` 中实现无泄漏基线和最小门控实验。
 

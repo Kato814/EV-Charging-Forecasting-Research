@@ -5,5 +5,5 @@ type: software
 authors:
   - family-names: Research Team
 date-released: 2026-08-27
-version: 0.3.0
+version: 0.4.0
 license: MIT

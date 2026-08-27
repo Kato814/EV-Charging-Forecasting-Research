@@ -78,3 +78,15 @@
 - 状态：Accepted for gate only
 - 决策：没有真实干预数据或外部现场效应约束时，不将仿真闭环结果作为主论文证据。
 - 原因：通用 performative 理论和 EV 决策依赖博弈已有先行工作；预设响应函数会主导结论。
+
+## 2026-08-27 — Pivot from OOD-centered direction to problem-first forecasting gaps
+
+**Decision:** Do not use distribution-outside generalization, unseen cities or unseen stations as the current paper core. Retain them only as optional robustness checks.
+
+**Reason:** These settings are evaluation boundaries rather than a sufficiently specific forecasting problem for the present research objective. Direction selection must begin from a concrete failure in charging-power/load prediction and subtract the nearest prior art.
+
+**New primary gate:** rolling probabilistic station-power forecasting that decomposes currently active sessions and not-yet-arrived sessions.
+
+**Parallel gates:** weak-label power-curve reconstruction; structured peak timing–magnitude–ramp forecasting.
+
+**Status:** no final title or architecture frozen; all candidates remain subject to `minimum_gate_plan_v0.5.md`.

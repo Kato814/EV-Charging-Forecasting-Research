@@ -1,5 +1,7 @@
 # 最小门控实验计划 v0.4
 
+> **历史版本提示：** 本文件记录Round 2/2B当时的方向判断。自`v0.5.0-problem-gap-review`起，OOD/未见城市/未见站点仅作为可选验证，不再作为当前论文核心。当前决策以`research/decision_recommendation_v0.5.md`为准。
+
 ## Gate S — 网络扩建与结构 OOD
 
 ### 数据

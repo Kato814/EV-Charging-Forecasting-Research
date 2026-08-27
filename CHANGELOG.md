@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0-problem-gap-review — 2026-08-27
+
+- Corrected the active research policy: OOD, unseen-city and unseen-station settings are retained only as optional validation and are no longer the paper core;
+- Completed a problem-first third-round review focused on issue-time information, active sessions, future arrivals, peak timing, weak power labels and control-contaminated targets;
+- Added 6 peer-reviewed EV papers, 1 frontier peak-method record and 1 adjacent method foundation;
+- Added 14 Round 3 evidence records, 8 search clusters and 8 problem-specific candidate directions;
+- Set “active-session + future-arrival dual-source rolling probabilistic station-power forecasting” as the primary gate;
+- Added weak-label power-curve reconstruction and joint peak timing–magnitude–ramp forecasting as parallel/fallback gates;
+- Added the DESL-EPFL Level 3 dataset and repository audit;
+- Updated novelty red lines, roadmap, decision log, validator and manifest;
+- No final paper title or neural architecture has been frozen.
+
 ## 0.4.0-round2-extension — 2026-08-27
 
 - 完成第二轮及两组扩展审查，覆盖严格 OOD、选择性校准、极端峰值、站点拥堵与可用性、数据异常、早期会话预测、仿真—真实迁移、performative prediction、现场价格干预、网络扩建反馈、逆向偏好学习和运营车队场站；

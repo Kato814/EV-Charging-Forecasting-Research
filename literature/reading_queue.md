@@ -2,7 +2,7 @@
 
 由 `scripts/build_reading_queue.py` 自动生成。正式全文阅读优先于继续扩大检索数量。
 
-## P0 — 正式文献（39）
+## P0 — 正式文献（44）
 
 - [ ] **P0054** (2026) Reducing peak load from electric vehicles through grid tariffs: Evidence from a randomized field experiment — `randomized tariff intervention/peak response` — evidence-extracted
 - [ ] **P0052** (2026) Integrated and agent-based charging demand prediction considering cost aware and adaptive charging behavior — `agent-based demand/policy response/dynamic tariffs` — evidence-extracted
@@ -17,6 +17,7 @@
 - [ ] **P0034** (2026) Integrated deep learning framework for electric vehicles' flexibility forecasting and optimal dispatch — `flexibility/forecast-to-dispatch` — to-read-full
 - [ ] **P0012** (2026) A city-scale dataset of public electric vehicle charging transactions and infrastructure — `dataset/city scale` — to-read-full
 - [ ] **P0003** (2026) A Review of Electric Vehicle Charging Demand Forecasting Models by Prediction Horizon: A Multi-Criteria Decision Analysis Approach — `review` — to-read-full
+- [ ] **P0065** (2025) Quantifying the Uncertainty of Electric Vehicle Charging with Probabilistic Load Forecasting — `direct/bottom-up/adaptive probabilistic EV load forecasting` — evidence-extracted
 - [ ] **P0044** (2025) Dynamic Incentives for Electric Vehicles Charging at Supermarket Stations: Causal Insights on Demand Flexibility — `causal response/dynamic incentives` — evidence-extracted
 - [ ] **P0039** (2025) Coherent Hierarchical Probabilistic Forecasting of Electric Vehicle Charging Demand — `hierarchical coherence/probabilistic forecasting` — evidence-extracted
 - [ ] **P0037** (2025) Online decoupling feature framework for optimal probabilistic load forecasting in concept drift environments — `concept drift/probabilistic forecasting` — to-read-full
@@ -27,6 +28,7 @@
 - [ ] **P0007** (2025) A City-scale and Harmonized Dataset for Global Electric Vehicle Charging Demand Analysis — `dataset/OOD/federated` — to-read-full
 - [ ] **P0006** (2025) UrbanEV: An Open Benchmark Dataset for Urban Electric Vehicle Charging Demand Prediction — `dataset/spatiotemporal` — to-read-full
 - [ ] **P0002** (2025) Machine Learning-Based Electric Vehicle Charging Demand Forecasting: A Systematized Literature Review — `review` — to-read-full
+- [ ] **P0064** (2024) Joint Occupancy and Load Profile Prediction for Electric Vehicle Charging Stations — `joint occupancy-load prediction` — evidence-extracted
 - [ ] **P0061** (2024) An integrated model of electric bus energy consumption and optimised depot charging — `electric-bus route energy/depot charging integration` — evidence-extracted
 - [ ] **P0059** (2024) Solving Decision-Dependent Games by Learning from Feedback — `decision-dependent stochastic games/feedback learning/EV charging market` — evidence-extracted
 - [ ] **P0031** (2024) DiffCharge: Generating EV Charging Scenarios via a Denoising Diffusion Model — `diffusion/scenario generation` — to-read-full
@@ -34,18 +36,22 @@
 - [ ] **P0020** (2024) A physics-informed and attention-based graph learning approach for regional electric vehicle charging demand prediction — `physics-informed/spatiotemporal graph` — to-read-full
 - [ ] **P0017** (2024) Electric vehicles load forecasting for day-ahead market participation using machine and deep learning methods — `day-ahead/market` — to-read-full
 - [ ] **P0001** (2024) A Comprehensive Survey of Electric Vehicle Charging Demand Forecasting Techniques — `review` — to-read-full
+- [ ] **P0063** (2023) Data-Driven, Short-Term Prediction of Charging Station Occupation — `real-time occupation/remaining-duration prediction` — evidence-extracted
 - [ ] **P0056** (2023) A joint machine learning and optimization approach for incremental expansion of electric vehicle charging infrastructure — `network expansion/behavioral feedback/predict-optimize` — evidence-extracted
 - [ ] **P0043** (2023) Mind the Gap: Modelling Difference between Censored and Uncensored Electric Vehicle Charging Demand — `latent demand/censoring/queue competition` — evidence-extracted
 - [ ] **P0019** (2023) Electric vehicle charging demand forecasting using a heterogeneous spatio-temporal graph convolutional network — `spatiotemporal graph` — to-read-full
+- [ ] **P0066** (2022) Assessing the influence of electric vehicle charging profile modelling methods — `charging-profile model error/measurement-based nonlinear profiles` — evidence-extracted
 - [ ] **P0032** (2022) Scalable probabilistic estimates of electric vehicle charging given observed driver behavior — `behavior/probabilistic` — to-read-full
 - [ ] **P0015** (2022) A benchmark of electric vehicle load and occupancy models for day-ahead forecasting on open charging session data — `benchmark/day-ahead` — to-read-full
+- [ ] **P0067** (2021) Short-term load forecasting at electric vehicle charging sites using a multivariate multi-step long short-term memory: A case study from Finland — `multi-step station-load forecasting/peak error` — evidence-extracted
 - [ ] **P0060** (2021) Inverse optimization with kernel regression: Application to the power forecasting and bidding of a fleet of electric vehicles — `inverse optimization/kernel regression/EV aggregation and bidding` — evidence-extracted
 - [ ] **P0045** (2021) Deep-Learning-Based Probabilistic Forecasting of Electric Vehicle Charging Load With a Novel Queuing Model — `traffic-to-load/queue/probabilistic forecasting` — to-read-full
 - [ ] **P0005** (2019) ACN-Sim: An Open-Source Simulator for Data-Driven Electric Vehicle Charging Research — `optimization/simulation` — to-read-full
 - [ ] **P0004** (2019) ACN-Data: Analysis and Applications of an Open EV Charging Dataset — `dataset` — to-read-full
 
-## P1 — 正式文献（21）
+## P1 — 正式文献（22）
 
+- [ ] **P0068** (2026) Forecast-Time-Safe Load Forecasting for Connected and Automated EV Charging Operation: Periodicity-Aware Residual Correction on a Processed Distribution Load Proxy with Public EV Charging Validation — `forecast-time-safe local ramps and peaks` — evidence-extracted
 - [ ] **P0062** (2026) Intention-Aware Electric Vehicle Routing: A Markovian Queuing Model Approach to Reduce Wait Times at Charging Stations — `intention-aware queue forecasting/routing/charging-station assignment` — evidence-extracted
 - [ ] **P0058** (2026) An explainable prediction framework for electric-taxi charging demand: Evidence from Shanghai, China — `multi-semantic graph/diffusion/explainability` — to-read-full
 - [ ] **P0055** (2026) Participatory inverse modelling for behavioural insights into Dutch EV charging dynamics — `inverse modelling/behavioral inference/structural uncertainty` — evidence-extracted

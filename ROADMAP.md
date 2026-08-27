@@ -1,68 +1,62 @@
 # Roadmap
 
-## Phase 0 — 文献库与问题定义
+## Phase 0 — Evidence library and problem definition
 
-- [x] 建立文献分类、质量分级和审读深度字段
-- [x] 建立核心文献、前沿观察、方法基础、数据集和代码仓目录
-- [x] 完成第一轮 EV 充电预测、灵活性和预测—调度证据审查
-- [x] 完成第二轮相邻方法域审查和创新红线更新
-- [x] 完成第二轮扩展审查：尾部风险、可靠性、仿真迁移、决策反馈、结构 OOD、运营车队与服务删失
-- [x] 完成 P0 数据集用途级字段审计
-- [x] 绘制研究缺口证据图与方向评分表
-- [ ] 完成全部 P0 文献全文审读
-- [ ] 下载并固定 P0 数据集版本、许可和 SHA-256
+- [x] Build literature, dataset, code and decision-log structure
+- [x] Complete initial EV forecasting/flexibility review
+- [x] Complete adjacent-method and OOD review
+- [x] Correct direction policy: OOD becomes optional validation rather than the paper core
+- [x] Complete Round 3 problem-first gap search
+- [x] Establish active-session/future-arrival, weak-label and peak-event gates
+- [ ] Complete full-text review of all P0 nearest neighbors
+- [ ] Pin P0 dataset versions, licenses and SHA-256
 
-## Phase 1 — 方向门控与数据协议（当前）
+## Phase 1 — Primary data acquisition and semantics audit
 
-### Gate S：网络扩建结构 OOD
+- [ ] Download ACN-Data using official API/client
+- [ ] Verify time-zone correction and chronological coverage
+- [ ] Separate legal issue-time fields from future session outcomes
+- [ ] Quantify pilot-limited/controlled sessions
+- [ ] Download DESL-EPFL Level 3 files and pin commit/hash
+- [ ] Audit P, Pset, Preq, SOC and overlapping-session power sharing
 
-- [ ] CHARGED leave-one-city-out 与 UrbanEV 留站/留区域基线
-- [ ] 新增节点、增容和价格变化造成的全网需求再分配协议
-- [ ] 支持域评分与误差、失准、峰值漏报的关联
-- [ ] 选择性拒绝—覆盖—风险曲线及安全回退
+## Phase 2 — Gate 1 and Gate 2 baselines
 
-### Gate F：运营车队场站
+- [ ] Build strict rolling issue-time samples
+- [ ] Seasonal persistence and tabular baselines
+- [ ] Direct aggregate TCN/PatchTST/TFT baseline
+- [ ] Direct probabilistic quantile/density baseline
+- [ ] Bottom-up mixture baseline
+- [ ] Compound-Poisson/Cox baseline
+- [ ] Joint occupancy-load baseline
+- [ ] Active-only, arrival-only and oracle value ceilings
+- [ ] Peak/ramp and forecast-time leakage audit
 
-- [ ] 固定 WeTRaC 和 RouteZero 数据/代码版本
-- [ ] 路线、城市、天气和运营条件留出
-- [ ] 返回时刻、能耗、车辆轮转和场站功率概率基线
-- [ ] 延误、取消、额外任务和车辆不可用扰动
-- [ ] 评估备用容量、峰值、未完成班次、调度遗憾和完美信息价值
+## Phase 3 — Candidate method only after gate pass
 
-### Gate P：performative 反馈
+- [ ] Active-session conditional remaining-curve model
+- [ ] Future-arrival marked event model
+- [ ] Correlated probabilistic station aggregation
+- [ ] Source-specific uncertainty attribution
+- [ ] Calibration and scenario reduction for downstream use
 
-- [ ] 用现场试验效应约束最小行动—需求响应模型
-- [ ] 比较静态重训、显式反馈和鲁棒反馈方法
-- [ ] 进行响应模型失配、闭环稳定和安全探索压力测试
-- [ ] 无真实或外部效应约束时停止主论文开发
+## Phase 4 — Parallel gates
 
-### Gate C：服务过程数据
+- [ ] Weak-label power-curve reconstruction masking experiment
+- [ ] Joint peak timing–magnitude–ramp backup experiment
+- [ ] Zero-activation/count/conditional-power component test
+- [ ] Control-aware latent need/executed-power feasibility study
 
-- [ ] 扫描排队、等待、故障、放弃、替代和扩容自然实验字段
-- [ ] 检查交易记录能否区分潜在需求与被服务需求
-- [ ] 无可信识别信号则停止潜在需求路线
+## Phase 5 — Downstream optimization and later project integration
 
-## Phase 2 — 可复现基线
+- [ ] Small rolling power-cap/PV/storage scheduling value test
+- [ ] Perfect-information and safe-baseline comparison
+- [ ] Only after central mechanism is stable, consider distributed/trusted learning
+- [ ] OOD/transfer tests only as robustness extensions where useful
 
-- [ ] 统计基线：seasonal naive、AR/ARIMA、GBDT
-- [ ] 深度时序基线：LSTM/TCN/Transformer/TimeXer
-- [ ] OOD 基线：FOIL、TFPS 类方法、动态归一化
-- [ ] 冷启动基线：全局模型、普通迁移、基础模型、检索增强
-- [ ] 概率基线：分位数、密度、整轨迹区间、选择性保形
-- [ ] 车队基线：WeTRaC、RouteZero、确定性 LP、场景随机与鲁棒优化
-- [ ] 建立统一无泄漏实验配置与结果锁定文件
+## Phase 6 — Paper and release
 
-## Phase 3 — 候选方法验证
-
-- [ ] Gate S 通过后：结构干预编码—类比检索—概率预测—拒绝/回退
-- [ ] Gate F 通过后：运营事件联合概率—场站一致聚合—学习增强鲁棒调度
-- [ ] Gate P 通过后：响应映射学习—performative 风险—闭环稳定调控
-- [ ] 仅在 Gate C 通过后研究潜在需求部分识别
-- [ ] 中央式机制稳定后再设计可信异构联邦扩展
-
-## Phase 4 — 论文与交付
-
-- [ ] 冻结主数据、评价协议和主基线
-- [ ] 形成完整最近邻对比和消融设计
-- [ ] 发布代码、环境、结果锁定文件和数据获取说明
-- [ ] 完成论文证据矩阵和可复现性清单
+- [ ] Freeze problem statement, nearest-neighbor table and stop conditions
+- [ ] Lock data splits and result files
+- [ ] Publish reproducible code and environment
+- [ ] Prepare manuscript only after a gate produces a nontrivial, externally validated effect

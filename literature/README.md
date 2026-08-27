@@ -1,20 +1,23 @@
 # Literature Library
 
-## 三层证据结构
+## 四层证据结构
 
 | 文件 | 内容 | 能否直接作为定稿证据 |
 |---|---|---|
 | `core_library.csv` | 正式同行评议论文、正式数据论文、正式仿真器论文 | 可以，但关键主张必须达到全文审读深度 |
 | `frontier_watchlist.csv` | 预印本、工作论文、极新方向 | 不可单独支撑定稿结论；用于监测竞争路线 |
 | `method_foundations.csv` | 非EV专属的相邻算法基础 | 可约束方法设计，但必须补充EV任务验证 |
+| `round*_evidence_matrix.csv` | 围绕具体缺口提取的最近邻证据 | 用于方向筛选；不能把定向检索未命中写成“文献不存在” |
 
-## 第二轮证据文件
+## 当前审查阶段
 
-- `round2_search_log.csv`：七个相邻方法域的检索簇、纳入标准和阶段判断；
-- `round2_evidence_matrix.csv`：已有占位、剩余缺口和对 EV 研究的直接含义；
+- Round 2/2B：保留在Git历史中，用于记录OOD、可信预测、结构变化和相邻方法边界；
+- **Round 3（当前）**：以充电功率/负荷预测中的具体失败为中心，OOD仅作可选稳健性验证；
+- `round3_search_log.csv`：八个问题簇的检索范围、边界判断和下一步；
+- `round3_evidence_matrix.csv`：最近邻已经解决的部分、尚未解决的细节及其对选题的影响；
 - `reading_queue.md`：自动生成的全文阅读优先级；
 - `notes/`：逐篇结构化证据提取；
-- `references.bib`：种子 BibTeX 库，投稿前仍需通过 DOI/出版商页面复核。
+- `references.bib`：种子BibTeX库，投稿前仍需通过DOI/出版商页面复核。
 
 ## 状态字段
 

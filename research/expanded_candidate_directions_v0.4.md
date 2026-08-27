@@ -1,5 +1,7 @@
 # 扩展候选研究方向 v0.4
 
+> **历史版本提示：** 本文件记录Round 2/2B当时的方向判断。自`v0.5.0-problem-gap-review`起，OOD/未见城市/未见站点仅作为可选验证，不再作为当前论文核心。当前决策以`research/decision_recommendation_v0.5.md`为准。
+
 本文件解释 `round2b_direction_scorecard.csv` 中的八条方向。评分不是论文质量承诺，只用于比较数据、创新与失败风险。
 
 ## D3-A 决策诱导分布变化下的闭环预测

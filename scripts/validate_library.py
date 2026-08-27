@@ -148,12 +148,26 @@ def main() -> int:
     direction_b_rows, _ = unique_ids(
         ROOT / "research/round2b_direction_scorecard.csv", "direction_id", errors
     )
+    round3_rows, _ = unique_ids(
+        ROOT / "literature/round3_evidence_matrix.csv", "evidence_id", errors
+    )
+    round3_search_rows, _ = unique_ids(
+        ROOT / "literature/round3_search_log.csv", "search_id", errors
+    )
+    round3_direction_rows, _ = unique_ids(
+        ROOT / "research/round3_direction_scorecard.csv", "direction_id", errors
+    )
 
     for relative, rows, known in [
         ("literature/round2_evidence_matrix.csv", round2_rows, literature_ids | method_ids),
         (
             "literature/round2b_evidence_matrix.csv",
             round2b_rows,
+            literature_ids | method_ids | dataset_ids | repo_ids,
+        ),
+        (
+            "literature/round3_evidence_matrix.csv",
+            round3_rows,
             literature_ids | method_ids | dataset_ids | repo_ids,
         ),
     ]:
@@ -196,6 +210,8 @@ def main() -> int:
         "literature/round2_evidence_matrix.csv",
         "literature/round2b_search_log.csv",
         "literature/round2b_evidence_matrix.csv",
+        "literature/round3_search_log.csv",
+        "literature/round3_evidence_matrix.csv",
         "datasets/dataset_catalog.csv",
         "datasets/field_audit.csv",
         "research/evidence_synthesis_v0.4.md",
@@ -206,6 +222,12 @@ def main() -> int:
         "research/novelty_red_lines.md",
         "research/round2_direction_scorecard.csv",
         "research/round2b_direction_scorecard.csv",
+        "research/problem_gap_landscape_v0.5.md",
+        "research/evidence_synthesis_v0.5.md",
+        "research/decision_recommendation_v0.5.md",
+        "research/minimum_gate_plan_v0.5.md",
+        "research/round3_direction_scorecard.csv",
+        "docs/ROUND3_PROBLEM_GAP_PROTOCOL.md",
         "docs/ROUND2_REVIEW_PROTOCOL.md",
         "docs/ROUND2_EXTENSION_PROTOCOL.md",
         "docs/ROUND2B_EXTENSION_PROTOCOL.md",
@@ -239,6 +261,9 @@ def main() -> int:
         "round2b_evidence_records": len(round2b_rows),
         "round2b_search_clusters": len(round2b_search_rows),
         "round2b_direction_records": len(direction_b_rows),
+        "round3_evidence_records": len(round3_rows),
+        "round3_search_clusters": len(round3_search_rows),
+        "round3_direction_records": len(round3_direction_rows),
         "dataset_records": len(dataset_rows),
         "field_audit_records": len(field_rows),
         "detailed_dataset_audit_notes": len(audit_note_files),
@@ -261,8 +286,8 @@ def main() -> int:
         "VALIDATION PASS: "
         f"{len(core_rows)} core + {len(frontier_rows)} frontier papers, "
         f"{len(method_rows)} methods, {len(dataset_rows)} datasets, "
-        f"{len(round2_rows)} + {len(round2b_rows)} evidence records, "
-        f"{len(direction_rows)} + {len(direction_b_rows)} candidate directions"
+        f"{len(round2_rows)} + {len(round2b_rows)} + {len(round3_rows)} evidence records, "
+        f"{len(direction_rows)} + {len(direction_b_rows)} + {len(round3_direction_rows)} candidate directions"
     )
     for item in warnings:
         print(f"WARNING: {item}")

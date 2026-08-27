@@ -1,24 +1,18 @@
-# Research Gap Map — Round 02
+# Research Gap Map — Problem-First Revision
 
-> 下表列的是经过两轮检索后仍值得验证的缺口，不等同于已确认无人研究。
+> A gap is retained only if it names a forecasting failure, nearest neighbors, observable evidence and a stop condition. OOD is an optional validation axis, not the core problem.
 
-| 研究域 | 已有工作已覆盖 | 仍可能成立的精确缺口 | 最小证伪实验 |
+| Problem fragment | Existing work already covers | Candidate unresolved detail | Minimum falsification test |
 |---|---|---|---|
-| 跨域功率预测 | 不变学习、模式专家、迁移、基础模型 | 未见站点的支持域判别、类比站选择、拒绝迁移 | leave-city/station-out + 支持度—错误关系 |
-| 概率可靠性 | SPCI、多步 ACI、轨迹带、KMM-CP、在线证书 | 支持不足时的整轨迹选择性覆盖与运行风险映射 | 覆盖—拒绝率—容量风险曲线 |
-| 冷启动 | 两周目标数据迁移、零/少样本基础模型、多模态站点表征 | 零历史/无标签/少样本严格分离及无有效类比站的回退 | 0/无标签/1/7/14 日协议 |
-| 潜在需求 | 删失回归、删失图模型、交通—排队负荷转换 | 多机制真实删失下的部分识别和联合潜在/服务/流失输出 | 半合成恢复 + 自然容量变化验证 |
-| 决策耦合 | EV 决策导向 RL、灵活性调度、CP-in-loop | 不可信预测下具有一致性、鲁棒性和平滑性的调度 | 精确/随机/对抗误差的性能界 |
-| 策略变化 | 动态激励因果评估、价格游戏 | 对未见价格/策略的可迁移条件预测与外推告警 | 真实干预留出与 overlap 审计 |
-| 多任务层级 | EV 多任务模型、混合型概率协调 | 会话流、占用、能量和功率的领域约束与 OOD 一致性 | 代数一致 + 概率校准 + 运行价值 |
-| 联邦预测 | FedMixer、Fed-TREND、FedProC、PiXTime、FCPJS | EV 时序依赖下的异构模型、联合偏移、攻击和决策风险统一 | 明确威胁模型的四类基线对照 |
+| Rolling issue-time information | remaining occupation, partial DCFC curve prediction, aggregate rolling forecasts | joint probabilistic station load from active-session remainder + future arrivals | strict issue-time active/arrival decomposition on ACN and EPFL |
+| Session-driven uncertainty | compound Poisson/Cox, queue-to-load, bottom-up mixture models | source-resolved uncertainty and correlations when some sessions are already observed | direct vs bottom-up vs decomposed model with CRPS and variance attribution |
+| Weak power labels | constant-power reconstruction, nonlinear profile assessment | multi-fidelity latent curve distribution from energy/duration plus metered anchors | mask true traces and test recovery on held-out metered sessions |
+| Peak operational error | post-hoc peak error reports, generic peak timing/shape methods | EV-specific joint curve–peak–ramp probability model | event metrics plus transformer/reserve decision value |
+| Zero/intermittent demand | compound event models and multi-task outputs | coherent zero activation–count–conditional power forecast | low-utilization station stratified proper scoring |
+| Controlled-load labels | pilot/setpoint/realized power datasets, managed-charging field evidence | latent need versus policy-conditioned executed power | cross-policy or known-control counterfactual validation |
+| Supply-censored demand | censored regression/GNN and queue models | multiple censoring mechanisms and partial identification | real fault/queue/abandon/substitution fields required |
+| Multi-resolution output | temporal reconciliation methods | preserve EV peaks/ramps while reconciling energy totals | 5/15/60 min joint evaluation |
 
-## 当前优先级
+## Current priority
 
-1. 支持域感知的选择性 OOD 概率预测；
-2. 新站点原型检索与上下文适配；
-3. 潜在需求可识别性试验；
-4. 学习增强鲁棒调度；
-5. 混合变量层级预测；
-6. 策略条件因果预测；
-7. 可信联邦集成。
+G01 dual-source rolling power forecast is the first experiment. G02 and G03 are parallel fallback gates. No paper title or method is frozen before these tests.

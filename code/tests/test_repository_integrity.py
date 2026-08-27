@@ -47,15 +47,21 @@ class RepositoryIntegrityTest(unittest.TestCase):
         round2b_ids = {
             row["record_id"] for row in rows("literature/round2b_evidence_matrix.csv")
         }
+        round3_ids = {
+            row["record_id"] for row in rows("literature/round3_evidence_matrix.csv")
+        }
         self.assertTrue(round2_ids <= paper_ids | method_ids)
         self.assertTrue(round2b_ids <= paper_ids | method_ids | dataset_ids | repo_ids)
+        self.assertTrue(round3_ids <= paper_ids | method_ids | dataset_ids | repo_ids)
         self.assertGreaterEqual(len(round2_ids), 30)
         self.assertGreaterEqual(len(round2b_ids), 20)
+        self.assertGreaterEqual(len(round3_ids), 14)
 
     def test_direction_scorecards_have_unique_ids_and_decisions(self) -> None:
         for relative, minimum in [
             ("research/round2_direction_scorecard.csv", 13),
             ("research/round2b_direction_scorecard.csv", 8),
+            ("research/round3_direction_scorecard.csv", 8),
         ]:
             records = rows(relative)
             ids = [row["direction_id"] for row in records]
@@ -99,6 +105,9 @@ class RepositoryIntegrityTest(unittest.TestCase):
             "round2b_evidence_records": len(rows("literature/round2b_evidence_matrix.csv")),
             "round2b_search_clusters": len(rows("literature/round2b_search_log.csv")),
             "round2b_direction_records": len(rows("research/round2b_direction_scorecard.csv")),
+            "round3_evidence_records": len(rows("literature/round3_evidence_matrix.csv")),
+            "round3_search_clusters": len(rows("literature/round3_search_log.csv")),
+            "round3_direction_records": len(rows("research/round3_direction_scorecard.csv")),
             "dataset_records": len(rows("datasets/dataset_catalog.csv")),
             "field_audit_records": len(rows("datasets/field_audit.csv")),
             "detailed_dataset_audit_notes": len(list((ROOT / "datasets/audits").glob("D*.md"))),
@@ -110,7 +119,7 @@ class RepositoryIntegrityTest(unittest.TestCase):
         for key, value in expected.items():
             self.assertEqual(manifest[key], value, key)
 
-    def test_required_round2_extension_files_exist(self) -> None:
+    def test_required_review_files_exist(self) -> None:
         required = [
             "literature/round2_evidence_matrix.csv",
             "literature/round2b_evidence_matrix.csv",
@@ -127,6 +136,14 @@ class RepositoryIntegrityTest(unittest.TestCase):
             "docs/ROUND2_REVIEW_PROTOCOL.md",
             "docs/ROUND2_EXTENSION_PROTOCOL.md",
             "docs/ROUND2B_EXTENSION_PROTOCOL.md",
+            "literature/round3_evidence_matrix.csv",
+            "literature/round3_search_log.csv",
+            "research/problem_gap_landscape_v0.5.md",
+            "research/evidence_synthesis_v0.5.md",
+            "research/decision_recommendation_v0.5.md",
+            "research/minimum_gate_plan_v0.5.md",
+            "research/round3_direction_scorecard.csv",
+            "docs/ROUND3_PROBLEM_GAP_PROTOCOL.md",
         ]
         for relative in required:
             self.assertTrue((ROOT / relative).exists(), relative)

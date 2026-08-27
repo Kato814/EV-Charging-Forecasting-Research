@@ -98,3 +98,19 @@ AND ("charging station" OR "charging demand" OR "charging load" OR EVSE)
 6. 与本研究问题的直接相关度。
 
 评分只用于排序，不替代定性判断。
+
+## 9. 第二轮相邻方法检索块
+
+为避免只在 EV 领域内部重复模型组合，以下查询块单独检索：
+
+```text
+("time series forecasting" AND ("out-of-distribution" OR "domain generalization" OR "environment inference"))
+("time series" AND conformal AND (shift OR support OR selective OR abstain*))
+("time series foundation model" AND ("in-context" OR retrieval OR "few-shot" OR "zero-shot"))
+("EV charging" AND (censor* OR latent demand OR queue OR abandonment OR competition))
+((forecast* OR prediction) AND ("learning-augmented" OR "decision-focused" OR "in the loop") AND schedul*)
+("EV charging" AND (causal OR incentive OR tariff OR intervention OR policy-conditioned))
+("federated time series forecasting" AND (heterogeneous OR calibration OR privacy OR attack))
+```
+
+第二轮检索的具体来源、估计筛选量和阶段判断见 `round2_search_log.csv`。通用方法文献的作用主要是**否定宽泛创新表述并确定必须超过的基线**，不能替代 EV 场景实证。

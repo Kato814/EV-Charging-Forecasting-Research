@@ -1,13 +1,19 @@
 {
   "repository_name": "EV-Charging-Forecasting-Research",
-  "version": "0.1.0-seed",
+  "version": "0.3.0-round2-review",
   "created_on": "2026-08-27",
-  "core_peer_reviewed_records": 38,
-  "frontier_records": 11,
-  "method_foundation_records": 13,
+  "last_verified_on": "2026-08-27",
+  "core_peer_reviewed_records": 46,
+  "frontier_records": 14,
+  "method_foundation_records": 33,
+  "round2_evidence_records": 18,
+  "round2_search_clusters": 7,
+  "candidate_direction_records": 8,
   "dataset_records": 10,
-  "related_code_records": 8,
+  "detailed_dataset_audits": 4,
+  "related_code_records": 15,
+  "structured_note_files": 17,
   "remote_owner": "Kato814",
   "remote_repo_suggested": "EV-Charging-Forecasting-Research",
-  "remote_write_status": "not created; current GitHub connector is read-only"
+  "remote_write_status": "not created or pushed; current GitHub connector is read-only"
 }

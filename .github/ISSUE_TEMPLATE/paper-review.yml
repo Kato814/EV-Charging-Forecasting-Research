@@ -1,0 +1,30 @@
+name: Paper full-text review
+description: Extract reproducible evidence from one paper
+title: "[LIT] <paper-id> — "
+labels: ["literature", "status:needs-evidence"]
+body:
+  - type: input
+    id: paper_id
+    attributes:
+      label: Paper ID
+      placeholder: P0034
+    validations:
+      required: true
+  - type: input
+    id: identifier
+    attributes:
+      label: DOI / arXiv / official URL
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Review checklist
+      options:
+        - label: Forecast target, scale, resolution and horizon extracted
+        - label: Dataset and split protocol extracted
+        - label: Baselines, ablations and metrics extracted
+        - label: Main claims linked to tables/figures/pages
+        - label: Limitations and leakage risks documented
+        - label: Code/data/license checked
+        - label: CSV and note updated

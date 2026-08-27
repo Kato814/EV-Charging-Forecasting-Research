@@ -1,0 +1,24 @@
+name: Dataset audit
+description: Audit fields, license and task suitability
+title: "[DATA] <dataset-id> — "
+labels: ["dataset", "status:needs-evidence"]
+body:
+  - type: input
+    id: dataset_id
+    attributes:
+      label: Dataset ID
+      placeholder: D0003
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Audit checklist
+      options:
+        - label: License and access terms saved
+        - label: Version/commit and checksum recorded
+        - label: Schema and units verified
+        - label: Missingness/imputation documented
+        - label: Leakage risks assessed
+        - label: Time/station/city OOD split feasibility assessed
+        - label: Flexibility identifiability assessed

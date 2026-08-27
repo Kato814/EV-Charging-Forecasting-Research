@@ -1,0 +1,13 @@
+name: ev-charging-forecasting
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - pyyaml
+  - requests
+  - pytest
+  - pip
+  - pip:
+      - ruff

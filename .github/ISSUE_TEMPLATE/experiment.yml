@@ -1,0 +1,27 @@
+name: Experiment
+description: Reproducible forecasting or optimization experiment
+title: "[EXP] "
+labels: ["experiment"]
+body:
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Falsifiable hypothesis
+    validations:
+      required: true
+  - type: textarea
+    id: protocol
+    attributes:
+      label: Dataset, split, baselines, metrics and stopping rule
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Reproducibility
+      options:
+        - label: Config file committed
+        - label: Random seeds recorded
+        - label: Data version recorded
+        - label: Output checksum recorded
+        - label: Negative/failed result recorded

@@ -1,0 +1,24 @@
+name: Research hypothesis
+description: Propose a falsifiable candidate direction
+title: "[HYP] "
+labels: ["hypothesis", "status:needs-evidence"]
+body:
+  - type: textarea
+    id: claim
+    attributes:
+      label: Hypothesis
+      description: State a claim that can be falsified.
+    validations:
+      required: true
+  - type: textarea
+    id: prior
+    attributes:
+      label: Prior literature and closest competitors
+    validations:
+      required: true
+  - type: textarea
+    id: falsification
+    attributes:
+      label: Falsification condition and minimum experiment
+    validations:
+      required: true

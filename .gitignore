@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+*.token
+*.key
+secrets/
+
+# Data and artifacts
+data/raw/**
+data/interim/**
+data/processed/**
+models/**
+outputs/**
+artifacts/**
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+!models/.gitkeep
+!outputs/.gitkeep
+
+# Literature full text: metadata/notes only by default
+literature/fulltext/**
+!literature/fulltext/README.md
+!literature/fulltext/.gitkeep
+*.pdf
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Build
+build/
+dist/
+*.egg-info/

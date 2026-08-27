@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ev-charging-forecasting-research"
+version = "0.1.0"
+description = "Research library and reproducible codebase for EV charging forecasting"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.26",
+  "pandas>=2.2",
+  "pyyaml>=6.0",
+  "requests>=2.32",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.12"]
+
+[tool.setuptools]
+package-dir = {"" = "code/src"}
+
+[tool.setuptools.packages.find]
+where = ["code/src"]
+
+[tool.pytest.ini_options]
+testpaths = ["code/tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

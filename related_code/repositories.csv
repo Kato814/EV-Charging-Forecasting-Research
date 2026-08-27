@@ -1,0 +1,9 @@
+﻿repo_id,repository,url,category,license,paper_or_dataset,priority,tracking,notes
+R0001,zach401/acnportal,https://github.com/zach401/acnportal,dataset API + simulator + algorithms,inspect repository,ACN-Data / ACN-Sim,P0,pin commit after clone,Canonical ACN tooling; do not vendor the repository into this project.
+R0002,IntelligentSystemsLab/UrbanEV,https://github.com/IntelligentSystemsLab/UrbanEV,dataset + spatiotemporal forecasting baselines,CC0-1.0,UrbanEV,P0,pin release/commit after download,Includes raw/processed data pointers and baseline code.
+R0003,IntelligentSystemsLab/CHARGED,https://github.com/IntelligentSystemsLab/CHARGED,multi-city dataset + forecasting + federated learning,MIT,CHARGED,P0,pin release/commit after clone,Key cross-city OOD and federated benchmark candidate.
+R0004,LSY-Cython/DiffCharge,https://github.com/LSY-Cython/DiffCharge,diffusion scenario generation,inspect repository,DiffCharge,P0,pin commit after clone,Open implementation and ACN data client; use as a probabilistic baseline.
+R0005,StavrosOrf/EV2Gym,https://github.com/StavrosOrf/EV2Gym,smart charging/V2G simulator,MIT,EV2Gym,P0,pin release/commit after clone,Suitable for forecast-to-dispatch value tests and oracle comparisons.
+R0006,acse-sl420/ev_charging_ml,https://github.com/acse-sl420/ev_charging_ml,within-session DC fast-charging profile prediction,inspect repository,Nature Communications 2025 DCFC prediction,P1,pin Zenodo release if used,Code and models are public; primary training data require NDA.
+R0007,thuml/Time-Series-Library,https://github.com/thuml/Time-Series-Library,general time-series baselines,MIT,General baseline library,P1,pin tagged release,Use only selected baselines with protocol consistency.
+R0008,cvxgrp/cvxpylayers,https://github.com/cvxgrp/cvxpylayers,differentiable convex optimization,Apache-2.0,Differentiable Convex Optimization Layers,P1,pin tagged release,Potential decision-focused/coherence layer.

@@ -1,0 +1,29 @@
+project:
+  seed: 20260827
+  timezone: UTC
+
+data:
+  dataset_id: null
+  raw_path: null
+  frequency: null
+  target: null
+  split:
+    strategy: temporal
+    train_end: null
+    validation_end: null
+    test_end: null
+
+forecast:
+  horizon: null
+  model: seasonal_naive
+  probabilistic: false
+
+optimization:
+  enabled: false
+  horizon: null
+  rolling_step: null
+
+evaluation:
+  point_metrics: [mae, rmse]
+  probabilistic_metrics: [pinball, crps, coverage]
+  decision_metrics: [cost, peak, unserved_energy, regret]

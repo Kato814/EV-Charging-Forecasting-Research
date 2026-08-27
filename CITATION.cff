@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+title: EV Charging Forecasting Research Library and Codebase
+message: Please cite the specific papers, datasets and software actually used. This repository is a research management scaffold.
+type: software
+authors:
+  - family-names: Research Team
+date-released: 2026-08-27
+version: 0.1.0
+license: MIT

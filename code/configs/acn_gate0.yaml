@@ -1,0 +1,23 @@
+dataset_id: D0001
+api_base_url: https://ev.caltech.edu/api/v1/
+token_environment_variable: ACN_API_TOKEN
+
+# Pilot acquisition policy. Set an explicit, timezone-aware window before running.
+pilot:
+  site: caltech
+  start: null
+  end: null
+  metadata_max_sessions: 500
+  timeseries_max_sessions: 50
+  output_directory: data/raw/acn/gate0
+
+rolling_task:
+  issue_frequency_minutes: 15
+  horizons_minutes: [15, 30, 60, 120, 240]
+  end_time_semantics: exclusive
+
+safety:
+  raw_data_in_git: false
+  overwrite_by_default: false
+  timeseries_opt_in: true
+  preserve_raw_timestamp_strings: true

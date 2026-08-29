@@ -6,11 +6,13 @@ import json
 import math
 import os
 from collections import Counter
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from itertools import pairwise
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any
 
 from .acn_api import iter_jsonl
 
@@ -146,14 +148,18 @@ def _inspect_timeseries(series: Any) -> dict[str, int | bool]:
             break
         if dt is not None:
             parsed.append(dt)
-    if parsed and any(current <= previous for previous, current in zip(parsed, parsed[1:])):
+    if parsed and any(current <= previous for previous, current in pairwise(parsed)):
         result["nonmonotonic"] = True
 
     negatives = 0
     for value in values:
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            if math.isfinite(float(value)) and float(value) < 0:
-                negatives += 1
+        if (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+            and float(value) < 0
+        ):
+            negatives += 1
     result["negative_values"] = negatives
     return result
 
@@ -253,12 +259,18 @@ def audit_sessions(records: Iterable[Mapping[str, Any]]) -> ACNAuditReport:
     }
     report.unknown_fields = dict(sorted(unknown.items()))
     report.semantic_warnings = [
-        "chargingCurrent is measured current in amperes, not a direct active-power series; "
-        "kW reconstruction requires EVSE voltage/phase/network metadata.",
-        "disconnectTime, doneChargingTime and final kWhDelivered are retrospective labels and "
-        "must not enter an earlier rolling-forecast input unchanged.",
-        "userInputs may be revised; only entries with modifiedAt at or before the issue time are "
-        "legal online inputs.",
+        (
+            "chargingCurrent is measured current in amperes, not a direct active-power series; "
+            "kW reconstruction requires EVSE voltage/phase/network metadata."
+        ),
+        (
+            "disconnectTime, doneChargingTime and final kWhDelivered are retrospective labels and "
+            "must not enter an earlier rolling-forecast input unchanged."
+        ),
+        (
+            "userInputs may be revised; only entries with modifiedAt at or before the issue time "
+            "are legal online inputs."
+        ),
         "pilotSignal is a control command/limit and must be distinguished from measured current.",
     ]
     return report

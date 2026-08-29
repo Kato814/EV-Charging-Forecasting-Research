@@ -1,8 +1,8 @@
 {
   "repository_name": "EV-Charging-Forecasting-Research",
-  "version": "0.5.0-problem-gap-review",
+  "version": "0.6.0-closed-loop-plan",
   "created_on": "2026-08-27",
-  "last_verified_on": "2026-08-27",
+  "last_verified_on": "2026-08-29",
   "core_peer_reviewed_records": 67,
   "frontier_records": 19,
   "method_foundation_records": 45,
@@ -17,11 +17,11 @@
   "round3_direction_records": 8,
   "dataset_records": 15,
   "field_audit_records": 11,
-  "detailed_dataset_audit_notes": 9,
+  "detailed_dataset_audit_notes": 10,
   "related_code_records": 23,
   "structured_note_files": 37,
-  "active_research_policy": "problem-first charging power/load forecasting gaps; OOD retained only as optional robustness validation",
+  "active_research_policy": "problem-first dual-source rolling probabilistic charging-power forecasting with Gate 0-3 validation; OOD retained only as optional robustness evidence",
   "remote_owner": "Kato814",
   "remote_repo_suggested": "EV-Charging-Forecasting-Research",
-  "remote_write_status": "not created or pushed; current GitHub connector is read-only"
+  "remote_write_status": "connected with active branch, issue and pull-request workflow"
 }

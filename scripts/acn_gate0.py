@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """ACN-Data Gate 0 command-line utility.
 
 Install the repository first with ``python -m pip install -e .``. The command never

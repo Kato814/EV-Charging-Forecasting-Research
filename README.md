@@ -68,7 +68,7 @@ P_{\tau+h}=P^{\mathrm{active}}_{\tau+h}+P^{\mathrm{arrival}}_{\tau+h}.
 2. 核验 DESL-EPFL Level 3 数据访问、字段和许可；
 3. 建立字段字典、时间戳/时区审计和控制影响审计；
 4. 形成预测发布时间字段白名单；
-5. 验证会话级功率求和与站级功率的一致性。
+5. 验证会话级电流、网络配置与站级功率之间的换算关系。
 
 ### Phase 1：实时状态价值 Gate 1
 
@@ -84,6 +84,18 @@ P_{\tau+h}=P^{\mathrm{active}}_{\tau+h}+P^{\mathrm{arrival}}_{\tau+h}.
 比较强直接概率模型、在充分支、未来到达分支、独立双源聚合、相关双源聚合和 oracle 上限。
 
 在 Gate 1–Gate 2 通过前，不开发复杂点过程、扩散模型、可微优化或联邦学习。
+
+## Gate 0代码状态
+
+`data/acn-gate0`分支已实现首版ACN数据获取与审计基础设施：
+
+- `scripts/acn_gate0.py`：元数据/时间序列有界下载和离线审计；
+- `evcf.data.acn_api`：带重试、分页、原子写入和SHA-256 manifest的API客户端；
+- `evcf.data.acn_audit`：字段覆盖、时序结构、时间边界和泄漏审计；
+- `datasets/audits/D0001_ACN_GATE0_RUNBOOK.md`：运行手册与停止条件；
+- `.env.example`：仅声明环境变量名称，不保存真实token。
+
+重要语义：ACN的`chargingCurrent`是实测电流，不是直接的kW功率。正式功率标签仍需结合EVSE电压、相别和网络配置构造；在完成该步骤前，不得把电流求和直接表述为站级实测功率。
 
 ## 平行候选与备用方向
 
@@ -123,6 +135,7 @@ P_{\tau+h}=P^{\mathrm{active}}_{\tau+h}+P^{\mathrm{arrival}}_{\tau+h}.
 ## 快速校验
 
 ```bash
+python -m pip install -e .[dev]
 python scripts/validate_library.py
 python scripts/build_reading_queue.py
 python -m pytest code/tests

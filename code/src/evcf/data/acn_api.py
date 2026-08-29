@@ -10,11 +10,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import format_datetime
 from pathlib import Path
-from typing import Any, Iterator, Mapping
+from typing import Any
 from urllib.parse import urljoin
 
 import requests
@@ -168,7 +169,7 @@ class ACNClient:
         cls,
         token_env: str = DEFAULT_TOKEN_ENV,
         **kwargs: Any,
-    ) -> "ACNClient":
+    ) -> ACNClient:
         token = os.environ.get(token_env)
         if token is None or not token.strip():
             raise ACNAuthenticationError(
@@ -359,8 +360,10 @@ def download_sessions(
         "notes": [
             "Raw timestamp strings are preserved exactly as returned by the API.",
             "chargingCurrent is measured current, not a direct kW time series.",
-            "The /ts endpoint is intentionally opt-in because the provider "
-            "documents it as expensive.",
+            (
+                "The /ts endpoint is intentionally opt-in because the provider "
+                "documents it as expensive."
+            ),
         ],
     }
     _atomic_write_json(manifest, manifest_payload)

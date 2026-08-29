@@ -7,7 +7,6 @@ from tempfile import TemporaryDirectory
 from typing import Any
 
 import pytest
-
 from evcf.data.acn_api import (
     ACNAuthenticationError,
     ACNClient,
@@ -84,10 +83,11 @@ def session_record(session_id: str = "s1") -> dict[str, Any]:
 
 
 def test_query_requires_timezone_and_uses_half_open_window() -> None:
+    naive_start = parse_iso_datetime("2024-01-01T00:00:00Z").replace(tzinfo=None)
     with pytest.raises(ValueError, match="timezone-aware"):
         ACNQuery(
             site="caltech",
-            start=datetime(2024, 1, 1),
+            start=naive_start,
             end=datetime(2024, 1, 2, tzinfo=timezone.utc),
         )
     query = ACNQuery(

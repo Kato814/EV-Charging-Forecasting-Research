@@ -1,24 +1,14 @@
 # EV-Charging-Forecasting-Research
 
-面向**电动汽车充电功率/负荷预测具体问题、概率预测、会话过程建模、数据语义审计、预测—调度衔接及后续可信分布式学习**的长期研究库。
+面向**电动汽车充电功率/负荷预测具体问题、概率预测、会话过程建模、预测—调度闭环及后续可信分布式学习**的长期研究库。
 
-> 当前版本：`v0.5.0-problem-gap-review`
-> 最近核验日期：2026-08-27
-> 状态：完成问题导向的第三轮审查；分布外泛化降为可选验证，不再作为论文核心；尚未冻结最终题目和模型。
+> 当前规划版本：`v0.6.0-closed-loop-plan`  
+> 最近核验日期：2026-08-29  
+> 状态：研究问题条件锁定；进入数据可行性与最小门控实验阶段；尚未冻结最终论文题目和具体算法。
 
-## 当前研究逻辑
+## 当前主验证方向
 
-本仓库不再通过“未见城市、未见站点或更困难划分”制造选题。候选方向必须回答：
-
-1. 充电功率/负荷预测中存在什么具体失败？
-2. 最近邻工作已经解决了哪一部分？
-3. 遗漏部分是否能由真实可观测数据验证？
-4. 复杂模型相对简单基线增加了什么机制价值？
-5. 什么结果会否决该方向？
-
-## 当前首要候选
-
-### 在充会话—未来到达双源滚动概率功率预测
+> **面向在充会话与未来到达会话双源不确定性的充电站日内滚动概率功率预测。**
 
 在预测发布时刻 \(\tau\)：
 
@@ -26,28 +16,89 @@
 P_{\tau+h}=P^{\mathrm{active}}_{\tau+h}+P^{\mathrm{arrival}}_{\tau+h}.
 \]
 
-- 第一部分来自已经连接、已有部分功率轨迹的会话；
-- 第二部分来自未来尚未到达的随机会话。
+- \(P^{\mathrm{active}}\)：已经接入车辆的剩余充电功率；
+- \(P^{\mathrm{arrival}}\)：发布时间之后新到达车辆形成的功率。
 
-现有文献分别研究了剩余占用时间、单车部分曲线、到达事件、bottom-up 概率负荷和联合占用—负荷，但第三轮定向检索尚未确认一个直接最近邻同时完成：合法实时状态条件化、两类来源分开建模、站级概率聚合和源别不确定性解释。该判断仍需全文系统核验。
+两类功率具有不同的信息条件和不确定性来源。当前研究首先检验：会话级实时状态是否具有不可替代的信息增量，以及双源分开建模是否稳定优于强直接聚合模型。
 
-详见：
+## 完整项目闭环
+
+```text
+实时观测
+→ 在充会话剩余过程预测 + 未来到达会话预测
+→ 站级概率功率/会话需求场景
+→ 风险感知滚动调度
+→ 执行首时段决策
+→ 状态更新并重新预测
+```
+
+第一阶段以概率功率预测为主；第二阶段通过小型滚动优化验证运行价值；在预测问题成立后，再扩展车辆级有序充电、预测—决策联合训练和可信联邦学习。
+
+## 当前研究原则
+
+1. 先证明具体预测问题真实存在，再选择复杂模型；
+2. 不以未见城市、未见站点或分布外条件代替科学问题；
+3. 所有滚动输入必须在预测发布时间真实可获得；
+4. 区分请求功率、控制设定功率和实际测量功率；
+5. 历史控制策略下的执行功率不得直接解释为自然需求；
+6. 概率输出必须评价校准、时间相关性、峰值和爬坡；
+7. 预测提升必须通过最小运行价值测试；
+8. 任何方向均设置明确停止条件。
+
+## 当前决策文件
+
+- [`research/decision_recommendation_v0.6.md`](research/decision_recommendation_v0.6.md)：研究方向、假设和门控；
+- [`research/forecast_dispatch_interface_v0.6.md`](research/forecast_dispatch_interface_v0.6.md)：预测与调度变量接口；
+- [`research/execution_roadmap_v0.6.md`](research/execution_roadmap_v0.6.md)：分阶段执行路线；
+- [`datasets/acquisition_and_semantics_checklist_v0.6.md`](datasets/acquisition_and_semantics_checklist_v0.6.md)：数据获取与语义审计；
+- [`experiments/gate0_gate2_protocol_v0.6.md`](experiments/gate0_gate2_protocol_v0.6.md)：Gate 0–Gate 2 最小实验协议。
+
+历史问题缺口和证据材料继续保留：
 
 - [`research/problem_gap_landscape_v0.5.md`](research/problem_gap_landscape_v0.5.md)
 - [`research/evidence_synthesis_v0.5.md`](research/evidence_synthesis_v0.5.md)
-- [`research/decision_recommendation_v0.5.md`](research/decision_recommendation_v0.5.md)
-- [`research/minimum_gate_plan_v0.5.md`](research/minimum_gate_plan_v0.5.md)
 - [`literature/round3_evidence_matrix.csv`](literature/round3_evidence_matrix.csv)
 - [`research/round3_direction_scorecard.csv`](research/round3_direction_scorecard.csv)
 
-## 平行候选
+## 下一步
 
-1. 弱标签交易数据下的瞬时功率曲线重构与预测；
-2. 峰值时刻—幅值—爬坡事件联合概率预测；
-3. 零负荷激活—会话数量—条件能量/功率联合分布；
-4. 控制策略内生性下潜在充电需求与执行功率分离；
+### Phase 0：数据获取与语义审计
+
+1. 获取并固定 ACN-Data 版本；
+2. 核验 DESL-EPFL Level 3 数据访问、字段和许可；
+3. 建立字段字典、时间戳/时区审计和控制影响审计；
+4. 形成预测发布时间字段白名单；
+5. 验证会话级功率求和与站级功率的一致性。
+
+### Phase 1：实时状态价值 Gate 1
+
+比较：
+
+1. 历史聚合功率；
+2. 聚合功率 + 当前占用率；
+3. 聚合功率 + 在充会话摘要；
+4. 聚合功率 + 会话部分功率轨迹。
+
+### Phase 2：双源分解价值 Gate 2
+
+比较强直接概率模型、在充分支、未来到达分支、独立双源聚合、相关双源聚合和 oracle 上限。
+
+在 Gate 1–Gate 2 通过前，不开发复杂点过程、扩散模型、可微优化或联邦学习。
+
+## 平行候选与备用方向
+
+1. 弱标签交易数据下的瞬时功率曲线重构；
+2. 峰值时刻—幅值—爬坡联合概率预测（低风险备用）；
+3. 零负荷激活—会话数量—条件功率复合预测；
+4. 控制策略内生性下潜在需求与执行功率分离；
 5. 删失条件下潜在、已服务和流失需求；
 6. 多时间分辨率一致预测。
+
+## 数据优先级
+
+- **ACN-Data**：主门控数据，重点用于会话窗口、部分轨迹和实时状态；
+- **DESL-EPFL Level 3**：独立高分辨率核验，重点区分测量、请求、设定功率和控制状态；
+- 其他大规模交易或站级数据：用于弱标签、峰值和广泛验证，不默认具有真实瞬时功率。
 
 ## 仓库内容
 
@@ -57,32 +108,17 @@ P_{\tau+h}=P^{\mathrm{active}}_{\tau+h}+P^{\mathrm{arrival}}_{\tau+h}.
 - 第三轮问题证据：**14** 项，检索簇 **8** 组；
 - 候选数据集/仿真器：**15** 个；
 - 相关开源仓库：**23** 个；
-- 第三轮候选方向：**8** 条；
+- 结构化阅读笔记：**37** 份；
 - Git版本、校验脚本、Issue模板和代码骨架均保留。
-
-## 当前数据优先级
-
-- **ACN-Data**：主门控；具有会话窗口、测量电流和pilot信号；
-- **DESL-EPFL Level 3**：外部高分辨率门控；具有P、Pset、Preq、SOC和控制标志；
-- 其他大规模交易/站级数据：用于后续弱标签与广泛验证，不默认拥有真实瞬时功率。
 
 ## 重要边界
 
-- “定向检索未发现”不等于“文献不存在”；
-- 不上传无再分发许可的论文PDF；
+- “定向检索未发现”不等于文献不存在；
+- 不上传无再分发许可的论文 PDF；
 - 数据未下载前，字段只视为官方页面级审计；
-- 所有滚动预测输入必须在发布时刻可获得；
 - 受控执行功率不得直接解释为无控制需求；
-- OOD仅作为可选稳健性验证，不作为当前创新主线。
-
-## 推荐使用顺序
-
-1. 阅读 [`docs/ROUND3_PROBLEM_GAP_PROTOCOL.md`](docs/ROUND3_PROBLEM_GAP_PROTOCOL.md)；
-2. 查看第三轮证据矩阵和方向评分；
-3. 固定ACN与EPFL数据版本并完成字段/控制审计；
-4. 执行 `research/minimum_gate_plan_v0.5.md` Gate 1–3；
-5. 只有门控通过后，才选择神经生存模型、点过程、条件流或其他骨干；
-6. 在 `research/decision_log.md` 中冻结第一个正式实验协议。
+- 分布外测试仅作为稳健性证据，不作为当前创新主线；
+- 原始数据、模型权重和大型结果不提交到 Git。
 
 ## 快速校验
 
@@ -91,7 +127,3 @@ python scripts/validate_library.py
 python scripts/build_reading_queue.py
 python -m pytest code/tests
 ```
-
-## GitHub发布
-
-当前交付仍是完整本地Git仓库。解压后可通过GitHub Desktop发布，或推送到你建立的私有空仓库。详见 [`docs/GITHUB_SETUP.md`](docs/GITHUB_SETUP.md)。

@@ -4,7 +4,6 @@ from datetime import timezone
 from typing import Any
 
 import pytest
-
 from evcf.data.acn_coverage import (
     collect_monthly_coverage,
     iter_months,

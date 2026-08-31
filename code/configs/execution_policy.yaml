@@ -1,0 +1,69 @@
+schema_version: 1
+
+control_plane:
+  provider: github_actions
+  runner: ubuntu-latest
+  gpu: false
+  timeout_minutes: 15
+  permissions:
+    contents: read
+  allowed_tasks:
+    - repository_validation
+    - lint
+    - unit_tests
+    - compile_check
+    - synthetic_cpu_smoke_test
+  forbidden_tasks:
+    - raw_data_download
+    - formal_training
+    - hyperparameter_search
+    - full_probabilistic_scenario_generation
+    - formal_dispatch_optimization
+
+execution_plane:
+  location: local_windows_workstation
+  gpu_name: NVIDIA GeForce RTX 5080
+  nominal_vram_gb: 16
+  formal_vram_budget_gb: 14
+  python_version: "3.11"
+  minimum_pytorch_cuda_build: "12.8"
+  allowed_tasks:
+    - credentialed_data_acquisition
+    - raw_data_qa
+    - preprocessing
+    - feature_building
+    - formal_training
+    - hyperparameter_search
+    - multi_seed_experiments
+    - ablation_studies
+    - probabilistic_scenario_generation
+    - rolling_dispatch_optimization
+
+self_hosted_runner:
+  status: deferred
+  allowed_trigger_if_enabled: workflow_dispatch
+  pull_request_trigger_allowed: false
+  required_labels:
+    - self-hosted
+    - windows
+    - x64
+    - rtx5080
+    - research-local
+
+artifact_policy:
+  github_allowed:
+    - source_code
+    - tests
+    - experiment_configs
+    - deidentified_qa_summaries
+    - aggregate_metrics
+    - small_figures
+    - checksums
+    - run_manifests
+  local_only:
+    - api_tokens
+    - raw_user_level_data
+    - interim_user_level_data
+    - full_model_checkpoints
+    - large_prediction_arrays
+    - full_probabilistic_scenarios

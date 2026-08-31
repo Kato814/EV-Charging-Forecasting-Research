@@ -10,10 +10,13 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from evcf.data.acn_api import ACNClient
+import requests
+from evcf.data import acn_jpl_gate0 as gate0_module
+from evcf.data.acn_api import ACNClient, ACNDataError
 from evcf.data.acn_jpl_gate0 import (
     JPL_ACQUISITION_END,
     JPL_ACQUISITION_START,
+    IncompleteChunkError,
     chunk_paths,
     classify_session,
     detect_duplicate_identifiers,
@@ -258,23 +261,49 @@ def test_hash_mismatch_and_incomplete_manifest_force_clean_rewrite(tmp_path: Pat
 def test_missing_remote_total_is_never_declared_complete(tmp_path: Path) -> None:
     window = next(jpl_acquisition_windows())
 
-    result = download_day_chunk(
-        FakeClient([[page([{"_id": "id-1"}], total=None)]]),
+    with pytest.raises(IncompleteChunkError, match="remote total"):
+        download_day_chunk(
+            FakeClient([[page([{"_id": "id-1"}], total=None)]]),
+            tmp_path,
+            window,
+            endpoint="metadata",
+        )
+
+    data_path, manifest_path = chunk_paths(tmp_path, "metadata", window)
+    assert not data_path.exists()
+    assert not manifest_path.exists()
+    assert not data_path.with_suffix(data_path.suffix + ".partial").exists()
+
+
+@pytest.mark.parametrize("remote_total", [None, 2])
+def test_incomplete_daily_redownload_preserves_existing_canonical_pair(
+    tmp_path: Path,
+    remote_total: int | None,
+) -> None:
+    window = next(jpl_analysis_windows())
+    initial = download_day_chunk(
+        FakeClient([[page([{"_id": "old", "sessionID": "old-session"}], total=1)]]),
         tmp_path,
         window,
-        endpoint="metadata",
+        endpoint="timeseries",
     )
+    manifest = json.loads(initial.manifest_path.read_text(encoding="utf-8"))
+    manifest["complete_for_query"] = False
+    initial.manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    old_data = initial.data_path.read_bytes()
+    old_manifest = initial.manifest_path.read_bytes()
 
-    assert result.remote_total_reported is None
-    assert not result.complete_for_query
-    validation = validate_chunk(
-        result.data_path,
-        result.manifest_path,
-        window=window,
-        endpoint="metadata",
-    )
-    assert not validation.valid
-    assert validation.reason == "manifest is not complete for query"
+    with pytest.raises(IncompleteChunkError, match="remote total"):
+        download_day_chunk(
+            FakeClient([[page([{"_id": "new", "sessionID": "new-session"}], total=remote_total)]]),
+            tmp_path,
+            window,
+            endpoint="timeseries",
+        )
+
+    assert initial.data_path.read_bytes() == old_data
+    assert initial.manifest_path.read_bytes() == old_manifest
+    assert not initial.data_path.with_suffix(initial.data_path.suffix + ".partial").exists()
 
 
 @pytest.mark.parametrize(
@@ -330,7 +359,7 @@ def test_progress_tracks_failure_and_resume_without_storing_error_secrets(
         def iter_pages(self, query: Any):
             self.calls += 1
             if self.calls == 2:
-                raise RuntimeError("request failed: sentinel-secret-token")
+                raise ACNDataError("request failed: sentinel-secret-token")
             yield page([{"_id": f"id-{self.calls}"}], total=1)
 
     first_client = FailingMiddleClient()
@@ -342,18 +371,27 @@ def test_progress_tracks_failure_and_resume_without_storing_error_secrets(
     )
 
     progress_path = tmp_path / "state" / "progress.json"
-    assert first_client.calls == 3
+    assert first_client.calls == 2
     progress_document = json.loads(progress_path.read_text(encoding="utf-8"))
     assert progress_document["endpoints"]["metadata"] == first_progress
-    assert first_progress["pending_days"] == []
-    assert first_progress["completed_days"] == [windows[0].day_key, windows[2].day_key]
+    assert progress_document["schema_version"] == "acn-jpl-progress/v3"
+    assert first_progress["schema_version"] == "acn-jpl-progress/v2"
+    assert first_progress["pending_days"] == [windows[2].day_key]
+    assert first_progress["completed_days"] == [windows[0].day_key]
     assert first_progress["failed_days"] == [windows[1].day_key]
-    assert first_progress["last_success"] == windows[2].day_key
+    assert first_progress["failure_reasons"] == {windows[1].day_key: "ACN_DATA_ERROR"}
+    assert first_progress["stop_reason"] == "ACN_DATA_ERROR"
+    assert first_progress["last_success"] == windows[0].day_key
     assert first_progress["retry_count"] == 1
     assert not progress_path.with_suffix(".json.partial").exists()
     assert "sentinel-secret-token" not in progress_path.read_text(encoding="utf-8")
 
-    resume_client = FakeClient([[page([{"_id": "recovered"}], total=1)]])
+    resume_client = FakeClient(
+        [
+            [page([{"_id": "recovered"}], total=1)],
+            [page([{"_id": "third-day"}], total=1)],
+        ]
+    )
     resumed = run_daily_chunks(
         resume_client,
         tmp_path,
@@ -361,10 +399,12 @@ def test_progress_tracks_failure_and_resume_without_storing_error_secrets(
         endpoint="metadata",
     )
 
-    assert len(resume_client.queries) == 1
+    assert len(resume_client.queries) == 2
     assert resumed["pending_days"] == []
     assert resumed["completed_days"] == [window.day_key for window in windows]
     assert resumed["failed_days"] == []
+    assert resumed["failure_reasons"] == {}
+    assert resumed["stop_reason"] is None
     assert resumed["last_success"] == windows[-1].day_key
     assert resumed["retry_count"] == 1
 
@@ -381,6 +421,8 @@ def test_incomplete_remote_total_is_recorded_as_failed_for_retry(tmp_path: Path)
 
     assert progress["completed_days"] == []
     assert progress["failed_days"] == [window.day_key]
+    assert progress["failure_reasons"] == {window.day_key: "INCOMPLETE_RESPONSE"}
+    assert progress["stop_reason"] == "INCOMPLETE_RESPONSE"
     assert progress["retry_count"] == 1
 
 
@@ -476,7 +518,7 @@ def test_retry_checkpoint_never_persists_day_as_pending_and_failed(
 
     class FailingClient:
         def iter_pages(self, query: Any):
-            raise RuntimeError("transient failure")
+            raise ACNDataError("transient failure")
             yield  # pragma: no cover
 
     first = run_daily_chunks(
@@ -486,6 +528,7 @@ def test_retry_checkpoint_never_persists_day_as_pending_and_failed(
         endpoint="metadata",
     )
     assert first["failed_days"] == [window.day_key]
+    assert first["failure_reasons"] == {window.day_key: "ACN_DATA_ERROR"}
 
     class InterruptingClient:
         def iter_pages(self, query: Any):
@@ -506,3 +549,101 @@ def test_retry_checkpoint_never_persists_day_as_pending_and_failed(
     assert persisted["pending_days"] == [window.day_key]
     assert persisted["failed_days"] == []
     assert set(persisted["pending_days"]).isdisjoint(persisted["failed_days"])
+
+
+def test_expected_network_failure_stops_and_uses_nonsecret_reason(tmp_path: Path) -> None:
+    windows = list(jpl_analysis_windows())[:2]
+
+    class NetworkClient:
+        calls = 0
+
+        def iter_pages(self, query: Any):
+            self.calls += 1
+            raise requests.Timeout("sentinel-secret-token")
+            yield  # pragma: no cover
+
+    client = NetworkClient()
+    progress = run_daily_chunks(client, tmp_path, windows, endpoint="timeseries")
+
+    assert client.calls == 1
+    assert progress["failed_days"] == [windows[0].day_key]
+    assert progress["pending_days"] == [windows[1].day_key]
+    assert progress["failure_reasons"] == {windows[0].day_key: "NETWORK_ERROR"}
+    assert progress["stop_reason"] == "NETWORK_ERROR"
+    assert "sentinel-secret-token" not in (tmp_path / "state" / "progress.json").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_unexpected_error_is_checkpointed_then_reraised_without_secret(
+    tmp_path: Path,
+) -> None:
+    windows = list(jpl_analysis_windows())[:2]
+
+    class BuggyClient:
+        calls = 0
+
+        def iter_pages(self, query: Any):
+            self.calls += 1
+            raise RuntimeError("program bug: sentinel-secret-token")
+            yield  # pragma: no cover
+
+    client = BuggyClient()
+    with pytest.raises(RuntimeError, match="program bug"):
+        run_daily_chunks(client, tmp_path, windows, endpoint="timeseries")
+
+    assert client.calls == 1
+    persisted_text = (tmp_path / "state" / "progress.json").read_text(encoding="utf-8")
+    persisted = json.loads(persisted_text)["endpoints"]["timeseries"]
+    assert persisted["failed_days"] == [windows[0].day_key]
+    assert persisted["pending_days"] == [windows[1].day_key]
+    assert persisted["failure_reasons"] == {windows[0].day_key: "UNEXPECTED_ERROR"}
+    assert persisted["stop_reason"] == "UNEXPECTED_ERROR"
+    assert "sentinel-secret-token" not in persisted_text
+
+
+def test_resume_skips_prevalidated_window_without_calling_downloader(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = next(jpl_analysis_windows())
+    download_day_chunk(
+        FakeClient([[page([{"_id": "existing"}], total=1)]]),
+        tmp_path,
+        window,
+        endpoint="timeseries",
+    )
+    downloader_calls = 0
+
+    def forbidden_downloader(*args: Any, **kwargs: Any) -> Any:
+        nonlocal downloader_calls
+        downloader_calls += 1
+        raise AssertionError("prevalidated window must be skipped")
+
+    monkeypatch.setattr(gate0_module, "download_day_chunk", forbidden_downloader)
+    progress = run_daily_chunks(FakeClient([]), tmp_path, [window], endpoint="timeseries")
+
+    assert downloader_calls == 0
+    assert progress["completed_days"] == [window.day_key]
+    assert progress["failed_days"] == []
+
+
+def test_unexpected_validation_disk_error_is_checkpointed_then_reraised(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = next(jpl_analysis_windows())
+
+    def disk_failure(*args: Any, **kwargs: Any) -> Any:
+        raise OSError("disk failure: sentinel-secret-token")
+
+    monkeypatch.setattr(gate0_module, "validate_chunk", disk_failure)
+    with pytest.raises(OSError, match="disk failure"):
+        run_daily_chunks(FakeClient([]), tmp_path, [window], endpoint="timeseries")
+
+    progress_text = (tmp_path / "state" / "progress.json").read_text(encoding="utf-8")
+    progress = json.loads(progress_text)["endpoints"]["timeseries"]
+    assert progress["failed_days"] == [window.day_key]
+    assert progress["failure_reasons"] == {window.day_key: "UNEXPECTED_ERROR"}
+    assert progress["stop_reason"] == "UNEXPECTED_ERROR"
+    assert "sentinel-secret-token" not in progress_text

@@ -11,20 +11,26 @@ import gzip
 import hashlib
 import json
 import os
+from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from .acn_api import ACNClient, ACNQuery, ACNSchemaError
+import requests
+
+from .acn_api import ACNClient, ACNDataError, ACNQuery, ACNSchemaError
 from .acn_audit import parse_acn_datetime
 from .acn_jpl_gate0 import (
     JPL_ANALYSIS_END,
     JPL_ANALYSIS_START,
+    IncompleteChunkError,
     LocalDayWindow,
+    chunk_paths,
     jpl_analysis_windows,
     run_daily_chunks,
+    validate_chunk,
 )
 
 EXPECTED_COMPLETE_METADATA_FILE_COUNT = 42
@@ -32,6 +38,9 @@ EXPECTED_COMPLETE_METADATA_RECORD_COUNT = 33_638
 EXPECTED_ANALYSIS_SESSION_COUNT = 1_644
 EXPECTED_UTC_MONTH_SESSION_COUNT = 1_645
 EXPECTED_CARRY_IN_SESSION_COUNT = 1
+EXPECTED_COMPLETE_METADATA_INVENTORY_DIGEST = (
+    "bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a"
+)
 
 _UTC_MONTH_START = datetime(2019, 5, 1, tzinfo=timezone.utc)
 _UTC_MONTH_END = datetime(2019, 6, 1, tzinfo=timezone.utc)
@@ -98,6 +107,7 @@ class _CarryInTransfer:
     record_count: int
     remote_total_reported: int | None
     complete_for_query: bool
+    failure_reason: str | None = None
 
 
 def _sha256_file(path: Path) -> str:
@@ -286,8 +296,13 @@ def _load_metadata_scope(metadata_root: str | Path) -> _PrivateMetadataScope:
         source_record_count += file_record_count
         inventory.update(f"{data_path.name}\0{digest}\0{file_record_count}\n".encode())
 
+    inventory_digest = inventory.hexdigest()
     if source_record_count != EXPECTED_COMPLETE_METADATA_RECORD_COUNT:
         raise FullMonthMetadataError("complete metadata must contain exactly 33638 source records")
+    if inventory_digest != EXPECTED_COMPLETE_METADATA_INVENTORY_DIGEST:
+        raise FullMonthMetadataError(
+            "complete metadata inventory digest does not match frozen input"
+        )
     if len(analysis) != EXPECTED_ANALYSIS_SESSION_COUNT:
         raise FullMonthMetadataError(
             "local-month membership filtering must yield exactly 1644 sessions"
@@ -312,7 +327,7 @@ def _load_metadata_scope(metadata_root: str | Path) -> _PrivateMetadataScope:
         analysis_session_count=len(ordered_analysis),
         utc_month_session_count=len(utc_month),
         carry_in_session_count=len(carry_in),
-        inventory_digest=inventory.hexdigest(),
+        inventory_digest=inventory_digest,
     )
     return _PrivateMetadataScope(
         analysis_sessions=ordered_analysis,
@@ -332,7 +347,7 @@ def _carry_in_query(session: _PrivateSession) -> ACNQuery:
     return ACNQuery(
         site="jpl",
         start=session.connection,
-        end=JPL_ANALYSIS_END,
+        end=JPL_ANALYSIS_START,
         timeseries=True,
         session_id=session.session_id,
     )
@@ -431,7 +446,6 @@ def _download_carry_in(
     data_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = data_path.with_suffix(data_path.suffix + ".partial")
     record_count = 0
-    returned_pair: tuple[str, str] | None = None
     totals: set[int] = set()
     try:
         with temporary.open("wb") as raw_handle:
@@ -447,8 +461,6 @@ def _download_carry_in(
                         if not isinstance(item, dict):
                             raise ACNSchemaError("ACN-Data session record must be an object")
                         record_count += 1
-                        if record_count == 1:
-                            returned_pair = _private_pair(item)
                         zipped.write(
                             (
                                 json.dumps(
@@ -462,14 +474,31 @@ def _download_carry_in(
                         )
             raw_handle.flush()
             os.fsync(raw_handle.fileno())
+
+        remote_total_reported = next(iter(totals)) if len(totals) == 1 else None
+        verified_count, returned_pair = _read_single_gzip_record(temporary)
+        exact_pair = returned_pair == (session.object_id, session.session_id)
+        complete = (
+            remote_total_reported == 1
+            and record_count == 1
+            and verified_count == record_count
+            and exact_pair
+        )
+        if not complete:
+            temporary.unlink(missing_ok=True)
+            return _CarryInTransfer(
+                status="FAILED",
+                record_count=record_count,
+                remote_total_reported=remote_total_reported,
+                complete_for_query=False,
+                failure_reason="INCOMPLETE_RESPONSE",
+            )
+        digest = _sha256_file(temporary)
         os.replace(temporary, data_path)
     except Exception:
         temporary.unlink(missing_ok=True)
         raise
 
-    remote_total_reported = next(iter(totals)) if len(totals) == 1 else None
-    exact_pair = returned_pair == (session.object_id, session.session_id)
-    complete = remote_total_reported == 1 and record_count == 1 and exact_pair
     manifest = {
         "schema_version": "acn-jpl-full-month-carry-in/v1",
         "dataset_id": "D0001-jpl-2019-05-full-ts",
@@ -481,18 +510,18 @@ def _download_carry_in(
         "query_condition": query.condition,
         "record_count": record_count,
         "remote_total_reported": remote_total_reported,
-        "complete_for_query": complete,
+        "complete_for_query": True,
         "downloaded_at_utc": downloaded_at_utc.astimezone(timezone.utc).isoformat(),
-        "sha256": _sha256_file(data_path),
+        "sha256": digest,
         "token_stored": False,
         "output_file": data_path.name,
     }
     _atomic_write_json(manifest_path, manifest)
     return _CarryInTransfer(
-        status="DOWNLOADED" if complete else "FAILED",
+        status="DOWNLOADED",
         record_count=record_count,
         remote_total_reported=remote_total_reported,
-        complete_for_query=complete,
+        complete_for_query=True,
     )
 
 
@@ -540,6 +569,83 @@ def _not_run_carry_in() -> dict[str, Any]:
         "record_count": 0,
         "remote_total_reported": None,
         "complete_for_query": False,
+        "failure_reason": "PREREQUISITE_INCOMPLETE",
+    }
+
+
+def _not_run_linkage(scope: _PrivateMetadataScope) -> dict[str, Any]:
+    return {
+        "status": "NOT_RUN",
+        "validated_chunks": 0,
+        "expected_pairs": len(scope.analysis_sessions),
+        "record_count": 0,
+        "unique_pairs": 0,
+        "duplicate_records": 0,
+        "invalid_identifier_records": 0,
+        "missing_pairs": len(scope.analysis_sessions),
+        "orphan_pairs": 0,
+    }
+
+
+def _validate_daily_linkage(
+    root: Path,
+    windows: Iterable[LocalDayWindow],
+    scope: _PrivateMetadataScope,
+) -> dict[str, Any]:
+    expected_pairs = {
+        (session.object_id, session.session_id) for session in scope.analysis_sessions
+    }
+    observed: Counter[tuple[str, str]] = Counter()
+    validated_chunks = 0
+    record_count = 0
+    invalid_identifier_records = 0
+    for window in windows:
+        data_path, manifest_path = chunk_paths(root, "timeseries", window)
+        if not validate_chunk(
+            data_path,
+            manifest_path,
+            window=window,
+            endpoint="timeseries",
+        ).valid:
+            continue
+        validated_chunks += 1
+        with gzip.open(data_path, "rt", encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                item = json.loads(line)
+                if not isinstance(item, dict):
+                    raise ACNSchemaError("validated daily time-series record is not an object")
+                record_count += 1
+                pair = _private_pair(item)
+                if pair is None:
+                    invalid_identifier_records += 1
+                    continue
+                observed[pair] += 1
+
+    observed_pairs = set(observed)
+    duplicate_records = sum(count - 1 for count in observed.values() if count > 1)
+    missing_pairs = len(expected_pairs - observed_pairs)
+    orphan_pairs = len(observed_pairs - expected_pairs)
+    passed = (
+        validated_chunks == 31
+        and record_count == EXPECTED_ANALYSIS_SESSION_COUNT
+        and len(observed_pairs) == EXPECTED_ANALYSIS_SESSION_COUNT
+        and duplicate_records == 0
+        and invalid_identifier_records == 0
+        and missing_pairs == 0
+        and orphan_pairs == 0
+    )
+    return {
+        "status": "PASS" if passed else "FAIL",
+        "validated_chunks": validated_chunks,
+        "expected_pairs": len(expected_pairs),
+        "record_count": record_count,
+        "unique_pairs": len(observed_pairs),
+        "duplicate_records": duplicate_records,
+        "invalid_identifier_records": invalid_identifier_records,
+        "missing_pairs": missing_pairs,
+        "orphan_pairs": orphan_pairs,
     }
 
 
@@ -553,6 +659,7 @@ def _carry_public_summary(transfer: object) -> dict[str, Any]:
     record_count = read("record_count")
     remote_total = read("remote_total_reported")
     complete = read("complete_for_query")
+    failure_reason = read("failure_reason")
     status_valid = status in {"DOWNLOADED", "SKIPPED"}
     count_safe = (
         isinstance(record_count, int) and not isinstance(record_count, bool) and record_count >= 0
@@ -573,6 +680,13 @@ def _carry_public_summary(transfer: object) -> dict[str, Any]:
         "record_count": record_count if count_safe else 0,
         "remote_total_reported": remote_total if total_safe else None,
         "complete_for_query": safe_complete,
+        "failure_reason": (
+            None
+            if safe_complete
+            else failure_reason
+            if failure_reason in {"ACN_DATA_ERROR", "NETWORK_ERROR", "INCOMPLETE_RESPONSE"}
+            else "INCOMPLETE_RESPONSE"
+        ),
     }
 
 
@@ -580,6 +694,7 @@ def _public_result(
     *,
     scope: _PrivateMetadataScope,
     daily: Mapping[str, Any],
+    linkage: Mapping[str, Any],
     carry_in: Mapping[str, Any],
     complete: bool,
 ) -> dict[str, Any]:
@@ -588,6 +703,7 @@ def _public_result(
         "status": "COMPLETE" if complete else "INCOMPLETE",
         "metadata": scope.provenance.public_dict(),
         "daily": dict(daily),
+        "linkage": dict(linkage),
         "carry_in": dict(carry_in),
         "privacy": {
             "aggregate_only": True,
@@ -640,24 +756,53 @@ def run_full_month_timeseries(
         return _public_result(
             scope=scope,
             daily=daily,
+            linkage=_not_run_linkage(scope),
+            carry_in=_not_run_carry_in(),
+            complete=False,
+        )
+
+    linkage = _validate_daily_linkage(root, windows, scope)
+    if linkage["status"] != "PASS":
+        return _public_result(
+            scope=scope,
+            daily=daily,
+            linkage=linkage,
             carry_in=_not_run_carry_in(),
             complete=False,
         )
 
     try:
         carry_transfer = carry_downloader(client, root, scope.carry_in, timestamp)
-    except Exception:  # noqa: BLE001 - never expose exception text that may hold secrets
+    except ACNDataError:
         carry_public = {
             "status": "FAILED",
             "record_count": 0,
             "remote_total_reported": None,
             "complete_for_query": False,
+            "failure_reason": "ACN_DATA_ERROR",
+        }
+    except requests.RequestException:
+        carry_public = {
+            "status": "FAILED",
+            "record_count": 0,
+            "remote_total_reported": None,
+            "complete_for_query": False,
+            "failure_reason": "NETWORK_ERROR",
+        }
+    except IncompleteChunkError:
+        carry_public = {
+            "status": "FAILED",
+            "record_count": 0,
+            "remote_total_reported": None,
+            "complete_for_query": False,
+            "failure_reason": "INCOMPLETE_RESPONSE",
         }
     else:
         carry_public = _carry_public_summary(carry_transfer)
     return _public_result(
         scope=scope,
         daily=daily,
+        linkage=linkage,
         carry_in=carry_public,
         complete=carry_public["complete_for_query"] is True,
     )

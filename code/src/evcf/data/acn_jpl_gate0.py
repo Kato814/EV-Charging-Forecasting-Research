@@ -14,7 +14,9 @@ from pathlib import Path
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from .acn_api import ACNClient, ACNQuery, ACNSchemaError
+import requests
+
+from .acn_api import ACNClient, ACNDataError, ACNQuery, ACNSchemaError
 from .acn_audit import parse_acn_datetime
 
 JPL_TIMEZONE = "America/Los_Angeles"
@@ -307,12 +309,13 @@ def download_day_chunk(
     *,
     endpoint: str,
     downloaded_at_utc: datetime | None = None,
+    _existing_validation: ChunkValidation | None = None,
 ) -> ChunkDownloadResult:
     """Download one daily API query atomically, or skip a validated pair."""
 
     endpoint = _validate_endpoint(endpoint)
     data_path, manifest_path = chunk_paths(root, endpoint, window)
-    existing = validate_chunk(
+    existing = _existing_validation or validate_chunk(
         data_path,
         manifest_path,
         window=window,
@@ -330,6 +333,9 @@ def download_day_chunk(
             sha256=manifest["sha256"],
         )
 
+    timestamp = downloaded_at_utc or datetime.now(timezone.utc)
+    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+        raise ValueError("downloaded_at_utc must be timezone-aware")
     query = ACNQuery(
         site="jpl",
         start=window.local_start,
@@ -371,17 +377,29 @@ def download_day_chunk(
                         record_count += 1
             raw_handle.flush()
             os.fsync(raw_handle.fileno())
+
+        verified_count = 0
+        with gzip.open(temporary, "rt", encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                item = json.loads(line)
+                if not isinstance(item, dict):
+                    raise ACNSchemaError("temporary JSONL record must be an object")
+                verified_count += 1
+        remote_total_reported = next(iter(reported_totals)) if len(reported_totals) == 1 else None
+        if (
+            remote_total_reported is None
+            or record_count != remote_total_reported
+            or verified_count != record_count
+        ):
+            raise IncompleteChunkError("remote total did not prove completeness")
+        digest = _sha256_file(temporary)
         os.replace(temporary, data_path)
     except Exception:
         temporary.unlink(missing_ok=True)
         raise
 
-    remote_total_reported = next(iter(reported_totals)) if len(reported_totals) == 1 else None
-    complete_for_query = remote_total_reported is not None and record_count == remote_total_reported
-    digest = _sha256_file(data_path)
-    timestamp = downloaded_at_utc or datetime.now(timezone.utc)
-    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
-        raise ValueError("downloaded_at_utc must be timezone-aware")
     manifest = {
         "schema_version": "acn-jpl-daily-chunk/v1",
         "dataset_id": "D0001",
@@ -396,7 +414,7 @@ def download_day_chunk(
         "query_condition": query.condition,
         "record_count": record_count,
         "remote_total_reported": remote_total_reported,
-        "complete_for_query": complete_for_query,
+        "complete_for_query": True,
         "downloaded_at_utc": timestamp.astimezone(timezone.utc).isoformat(),
         "sha256": digest,
         "token_stored": False,
@@ -409,7 +427,7 @@ def download_day_chunk(
         status="downloaded",
         record_count=record_count,
         remote_total_reported=remote_total_reported,
-        complete_for_query=complete_for_query,
+        complete_for_query=True,
         sha256=digest,
     )
 
@@ -474,67 +492,120 @@ def run_daily_chunks(
         if isinstance(previous_failed, list)
         else set()
     )
+    valid_failure_reasons = {
+        "ACN_DATA_ERROR",
+        "NETWORK_ERROR",
+        "INCOMPLETE_RESPONSE",
+        "UNEXPECTED_ERROR",
+    }
+    previous_failure_reasons = previous.get("failure_reasons", {})
+    failure_reasons = (
+        {
+            day: reason
+            for day, reason in previous_failure_reasons.items()
+            if day in failed and reason in valid_failure_reasons
+        }
+        if isinstance(previous_failure_reasons, dict)
+        else {}
+    )
     completed: set[str] = set()
-    for window in ordered_windows:
-        data_path, manifest_path = chunk_paths(root_path, endpoint, window)
-        if validate_chunk(
-            data_path,
-            manifest_path,
-            window=window,
-            endpoint=endpoint,
-        ).valid:
-            completed.add(window.day_key)
-            failed.discard(window.day_key)
-
-    pending = set(day_order) - completed - failed
+    pending = set(day_order) - failed
     previous_last_success = previous.get("last_success")
     last_success = previous_last_success if isinstance(previous_last_success, str) else None
+    stop_reason: str | None = None
 
     def snapshot() -> dict[str, Any]:
         return {
-            "schema_version": "acn-jpl-progress/v1",
+            "schema_version": "acn-jpl-progress/v2",
             "endpoint": endpoint,
             "pending_days": [day for day in day_order if day in pending],
             "completed_days": [day for day in day_order if day in completed],
             "failed_days": [day for day in day_order if day in failed],
             "last_success": last_success,
             "retry_count": retry_count,
+            "failure_reasons": {
+                day: failure_reasons[day] for day in day_order if day in failure_reasons
+            },
+            "stop_reason": stop_reason,
         }
 
     def checkpoint() -> None:
         current = snapshot()
         endpoint_states[endpoint] = current
         document = dict(current)
-        document["schema_version"] = "acn-jpl-progress/v2"
+        document["schema_version"] = "acn-jpl-progress/v3"
         document["endpoints"] = endpoint_states
         _atomic_write_json(progress_path, document)
 
     checkpoint()
     for window in ordered_windows:
         day = window.day_key
+        if day in completed:
+            continue
         if day in failed:
             failed.discard(day)
+            failure_reasons.pop(day, None)
             pending.add(day)
         checkpoint()
         try:
-            result = download_day_chunk(
-                client,
-                root_path,
-                window,
+            data_path, manifest_path = chunk_paths(root_path, endpoint, window)
+            existing = validate_chunk(
+                data_path,
+                manifest_path,
+                window=window,
                 endpoint=endpoint,
             )
-            if not result.complete_for_query:
-                raise IncompleteChunkError("remote total did not prove completeness")
-        # A failed day must be checkpointed even for an unexpected client/runtime
-        # exception; no exception text is persisted because it may contain secrets.
-        except Exception:  # noqa: BLE001
+            if not existing.valid:
+                result = download_day_chunk(
+                    client,
+                    root_path,
+                    window,
+                    endpoint=endpoint,
+                    _existing_validation=existing,
+                )
+                if not result.complete_for_query:
+                    raise IncompleteChunkError("remote total did not prove completeness")
+
+        except IncompleteChunkError:
             retry_count += 1
             completed.discard(day)
             failed.add(day)
             pending.discard(day)
+            failure_reasons[day] = "INCOMPLETE_RESPONSE"
+            stop_reason = "INCOMPLETE_RESPONSE"
+            checkpoint()
+            break
+        except ACNDataError:
+            retry_count += 1
+            completed.discard(day)
+            failed.add(day)
+            pending.discard(day)
+            failure_reasons[day] = "ACN_DATA_ERROR"
+            stop_reason = "ACN_DATA_ERROR"
+            checkpoint()
+            break
+        except requests.RequestException:
+            retry_count += 1
+            completed.discard(day)
+            failed.add(day)
+            pending.discard(day)
+            failure_reasons[day] = "NETWORK_ERROR"
+            stop_reason = "NETWORK_ERROR"
+            checkpoint()
+            break
+        except Exception:
+            retry_count += 1
+            completed.discard(day)
+            failed.add(day)
+            pending.discard(day)
+            failure_reasons[day] = "UNEXPECTED_ERROR"
+            stop_reason = "UNEXPECTED_ERROR"
+            checkpoint()
+            raise
         else:
             completed.add(day)
             failed.discard(day)
+            failure_reasons.pop(day, None)
             pending.discard(day)
             last_success = day
         checkpoint()

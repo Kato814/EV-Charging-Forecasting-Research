@@ -20,6 +20,7 @@ from evcf.data.acn_jpl_gate0 import (
     download_day_chunk,
     iter_local_day_windows,
     jpl_acquisition_windows,
+    jpl_analysis_windows,
     run_daily_chunks,
     validate_chunk,
 )
@@ -52,6 +53,18 @@ def test_fixed_jpl_acquisition_window_uses_local_half_open_days() -> None:
     assert windows[-1].local_end == JPL_ACQUISITION_END
     assert windows[0].utc_start.isoformat() == "2019-04-24T07:00:00+00:00"
     assert windows[-1].utc_end.isoformat() == "2019-06-01T07:00:00+00:00"
+    assert all(left.local_end == right.local_start for left, right in pairwise(windows))
+
+
+def test_jpl_analysis_windows_are_exactly_the_31_local_may_days() -> None:
+    windows = list(jpl_analysis_windows())
+
+    assert len(windows) == 31
+    assert windows[0].local_start == JPL_ACQUISITION_START.replace(day=1, month=5)
+    assert windows[-1].local_end == JPL_ACQUISITION_END
+    assert windows[0].utc_start.isoformat() == "2019-05-01T07:00:00+00:00"
+    assert windows[-1].utc_end.isoformat() == "2019-06-01T07:00:00+00:00"
+    assert all(window.local_start.tzinfo is not None for window in windows)
     assert all(left.local_end == right.local_start for left, right in pairwise(windows))
 
 

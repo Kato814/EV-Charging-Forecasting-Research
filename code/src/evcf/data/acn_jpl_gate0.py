@@ -118,6 +118,16 @@ def jpl_acquisition_windows() -> Iterator[LocalDayWindow]:
     )
 
 
+def jpl_analysis_windows() -> Iterator[LocalDayWindow]:
+    """Yield exactly the 31 half-open local days in the May analysis month."""
+
+    return iter_local_day_windows(
+        JPL_ANALYSIS_START.date(),
+        JPL_ANALYSIS_END.date(),
+        timezone_name=JPL_TIMEZONE,
+    )
+
+
 def classify_session(record: Mapping[str, object]) -> SessionRole:
     """Classify a raw session without modifying or copying its fields."""
 

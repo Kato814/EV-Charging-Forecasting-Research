@@ -1,0 +1,44 @@
+{
+  "artifact_scope": "rules only; no cleaned or aggregated data",
+  "creates_15_min_data": false,
+  "creates_cleaned_data": false,
+  "rules": [
+    {
+      "code": "UTC_PARSE",
+      "rule": "Parse timestamps as timezone-aware UTC instants and count parse failures."
+    },
+    {
+      "code": "PRESERVE_RAW_ORDER",
+      "rule": "Preserve every raw value, raw timestamp string, and original ordering."
+    },
+    {
+      "code": "EXACT_DUPLICATE",
+      "rule": "An exact duplicate timestamp-value pair may be deduplicated only with an explicit count."
+    },
+    {
+      "code": "CONFLICTING_DUPLICATE",
+      "rule": "Conflicting values at one timestamp are flagged, never averaged, and excluded pending a documented decision."
+    },
+    {
+      "code": "ACTIVE_INTERVAL",
+      "rule": "Analysis eligibility is connection time less than or equal to t and t strictly less than disconnect time."
+    },
+    {
+      "code": "BOUNDARY_POSITIVE",
+      "rule": "Positive current outside the active interval remains in raw storage and is reported by QA."
+    },
+    {
+      "code": "INTERPOLATION_BOUND",
+      "rule": "No unbounded interpolation is allowed."
+    },
+    {
+      "code": "DONE_TIME",
+      "rule": "Preserve doneChargingTime as a retrospective field."
+    },
+    {
+      "code": "ISSUE_TIME_INPUTS",
+      "rule": "userInputs are truncated using modifiedAt at or before the forecast issue time."
+    }
+  ],
+  "schema_version": "acn-jpl-full-month-cleaning-rules/v1"
+}

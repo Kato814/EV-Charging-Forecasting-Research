@@ -84,6 +84,28 @@ class _ChunkIdentityInventory:
         )
 
 
+class _PrivateChunkIdentityCapture:
+    """One-shot private carrier used only while a chunk is being validated."""
+
+    __slots__ = ("_inventory",)
+
+    def __init__(self) -> None:
+        self._inventory: _ChunkIdentityInventory | None = None
+
+    @property
+    def inventory(self) -> _ChunkIdentityInventory | None:
+        return self._inventory
+
+    def reset(self) -> None:
+        self._inventory = None
+
+    def store(self, inventory: _ChunkIdentityInventory) -> None:
+        self._inventory = inventory
+
+    def __repr__(self) -> str:
+        return "_PrivateChunkIdentityCapture(<redacted>)"
+
+
 @dataclass(frozen=True)
 class ChunkValidation:
     """Result of validating one data/manifest pair."""
@@ -91,11 +113,6 @@ class ChunkValidation:
     valid: bool
     reason: str
     record_count: int = 0
-    _identity_inventory: _ChunkIdentityInventory = field(
-        default_factory=_ChunkIdentityInventory,
-        repr=False,
-        compare=False,
-    )
 
 
 @dataclass(frozen=True)
@@ -109,11 +126,6 @@ class ChunkDownloadResult:
     remote_total_reported: int | None
     complete_for_query: bool
     sha256: str
-    _identity_inventory: _ChunkIdentityInventory = field(
-        default_factory=_ChunkIdentityInventory,
-        repr=False,
-        compare=False,
-    )
 
 
 class IncompleteChunkError(RuntimeError):
@@ -272,10 +284,13 @@ def validate_chunk(
     *,
     window: LocalDayWindow,
     endpoint: str,
+    _private_identity_capture: _PrivateChunkIdentityCapture | None = None,
 ) -> ChunkValidation:
     """Validate completeness, final-file hash, gzip JSONL, and record count."""
 
     endpoint = _validate_endpoint(endpoint)
+    if _private_identity_capture is not None:
+        _private_identity_capture.reset()
     data = Path(data_path)
     manifest_file = Path(manifest_path)
     if not data.is_file():
@@ -320,7 +335,9 @@ def validate_chunk(
         return ChunkValidation(False, "data hash does not match manifest")
 
     count = 0
-    identifier_pairs: list[tuple[str, str]] = []
+    identifier_pairs: list[tuple[str, str]] | None = (
+        [] if _private_identity_capture is not None else None
+    )
     invalid_identifier_records = 0
     try:
         with gzip.open(data, "rt", encoding="utf-8") as handle:
@@ -331,11 +348,12 @@ def validate_chunk(
                 if not isinstance(item, dict):
                     return ChunkValidation(False, "JSONL record is not an object")
                 count += 1
-                pair = _identifier_pair(item)
-                if pair is None:
-                    invalid_identifier_records += 1
-                else:
-                    identifier_pairs.append(pair)
+                if identifier_pairs is not None:
+                    pair = _identifier_pair(item)
+                    if pair is None:
+                        invalid_identifier_records += 1
+                    else:
+                        identifier_pairs.append(pair)
     except (OSError, EOFError, UnicodeError, json.JSONDecodeError):
         return ChunkValidation(False, "data file is not valid gzip JSONL")
 
@@ -352,12 +370,12 @@ def validate_chunk(
         or count != remote_total
     ):
         return ChunkValidation(False, "remote total is missing or does not match", count)
-    return ChunkValidation(
-        True,
-        "valid",
-        count,
-        _identity_inventory(identifier_pairs, invalid_identifier_records),
-    )
+    if _private_identity_capture is not None:
+        assert identifier_pairs is not None
+        _private_identity_capture.store(
+            _identity_inventory(identifier_pairs, invalid_identifier_records)
+        )
+    return ChunkValidation(True, "valid", count)
 
 
 def _remote_total_from_page(page: Mapping[str, Any]) -> int | None:
@@ -378,17 +396,23 @@ def download_day_chunk(
     endpoint: str,
     downloaded_at_utc: datetime | None = None,
     _existing_validation: ChunkValidation | None = None,
+    _private_identity_capture: _PrivateChunkIdentityCapture | None = None,
 ) -> ChunkDownloadResult:
     """Download one daily API query atomically, or skip a validated pair."""
 
     endpoint = _validate_endpoint(endpoint)
     data_path, manifest_path = chunk_paths(root, endpoint, window)
-    existing = _existing_validation or validate_chunk(
-        data_path,
-        manifest_path,
-        window=window,
-        endpoint=endpoint,
-    )
+    if _private_identity_capture is not None:
+        _private_identity_capture.reset()
+    existing = _existing_validation
+    if existing is None:
+        existing = validate_chunk(
+            data_path,
+            manifest_path,
+            window=window,
+            endpoint=endpoint,
+            _private_identity_capture=_private_identity_capture,
+        )
     if existing.valid:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         return ChunkDownloadResult(
@@ -399,7 +423,6 @@ def download_day_chunk(
             remote_total_reported=manifest["remote_total_reported"],
             complete_for_query=True,
             sha256=manifest["sha256"],
-            _identity_inventory=existing._identity_inventory,
         )
 
     timestamp = downloaded_at_utc or datetime.now(timezone.utc)
@@ -448,7 +471,9 @@ def download_day_chunk(
             os.fsync(raw_handle.fileno())
 
         verified_count = 0
-        identifier_pairs: list[tuple[str, str]] = []
+        identifier_pairs: list[tuple[str, str]] | None = (
+            [] if _private_identity_capture is not None else None
+        )
         invalid_identifier_records = 0
         with gzip.open(temporary, "rt", encoding="utf-8") as handle:
             for line in handle:
@@ -458,11 +483,12 @@ def download_day_chunk(
                 if not isinstance(item, dict):
                     raise ACNSchemaError("temporary JSONL record must be an object")
                 verified_count += 1
-                pair = _identifier_pair(item)
-                if pair is None:
-                    invalid_identifier_records += 1
-                else:
-                    identifier_pairs.append(pair)
+                if identifier_pairs is not None:
+                    pair = _identifier_pair(item)
+                    if pair is None:
+                        invalid_identifier_records += 1
+                    else:
+                        identifier_pairs.append(pair)
         remote_total_reported = next(iter(reported_totals)) if len(reported_totals) == 1 else None
         if (
             remote_total_reported is None
@@ -497,6 +523,11 @@ def download_day_chunk(
         "output_file": data_path.name,
     }
     _atomic_write_json(manifest_path, manifest)
+    if _private_identity_capture is not None:
+        assert identifier_pairs is not None
+        _private_identity_capture.store(
+            _identity_inventory(identifier_pairs, invalid_identifier_records)
+        )
     return ChunkDownloadResult(
         data_path=data_path,
         manifest_path=manifest_path,
@@ -505,10 +536,6 @@ def download_day_chunk(
         remote_total_reported=remote_total_reported,
         complete_for_query=True,
         sha256=digest,
-        _identity_inventory=_identity_inventory(
-            identifier_pairs,
-            invalid_identifier_records,
-        ),
     )
 
 
@@ -633,13 +660,16 @@ def run_daily_chunks(
         checkpoint()
         try:
             data_path, manifest_path = chunk_paths(root_path, endpoint, window)
+            identity_capture = (
+                _PrivateChunkIdentityCapture() if _private_validation_sink is not None else None
+            )
             existing = validate_chunk(
                 data_path,
                 manifest_path,
                 window=window,
                 endpoint=endpoint,
+                _private_identity_capture=identity_capture,
             )
-            identity_inventory = existing._identity_inventory
             if not existing.valid:
                 result = download_day_chunk(
                     client,
@@ -647,10 +677,13 @@ def run_daily_chunks(
                     window,
                     endpoint=endpoint,
                     _existing_validation=existing,
+                    _private_identity_capture=identity_capture,
                 )
-                identity_inventory = result._identity_inventory
                 if not result.complete_for_query:
                     raise IncompleteChunkError("remote total did not prove completeness")
+            identity_inventory = identity_capture.inventory if identity_capture else None
+            if _private_validation_sink is not None and identity_inventory is None:
+                raise RuntimeError("private chunk identity validation was not captured")
 
         except IncompleteChunkError:
             retry_count += 1
@@ -690,6 +723,7 @@ def run_daily_chunks(
             raise
         else:
             if _private_validation_sink is not None:
+                assert identity_inventory is not None
                 _private_validation_sink[day] = identity_inventory
             completed.add(day)
             failed.discard(day)

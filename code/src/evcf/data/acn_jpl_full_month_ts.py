@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import inspect
 import json
 import os
 from collections import Counter
@@ -28,8 +29,11 @@ from .acn_jpl_gate0 import (
     IncompleteChunkError,
     LocalDayWindow,
     _ChunkIdentityInventory,
+    _PrivateChunkIdentityCapture,
+    chunk_paths,
     jpl_analysis_windows,
     run_daily_chunks,
+    validate_chunk,
 )
 
 EXPECTED_COMPLETE_METADATA_FILE_COUNT = 42
@@ -586,6 +590,40 @@ def _not_run_linkage(scope: _PrivateMetadataScope) -> dict[str, Any]:
     }
 
 
+def _daily_runner_supports_private_sink(runner: Callable[..., Any]) -> bool:
+    try:
+        parameters = inspect.signature(runner).parameters
+    except (TypeError, ValueError):
+        return False
+    private_parameter = parameters.get("_private_validation_sink")
+    if (
+        private_parameter is not None
+        and private_parameter.kind is not inspect.Parameter.POSITIONAL_ONLY
+    ):
+        return True
+    return any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters.values())
+
+
+def _load_private_daily_validation_sink(
+    root: Path,
+    windows: Iterable[LocalDayWindow],
+) -> dict[str, _ChunkIdentityInventory]:
+    validation_sink: dict[str, _ChunkIdentityInventory] = {}
+    for window in windows:
+        data_path, manifest_path = chunk_paths(root, "timeseries", window)
+        capture = _PrivateChunkIdentityCapture()
+        validation = validate_chunk(
+            data_path,
+            manifest_path,
+            window=window,
+            endpoint="timeseries",
+            _private_identity_capture=capture,
+        )
+        if validation.valid and capture.inventory is not None:
+            validation_sink[window.day_key] = capture.inventory
+    return validation_sink
+
+
 def _validate_daily_linkage(
     windows: Iterable[LocalDayWindow],
     scope: _PrivateMetadataScope,
@@ -730,13 +768,22 @@ def run_full_month_timeseries(
     root = Path(raw_root)
     windows = list(jpl_analysis_windows())
     validation_sink: dict[str, _ChunkIdentityInventory] = {}
-    progress = daily_runner(
-        client,
-        root,
-        windows,
-        endpoint="timeseries",
-        _private_validation_sink=validation_sink,
-    )
+    runner_supports_private_sink = _daily_runner_supports_private_sink(daily_runner)
+    if runner_supports_private_sink:
+        progress = daily_runner(
+            client,
+            root,
+            windows,
+            endpoint="timeseries",
+            _private_validation_sink=validation_sink,
+        )
+    else:
+        progress = daily_runner(
+            client,
+            root,
+            windows,
+            endpoint="timeseries",
+        )
     daily, daily_complete = _daily_public_summary(progress, windows)
     if not daily_complete:
         return _public_result(
@@ -747,6 +794,8 @@ def run_full_month_timeseries(
             complete=False,
         )
 
+    if not runner_supports_private_sink:
+        validation_sink = _load_private_daily_validation_sink(root, windows)
     linkage = _validate_daily_linkage(windows, scope, validation_sink)
     if linkage["status"] != "PASS":
         return _public_result(

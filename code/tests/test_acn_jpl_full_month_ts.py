@@ -316,6 +316,74 @@ def test_complete_resume_scans_each_daily_gzip_once_for_validation_and_linkage(
     assert set(daily_open_counts.values()) == {1}
 
 
+def test_legacy_daily_runner_signature_uses_safe_disk_linkage_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records, carry = _production_scope_records()
+    analysis_records = records[:-1]
+    metadata_root = tmp_path / "metadata"
+    _write_legacy_metadata(metadata_root, records, monkeypatch=monkeypatch)
+    legacy_calls = 0
+
+    def legacy_runner(
+        client: Any,
+        root: Path,
+        windows: Any,
+        *,
+        endpoint: str,
+    ) -> dict[str, Any]:
+        nonlocal legacy_calls
+        legacy_calls += 1
+        return _exact_daily_runner(analysis_records)(
+            client,
+            root,
+            windows,
+            endpoint=endpoint,
+        )
+
+    result = run_full_month_timeseries(
+        authorized=True,
+        metadata_root=metadata_root,
+        raw_root=tmp_path / "raw",
+        client_factory=lambda: FullRunClient(carry),
+        daily_runner=legacy_runner,
+    )
+
+    assert legacy_calls == 1
+    assert result["status"] == "COMPLETE"
+    assert result["linkage"]["status"] == "PASS"
+
+
+def test_capable_daily_runner_internal_type_error_is_not_masked(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records, carry = _production_scope_records()
+    metadata_root = tmp_path / "metadata"
+    _write_legacy_metadata(metadata_root, records, monkeypatch=monkeypatch)
+
+    def capable_runner(
+        client: Any,
+        root: Path,
+        windows: Any,
+        *,
+        endpoint: str,
+        _private_validation_sink: Any,
+    ) -> dict[str, Any]:
+        del client, root, windows, endpoint, _private_validation_sink
+        raise TypeError("sentinel internal runner bug")
+
+    with pytest.raises(TypeError, match="sentinel internal runner bug"):
+        run_full_month_timeseries(
+            authorized=True,
+            metadata_root=metadata_root,
+            raw_root=tmp_path / "raw",
+            client_factory=lambda: FullRunClient(carry),
+            daily_runner=capable_runner,
+        )
+
+
 def test_self_consistent_metadata_with_wrong_frozen_digest_fails_before_client(
     tmp_path: Path,
 ) -> None:

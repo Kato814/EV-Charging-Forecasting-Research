@@ -4,6 +4,7 @@ import gzip
 import hashlib
 import json
 from copy import deepcopy
+from dataclasses import asdict
 from datetime import date, timezone
 from itertools import pairwise
 from pathlib import Path
@@ -273,6 +274,35 @@ def test_missing_remote_total_is_never_declared_complete(tmp_path: Path) -> None
     assert not data_path.exists()
     assert not manifest_path.exists()
     assert not data_path.with_suffix(data_path.suffix + ".partial").exists()
+
+
+def test_public_chunk_dataclasses_never_serialize_private_identifiers(
+    tmp_path: Path,
+) -> None:
+    window = next(jpl_analysis_windows())
+    private_record = {
+        "_id": "sentinel-private-object",
+        "sessionID": "sentinel-private-session",
+    }
+    result = download_day_chunk(
+        FakeClient([[page([private_record], total=1)]]),
+        tmp_path,
+        window,
+        endpoint="timeseries",
+    )
+    validation = validate_chunk(
+        result.data_path,
+        result.manifest_path,
+        window=window,
+        endpoint="timeseries",
+    )
+
+    for public_dataclass in (result, validation):
+        payload = asdict(public_dataclass)
+        serialized = json.dumps(payload, default=str)
+        assert "sentinel-private-object" not in serialized
+        assert "sentinel-private-session" not in serialized
+        assert "identity" not in serialized
 
 
 @pytest.mark.parametrize("remote_total", [None, 2])

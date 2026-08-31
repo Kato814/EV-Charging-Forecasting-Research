@@ -28,13 +28,13 @@ from .acn_coverage import (
 )
 
 __all__ = [
+    "ACNAuditReport",
     "ACNAuthenticationError",
     "ACNClient",
     "ACNDataError",
     "ACNQuery",
     "ACNSchemaError",
     "DownloadResult",
-    "ACNAuditReport",
     "MonthlyCoverageRecord",
     "audit_jsonl",
     "audit_sessions",

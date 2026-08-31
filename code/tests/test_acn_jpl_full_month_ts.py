@@ -355,6 +355,80 @@ def test_legacy_daily_runner_signature_uses_safe_disk_linkage_fallback(
     assert result["linkage"]["status"] == "PASS"
 
 
+def test_generic_kwargs_runner_is_not_treated_as_private_sink_capable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records, carry = _production_scope_records()
+    metadata_root = tmp_path / "metadata"
+    _write_legacy_metadata(metadata_root, records, monkeypatch=monkeypatch)
+    received_kwargs: list[dict[str, Any]] = []
+
+    def kwargs_runner(
+        client: Any,
+        root: Path,
+        windows: Any,
+        *,
+        endpoint: str,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        received_kwargs.append(dict(kwargs))
+        return _exact_daily_runner(records[:-1])(
+            client,
+            root,
+            windows,
+            endpoint=endpoint,
+        )
+
+    result = run_full_month_timeseries(
+        authorized=True,
+        metadata_root=metadata_root,
+        raw_root=tmp_path / "raw",
+        client_factory=lambda: FullRunClient(carry),
+        daily_runner=kwargs_runner,
+    )
+
+    assert received_kwargs == [{}]
+    assert result["status"] == "COMPLETE"
+    assert result["linkage"]["status"] == "PASS"
+
+
+def test_explicit_sink_runner_that_ignores_sink_uses_missing_day_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records, carry = _production_scope_records()
+    metadata_root = tmp_path / "metadata"
+    _write_legacy_metadata(metadata_root, records, monkeypatch=monkeypatch)
+
+    def ignoring_runner(
+        client: Any,
+        root: Path,
+        windows: Any,
+        *,
+        endpoint: str,
+        _private_validation_sink: Any,
+    ) -> dict[str, Any]:
+        del _private_validation_sink
+        return _exact_daily_runner(records[:-1])(
+            client,
+            root,
+            windows,
+            endpoint=endpoint,
+        )
+
+    result = run_full_month_timeseries(
+        authorized=True,
+        metadata_root=metadata_root,
+        raw_root=tmp_path / "raw",
+        client_factory=lambda: FullRunClient(carry),
+        daily_runner=ignoring_runner,
+    )
+
+    assert result["status"] == "COMPLETE"
+    assert result["linkage"]["status"] == "PASS"
+
+
 def test_capable_daily_runner_internal_type_error_is_not_masked(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

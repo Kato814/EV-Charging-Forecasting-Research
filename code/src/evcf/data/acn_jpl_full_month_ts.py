@@ -592,16 +592,14 @@ def _not_run_linkage(scope: _PrivateMetadataScope) -> dict[str, Any]:
 
 def _daily_runner_supports_private_sink(runner: Callable[..., Any]) -> bool:
     try:
-        parameters = inspect.signature(runner).parameters
+        parameters = inspect.signature(runner, follow_wrapped=False).parameters
     except (TypeError, ValueError):
         return False
     private_parameter = parameters.get("_private_validation_sink")
-    if (
+    return (
         private_parameter is not None
         and private_parameter.kind is not inspect.Parameter.POSITIONAL_ONLY
-    ):
-        return True
-    return any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters.values())
+    )
 
 
 def _load_private_daily_validation_sink(
@@ -794,8 +792,16 @@ def run_full_month_timeseries(
             complete=False,
         )
 
-    if not runner_supports_private_sink:
-        validation_sink = _load_private_daily_validation_sink(root, windows)
+    missing_inventory_windows = [
+        window
+        for window in windows
+        if not isinstance(
+            validation_sink.get(window.day_key),
+            _ChunkIdentityInventory,
+        )
+    ]
+    if missing_inventory_windows:
+        validation_sink.update(_load_private_daily_validation_sink(root, missing_inventory_windows))
     linkage = _validate_daily_linkage(windows, scope, validation_sink)
     if linkage["status"] != "PASS":
         return _public_result(

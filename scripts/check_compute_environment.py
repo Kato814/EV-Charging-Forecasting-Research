@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 
-def _round_gib(value: int | float) -> float:
+def _round_gib(value: float) -> float:
     return round(float(value) / (1024**3), 3)
 
 

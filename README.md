@@ -2,9 +2,9 @@
 
 面向**电动汽车充电功率/负荷预测具体问题、概率预测、会话过程建模、预测—调度闭环及后续可信分布式学习**的长期研究库。
 
-> 当前规划版本：`v0.6.0-closed-loop-plan`  
-> 最近核验日期：2026-08-29  
-> 状态：研究问题条件锁定；进入数据可行性与最小门控实验阶段；尚未冻结最终论文题目和具体算法。
+> 当前规划版本：`v0.7.0-jpl-preflight-pass`  
+> 最近核验日期：2026-08-31  
+> 状态：研究问题条件锁定；JPL 2019-05当地月元数据门控和100会话时间序列预检通过；完整月时间序列与Gate 1尚未执行。
 
 ## 当前主验证方向
 
@@ -34,6 +34,23 @@ P_{\tau+h}=P^{\mathrm{active}}_{\tau+h}+P^{\mathrm{arrival}}_{\tau+h}.
 
 第一阶段以概率功率预测为主；第二阶段通过小型滚动优化验证运行价值；在预测问题成立后，再扩展车辆级有序充电、预测—决策联合训练和可信联邦学习。
 
+## 计算执行安排
+
+本项目采用：
+
+```text
+GitHub / GitHub Actions = 代码、审查和轻量CI控制面
+本地Windows + RTX 5080 = 原始数据、正式训练和调度执行面
+```
+
+- GitHub Actions只执行仓库校验、Ruff、单元测试、编译检查和CPU小样本冒烟测试；
+- ACN Token调用、原始数据处理、完整月聚合、深度模型训练、多随机种子、消融、超参数搜索和调度均在本地工作站运行；
+- 当前不购买GitHub GPU runner，也不立即启用self-hosted runner；
+- 原始数据、大型中间数组和模型权重不提交Git；GitHub只保存配置、哈希、聚合指标和审计证据；
+- 本地GPU环境需通过 `scripts/check_compute_environment.py` 核验后才能执行正式训练。
+
+详细规则：[`docs/COMPUTE_EXECUTION_POLICY.md`](docs/COMPUTE_EXECUTION_POLICY.md)。
+
 ## 当前研究原则
 
 1. 先证明具体预测问题真实存在，再选择复杂模型；
@@ -50,8 +67,10 @@ P_{\tau+h}=P^{\mathrm{active}}_{\tau+h}+P^{\mathrm{arrival}}_{\tau+h}.
 - [`research/decision_recommendation_v0.6.md`](research/decision_recommendation_v0.6.md)：研究方向、假设和门控；
 - [`research/forecast_dispatch_interface_v0.6.md`](research/forecast_dispatch_interface_v0.6.md)：预测与调度变量接口；
 - [`research/execution_roadmap_v0.6.md`](research/execution_roadmap_v0.6.md)：分阶段执行路线；
+- [`research/jpl_staged_acquisition_decision_v0.7.md`](research/jpl_staged_acquisition_decision_v0.7.md)：JPL分阶段获取决策；
 - [`datasets/acquisition_and_semantics_checklist_v0.6.md`](datasets/acquisition_and_semantics_checklist_v0.6.md)：数据获取与语义审计；
-- [`experiments/gate0_gate2_protocol_v0.6.md`](experiments/gate0_gate2_protocol_v0.6.md)：Gate 0–Gate 2 最小实验协议。
+- [`experiments/gate0_gate2_protocol_v0.6.md`](experiments/gate0_gate2_protocol_v0.6.md)：Gate 0–Gate 2最小实验协议；
+- [`docs/COMPUTE_EXECUTION_POLICY.md`](docs/COMPUTE_EXECUTION_POLICY.md)：本地GPU与GitHub CI职责边界。
 
 历史问题缺口和证据材料继续保留：
 
@@ -62,13 +81,13 @@ P_{\tau+h}=P^{\mathrm{active}}_{\tau+h}+P^{\mathrm{arrival}}_{\tau+h}.
 
 ## 下一步
 
-### Phase 0：数据获取与语义审计
+### Phase 0：完成JPL完整月时间序列与功率语义
 
-1. 获取并固定 ACN-Data 版本；
-2. 核验 DESL-EPFL Level 3 数据访问、字段和许可；
-3. 建立字段字典、时间戳/时区审计和控制影响审计；
-4. 形成预测发布时间字段白名单；
-5. 验证会话级电流、网络配置与站级功率之间的换算关系。
+1. 获取JPL当地月2019-05的1644个会话及1个carry-in会话的完整 `/ts`；
+2. 完成时间序列完整性、重复时间戳、稀疏分钟和边界外电流QA；
+3. 固定raw到interim的清洗规则；
+4. 验证会话级电流、网络配置与站级功率之间的换算关系；
+5. 构造完整连续的15 min站级轨迹和严格截至发布时间的会话快照。
 
 ### Phase 1：实时状态价值 Gate 1
 
@@ -81,19 +100,22 @@ P_{\tau+h}=P^{\mathrm{active}}_{\tau+h}+P^{\mathrm{arrival}}_{\tau+h}.
 
 ### Phase 2：双源分解价值 Gate 2
 
-比较强直接概率模型、在充分支、未来到达分支、独立双源聚合、相关双源聚合和 oracle 上限。
+比较强直接概率模型、在充分支、未来到达分支、独立双源聚合、相关双源聚合和oracle上限。
 
-在 Gate 1–Gate 2 通过前，不开发复杂点过程、扩散模型、可微优化或联邦学习。
+在Gate 1–Gate 2通过前，不开发复杂点过程、扩散模型、可微优化或联邦学习。
 
-## Gate 0代码状态
+## Gate 0代码与证据状态
 
-`data/acn-gate0`分支已实现首版ACN数据获取与审计基础设施：
+Gate 0基础设施和JPL 2019-05预检已进入`main`：
 
 - `scripts/acn_gate0.py`：元数据/时间序列有界下载和离线审计；
+- `scripts/acn_jpl_2019_05.py`：JPL当地月分块获取入口；
 - `evcf.data.acn_api`：带重试、分页、原子写入和SHA-256 manifest的API客户端；
 - `evcf.data.acn_audit`：字段覆盖、时序结构、时间边界和泄漏审计；
-- `datasets/audits/D0001_ACN_GATE0_RUNBOOK.md`：运行手册与停止条件；
-- `.env.example`：仅声明环境变量名称，不保存真实token。
+- JPL当地月元数据：1644个唯一会话，与官方 `_meta.total` 一致；
+- 完整历史carry-in：1个；
+- 固定种子100会话 `/ts` 预检：100/100匹配，状态PASS；
+- `.env.example`：仅声明环境变量名称，不保存真实Token。
 
 重要语义：ACN的`chargingCurrent`是实测电流，不是直接的kW功率。正式功率标签仍需结合EVSE电压、相别和网络配置构造；在完成该步骤前，不得把电流求和直接表述为站级实测功率。
 
@@ -114,29 +136,36 @@ P_{\tau+h}=P^{\mathrm{active}}_{\tau+h}+P^{\mathrm{arrival}}_{\tau+h}.
 
 ## 仓库内容
 
-- 正式同行评议/高可信文献：**67** 篇；
-- 前沿观察：**19** 篇；
-- 通用及相邻方法基础：**45** 篇；
-- 第三轮问题证据：**14** 项，检索簇 **8** 组；
-- 候选数据集/仿真器：**15** 个；
-- 相关开源仓库：**23** 个；
-- 结构化阅读笔记：**37** 份；
+- 正式同行评议/高可信文献：**67**篇；
+- 前沿观察：**19**篇；
+- 通用及相邻方法基础：**45**篇；
+- 第三轮问题证据：**14**项，检索簇**8**组；
+- 候选数据集/仿真器：**15**个；
+- 相关开源仓库：**23**个；
+- 结构化阅读笔记：**37**份；
 - Git版本、校验脚本、Issue模板和代码骨架均保留。
 
 ## 重要边界
 
 - “定向检索未发现”不等于文献不存在；
-- 不上传无再分发许可的论文 PDF；
+- 不上传无再分发许可的论文PDF；
 - 数据未下载前，字段只视为官方页面级审计；
 - 受控执行功率不得直接解释为无控制需求；
 - 分布外测试仅作为稳健性证据，不作为当前创新主线；
-- 原始数据、模型权重和大型结果不提交到 Git。
+- 原始数据、模型权重和大型结果不提交到Git。
 
 ## 快速校验
 
 ```bash
 python -m pip install -e .[dev]
 python scripts/validate_library.py
+python scripts/check_compute_environment.py
 python scripts/build_reading_queue.py
 python -m pytest code/tests
+```
+
+本地RTX 5080正式核验：
+
+```bash
+python scripts/check_compute_environment.py --require-cuda --min-vram-gb 14
 ```

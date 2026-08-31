@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from email.utils import format_datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -74,6 +74,7 @@ class ACNQuery:
     end: datetime
     timeseries: bool = False
     min_energy_kwh: float | None = None
+    session_id: str | None = None
     max_sessions: int | None = None
     sort: str = "-connectionTime"
 
@@ -86,6 +87,10 @@ class ACNQuery:
             raise ValueError("start must be earlier than end")
         if self.min_energy_kwh is not None and self.min_energy_kwh < 0:
             raise ValueError("min_energy_kwh must be non-negative")
+        if self.session_id is not None and (
+            not isinstance(self.session_id, str) or not self.session_id.strip()
+        ):
+            raise ValueError("session_id must be a non-empty string when provided")
         if self.max_sessions is not None and self.max_sessions <= 0:
             raise ValueError("max_sessions must be positive when provided")
 
@@ -105,6 +110,11 @@ class ACNQuery:
         ]
         if self.min_energy_kwh is not None:
             clauses.append(f"kWhDelivered >= {self.min_energy_kwh:g}")
+        if self.session_id is not None:
+            # The official ``where`` grammar uses JSON-compatible quoted string
+            # literals.  Encoding the complete value prevents quote characters in
+            # an identifier from becoming query operators.
+            clauses.append(f"sessionID == {json.dumps(self.session_id, ensure_ascii=False)}")
         return " and ".join(clauses)
 
     @property
@@ -121,6 +131,7 @@ class ACNQuery:
             "end_utc": self.end_utc.isoformat(),
             "timeseries": self.timeseries,
             "min_energy_kwh": self.min_energy_kwh,
+            "session_id": self.session_id,
             "max_sessions": self.max_sessions,
             "sort": self.sort,
             "where": self.condition,
@@ -249,11 +260,49 @@ class ACNClient:
             if not isinstance(next_link, Mapping) or not next_link.get("href"):
                 break
             next_url = urljoin(self.base_url, str(next_link["href"]))
+            base_origin = urlsplit(self.base_url)
+            next_origin = urlsplit(next_url)
+            if (
+                next_origin.scheme.lower(),
+                next_origin.netloc.lower(),
+            ) != (
+                base_origin.scheme.lower(),
+                base_origin.netloc.lower(),
+            ):
+                raise ACNSchemaError("ACN-Data returned a cross-origin pagination link")
             if next_url in seen_urls:
                 raise ACNSchemaError("ACN-Data pagination loop detected")
             seen_urls.add(next_url)
             url = next_url
             params = None
+
+    def fetch_total_once(self, query: ACNQuery) -> int:
+        """Issue one request and return only the validated official ``_meta.total``.
+
+        This deliberately does not validate, consume, or paginate ``_items``.  It is
+        intended for an independent count reference, not session acquisition.
+        """
+
+        url = urljoin(self.base_url, query.endpoint)
+        payload = self._get_json(
+            url,
+            params={
+                "where": query.condition,
+                "sort": query.sort,
+                "max_results": 1,
+            },
+        )
+        meta = payload.get("_meta")
+        total = meta.get("total") if isinstance(meta, Mapping) else None
+        if (
+            not isinstance(total, int)
+            or isinstance(total, bool)
+            or total < 0
+        ):
+            raise ACNSchemaError(
+                "ACN-Data page is missing a non-negative integer '_meta.total'"
+            )
+        return total
 
     def iter_sessions(self, query: ACNQuery) -> Iterator[dict[str, Any]]:
         yielded = 0

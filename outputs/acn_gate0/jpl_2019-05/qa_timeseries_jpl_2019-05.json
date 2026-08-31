@@ -1,0 +1,337 @@
+{
+  "actual_scope": {
+    "analysis_connection_range_utc": {
+      "maximum": "2019-06-01T04:00:22+00:00",
+      "minimum": "2019-05-01T12:04:06+00:00"
+    },
+    "connection_range_utc": {
+      "maximum": "2019-06-01T04:00:22+00:00",
+      "minimum": "2019-04-24T12:43:13+00:00"
+    },
+    "metadata_days_with_records": 37,
+    "metadata_record_count": 1973,
+    "timeseries_status": "PREFLIGHT_100_ONLY"
+  },
+  "api_retry_observation": {
+    "chunk_failure_retry_count": 0,
+    "chunk_failure_retry_count_status": "OBSERVED_FROM_PROGRESS",
+    "http_internal_retry_count": null,
+    "http_internal_retry_count_status": "NOT_OBSERVABLE",
+    "note": "progress.json exposes failed chunk attempts only; retries internal to the HTTP adapter are not observable from saved acquisition state."
+  },
+  "buffer": {
+    "carry_in_session_count": 1,
+    "connection_session_count": 329,
+    "observed_end_exclusive": "2019-05-01T00:00:00-07:00",
+    "observed_start_inclusive": "2019-04-24T00:00:00-07:00",
+    "sufficiency": {
+      "assessment_zh": "七日缓冲只说明局部观测范围，不能证明更早连接且仍活跃的会话不存在；完整性只能由单独的全历史 carry-in 审计支持。",
+      "status": "PARTIAL_OBSERVATION_ONLY"
+    }
+  },
+  "daily": {
+    "metadata_record_counts": {
+      "2019-04-24": 71,
+      "2019-04-25": 72,
+      "2019-04-26": 31,
+      "2019-04-27": 2,
+      "2019-04-28": 0,
+      "2019-04-29": 76,
+      "2019-04-30": 77,
+      "2019-05-01": 72,
+      "2019-05-02": 73,
+      "2019-05-03": 86,
+      "2019-05-04": 4,
+      "2019-05-05": 3,
+      "2019-05-06": 78,
+      "2019-05-07": 73,
+      "2019-05-08": 72,
+      "2019-05-09": 72,
+      "2019-05-10": 32,
+      "2019-05-11": 7,
+      "2019-05-12": 5,
+      "2019-05-13": 81,
+      "2019-05-14": 75,
+      "2019-05-15": 76,
+      "2019-05-16": 79,
+      "2019-05-17": 72,
+      "2019-05-18": 31,
+      "2019-05-19": 25,
+      "2019-05-20": 73,
+      "2019-05-21": 70,
+      "2019-05-22": 71,
+      "2019-05-23": 73,
+      "2019-05-24": 39,
+      "2019-05-25": 3,
+      "2019-05-26": 1,
+      "2019-05-27": 5,
+      "2019-05-28": 71,
+      "2019-05-29": 75,
+      "2019-05-30": 77,
+      "2019-05-31": 70
+    },
+    "timeseries_record_counts": {
+      "2019-04-24": null,
+      "2019-04-25": null,
+      "2019-04-26": null,
+      "2019-04-27": null,
+      "2019-04-28": null,
+      "2019-04-29": null,
+      "2019-04-30": null,
+      "2019-05-01": null,
+      "2019-05-02": null,
+      "2019-05-03": null,
+      "2019-05-04": null,
+      "2019-05-05": null,
+      "2019-05-06": null,
+      "2019-05-07": null,
+      "2019-05-08": null,
+      "2019-05-09": null,
+      "2019-05-10": null,
+      "2019-05-11": null,
+      "2019-05-12": null,
+      "2019-05-13": null,
+      "2019-05-14": null,
+      "2019-05-15": null,
+      "2019-05-16": null,
+      "2019-05-17": null,
+      "2019-05-18": null,
+      "2019-05-19": null,
+      "2019-05-20": null,
+      "2019-05-21": null,
+      "2019-05-22": null,
+      "2019-05-23": null,
+      "2019-05-24": null,
+      "2019-05-25": null,
+      "2019-05-26": null,
+      "2019-05-27": null,
+      "2019-05-28": null,
+      "2019-05-29": null,
+      "2019-05-30": null,
+      "2019-05-31": null
+    },
+    "timeseries_status": "PREFLIGHT_100_ONLY"
+  },
+  "daily_timeseries_record_counts": {
+    "2019-04-24": null,
+    "2019-04-25": null,
+    "2019-04-26": null,
+    "2019-04-27": null,
+    "2019-04-28": null,
+    "2019-04-29": null,
+    "2019-04-30": null,
+    "2019-05-01": null,
+    "2019-05-02": null,
+    "2019-05-03": null,
+    "2019-05-04": null,
+    "2019-05-05": null,
+    "2019-05-06": null,
+    "2019-05-07": null,
+    "2019-05-08": null,
+    "2019-05-09": null,
+    "2019-05-10": null,
+    "2019-05-11": null,
+    "2019-05-12": null,
+    "2019-05-13": null,
+    "2019-05-14": null,
+    "2019-05-15": null,
+    "2019-05-16": null,
+    "2019-05-17": null,
+    "2019-05-18": null,
+    "2019-05-19": null,
+    "2019-05-20": null,
+    "2019-05-21": null,
+    "2019-05-22": null,
+    "2019-05-23": null,
+    "2019-05-24": null,
+    "2019-05-25": null,
+    "2019-05-26": null,
+    "2019-05-27": null,
+    "2019-05-28": null,
+    "2019-05-29": null,
+    "2019-05-30": null,
+    "2019-05-31": null
+  },
+  "dataset_id": "D0001",
+  "download_attempted": true,
+  "field_coverage": {
+    "chargingCurrent": {
+      "count": 100,
+      "denominator": 100,
+      "rate": 1.0
+    },
+    "pilotSignal": {
+      "count": 100,
+      "denominator": 100,
+      "rate": 1.0
+    },
+    "userInputs": {
+      "count": 97,
+      "denominator": 100,
+      "rate": 0.97
+    }
+  },
+  "full_month": {
+    "download_attempted": false,
+    "reason_code": "STOP_AFTER_100_SESSION_PREFLIGHT_FOR_CONTROLLER_REVIEW",
+    "status": "NOT_RUN"
+  },
+  "metadata_manifest_quality": {
+    "failure_dates": [],
+    "invalid_manifests": 0,
+    "json_errors_total": 0,
+    "sha256_mismatch": 0,
+    "valid_manifests": 38
+  },
+  "preflight": {
+    "field_coverage": {
+      "chargingCurrent": {
+        "count": 100,
+        "denominator": 100,
+        "rate": 1.0
+      },
+      "pilotSignal": {
+        "count": 100,
+        "denominator": 100,
+        "rate": 1.0
+      },
+      "userInputs": {
+        "count": 97,
+        "denominator": 100,
+        "rate": 0.97
+      }
+    },
+    "gate": {
+      "invalid_charging_current_limit": 0.1,
+      "invalid_pilot_signal_limit": 0.1,
+      "severe_timestamp_anomalies": 0,
+      "status": "PASS",
+      "unmatched_metadata_limit": 0.01,
+      "unmatched_metadata_rate": 0.0
+    },
+    "matching": {
+      "match_rate": 1.0,
+      "matched_sessions": 100,
+      "metadata_sessions": 100,
+      "missing_sessions": 0,
+      "orphan_sessions": 0,
+      "timeseries_records": 100
+    },
+    "privacy": {
+      "aggregate_only": true,
+      "identifiers_emitted": false,
+      "token_emitted": false
+    },
+    "run": {
+      "downloaded_sessions": 100,
+      "failed_sessions": 0,
+      "serial": true,
+      "skipped_sessions": 0
+    },
+    "sample": {
+      "random_seed": 201905,
+      "requested_sessions": 100,
+      "selected_unique_sessions": 100
+    },
+    "schema_version": "acn-jpl-ts-preflight-qa/v1",
+    "series": {
+      "chargingCurrent": {
+        "boundary_positive_current_points": 86,
+        "boundary_positive_current_sessions": 28,
+        "boundary_unverifiable_sessions": 0,
+        "duplicate_extra_timestamps": 1,
+        "expected_complete_active_minutes": 41399,
+        "invalid_container_rate": 0.0,
+        "invalid_container_sessions": 0,
+        "invalid_numeric_values": 0,
+        "length_mismatch_sessions": 0,
+        "negative_values": 0,
+        "nonmonotonic_pairs": 0,
+        "raw_samples": 632687,
+        "retained_sample_rate": 0.99517139,
+        "sparse_minute_rate": 0.00577309,
+        "sparse_minutes_under_10_points": 239,
+        "timestamp_parse_errors": 0,
+        "usable_samples": 629632
+      },
+      "pilotSignal": {
+        "boundary_positive_current_points": null,
+        "boundary_positive_current_sessions": null,
+        "boundary_unverifiable_sessions": null,
+        "duplicate_extra_timestamps": 1,
+        "expected_complete_active_minutes": 41399,
+        "invalid_container_rate": 0.0,
+        "invalid_container_sessions": 0,
+        "invalid_numeric_values": 0,
+        "length_mismatch_sessions": 0,
+        "negative_values": 0,
+        "nonmonotonic_pairs": 0,
+        "raw_samples": 632816,
+        "retained_sample_rate": 0.99517079,
+        "sparse_minute_rate": 0.00548322,
+        "sparse_minutes_under_10_points": 227,
+        "timestamp_parse_errors": 0,
+        "usable_samples": 629760
+      }
+    }
+  },
+  "privacy": {
+    "identifiers_emitted": false,
+    "raw_response_emitted": false,
+    "status": "PASS",
+    "token_emitted": false
+  },
+  "quality": {
+    "chargingCurrent": {
+      "boundary_positive_current_points": 86,
+      "boundary_positive_current_sessions": 28,
+      "boundary_unverifiable_sessions": 0,
+      "duplicate_extra_timestamps": 1,
+      "expected_complete_active_minutes": 41399,
+      "invalid_container_rate": 0.0,
+      "invalid_container_sessions": 0,
+      "invalid_numeric_values": 0,
+      "length_mismatch_sessions": 0,
+      "negative_values": 0,
+      "nonmonotonic_pairs": 0,
+      "raw_samples": 632687,
+      "retained_sample_rate": 0.99517139,
+      "sparse_minute_rate": 0.00577309,
+      "sparse_minutes_under_10_points": 239,
+      "timestamp_parse_errors": 0,
+      "usable_samples": 629632
+    },
+    "pilotSignal": {
+      "boundary_positive_current_points": null,
+      "boundary_positive_current_sessions": null,
+      "boundary_unverifiable_sessions": null,
+      "duplicate_extra_timestamps": 1,
+      "expected_complete_active_minutes": 41399,
+      "invalid_container_rate": 0.0,
+      "invalid_container_sessions": 0,
+      "invalid_numeric_values": 0,
+      "length_mismatch_sessions": 0,
+      "negative_values": 0,
+      "nonmonotonic_pairs": 0,
+      "raw_samples": 632816,
+      "retained_sample_rate": 0.99517079,
+      "sparse_minute_rate": 0.00548322,
+      "sparse_minutes_under_10_points": 227,
+      "timestamp_parse_errors": 0,
+      "usable_samples": 629760
+    }
+  },
+  "reason_code": null,
+  "schema_version": "acn-jpl-timeseries-qa/v2",
+  "scope": "FIXED_SEED_100_SESSION_PREFLIGHT_ONLY",
+  "session_linkage": {
+    "match_rate": 1.0,
+    "matched_sessions": 100,
+    "metadata_sessions": 100,
+    "missing_sessions": 0,
+    "orphan_sessions": 0,
+    "timeseries_records": 100
+  },
+  "site": "jpl",
+  "status": "PREFLIGHT_PASS"
+}

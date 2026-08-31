@@ -11,6 +11,7 @@ from evcf.data.acn_api import (
     ACNAuthenticationError,
     ACNClient,
     ACNQuery,
+    ACNSchemaError,
     download_sessions,
     parse_iso_datetime,
 )
@@ -129,6 +130,31 @@ def test_client_follows_relative_next_links_and_uses_basic_auth() -> None:
     assert fake.auth == ("secret-token", "")
     assert fake.calls[1]["url"].endswith("/api/v1/sessions/caltech?page=2")
     assert "secret-token" not in json.dumps(fake.calls)
+
+
+def test_client_rejects_cross_origin_next_link_before_reusing_authenticated_session() -> None:
+    fake = FakeSession(
+        [
+            FakeResponse(
+                {
+                    "_items": [session_record("s1")],
+                    "_links": {"next": {"href": "https://example.test/steal"}},
+                    "_meta": {"total": 2},
+                }
+            )
+        ]
+    )
+    client = ACNClient("secret-token", session=fake)  # type: ignore[arg-type]
+    query = ACNQuery(
+        site="caltech",
+        start=parse_iso_datetime("2024-01-01T00:00:00Z"),
+        end=parse_iso_datetime("2024-01-02T00:00:00Z"),
+    )
+
+    with pytest.raises(ACNSchemaError, match="cross-origin"):
+        list(client.iter_pages(query))
+
+    assert len(fake.calls) == 1
 
 
 def test_download_is_atomic_and_manifest_never_contains_token() -> None:

@@ -1,0 +1,406 @@
+{
+  "acquisition": {
+    "daily_record_counts": {
+      "2019-04-24": 71,
+      "2019-04-25": 72,
+      "2019-04-26": 31,
+      "2019-04-27": 2,
+      "2019-04-28": 0,
+      "2019-04-29": 76,
+      "2019-04-30": 77,
+      "2019-05-01": 72,
+      "2019-05-02": 73,
+      "2019-05-03": 86,
+      "2019-05-04": 4,
+      "2019-05-05": 3,
+      "2019-05-06": 78,
+      "2019-05-07": 73,
+      "2019-05-08": 72,
+      "2019-05-09": 72,
+      "2019-05-10": 32,
+      "2019-05-11": 7,
+      "2019-05-12": 5,
+      "2019-05-13": 81,
+      "2019-05-14": 75,
+      "2019-05-15": 76,
+      "2019-05-16": 79,
+      "2019-05-17": 72,
+      "2019-05-18": 31,
+      "2019-05-19": 25,
+      "2019-05-20": 73,
+      "2019-05-21": 70,
+      "2019-05-22": 71,
+      "2019-05-23": 73,
+      "2019-05-24": 39,
+      "2019-05-25": 3,
+      "2019-05-26": 1,
+      "2019-05-27": 5,
+      "2019-05-28": 71,
+      "2019-05-29": 75,
+      "2019-05-30": 77,
+      "2019-05-31": 70
+    },
+    "duplicate_object_id_records": 0,
+    "duplicate_session_id_records": 0,
+    "missing_object_ids": 0,
+    "missing_session_ids": 0,
+    "record_count": 1973,
+    "unique_object_ids": 1973,
+    "unique_session_ids": 1973,
+    "user_input_coverage": {
+      "denominator_sessions": 1973,
+      "kwh_requested_rate": 0.961987,
+      "requested_departure_rate": 0.961987,
+      "sessions_with_kwh_requested": 1898,
+      "sessions_with_requested_departure": 1898,
+      "sessions_with_user_inputs": 1898,
+      "user_inputs_rate": 0.961987
+    }
+  },
+  "acquisition_window": {
+    "end_exclusive": "2019-06-01T00:00:00-07:00",
+    "start_inclusive": "2019-04-24T00:00:00-07:00"
+  },
+  "actual_scope": {
+    "analysis_connection_range_utc": {
+      "maximum": "2019-06-01T04:00:22+00:00",
+      "minimum": "2019-05-01T12:04:06+00:00"
+    },
+    "connection_range_utc": {
+      "maximum": "2019-06-01T04:00:22+00:00",
+      "minimum": "2019-04-24T12:43:13+00:00"
+    },
+    "metadata_days_with_records": 37,
+    "metadata_record_count": 1973,
+    "timeseries_status": "PREFLIGHT_100_ONLY"
+  },
+  "analysis": {
+    "daily_record_counts": {
+      "2019-05-01": 72,
+      "2019-05-02": 73,
+      "2019-05-03": 86,
+      "2019-05-04": 4,
+      "2019-05-05": 3,
+      "2019-05-06": 78,
+      "2019-05-07": 73,
+      "2019-05-08": 72,
+      "2019-05-09": 72,
+      "2019-05-10": 32,
+      "2019-05-11": 7,
+      "2019-05-12": 5,
+      "2019-05-13": 81,
+      "2019-05-14": 75,
+      "2019-05-15": 76,
+      "2019-05-16": 79,
+      "2019-05-17": 72,
+      "2019-05-18": 31,
+      "2019-05-19": 25,
+      "2019-05-20": 73,
+      "2019-05-21": 70,
+      "2019-05-22": 71,
+      "2019-05-23": 73,
+      "2019-05-24": 39,
+      "2019-05-25": 3,
+      "2019-05-26": 1,
+      "2019-05-27": 5,
+      "2019-05-28": 71,
+      "2019-05-29": 75,
+      "2019-05-30": 77,
+      "2019-05-31": 70
+    },
+    "duplicate_object_id_records": 0,
+    "duplicate_session_id_records": 0,
+    "missing_object_ids": 0,
+    "missing_session_ids": 0,
+    "record_count": 1644,
+    "unique_object_ids": 1644,
+    "unique_session_ids": 1644,
+    "user_input_coverage": {
+      "denominator_sessions": 1644,
+      "kwh_requested_rate": 0.956204,
+      "requested_departure_rate": 0.956204,
+      "sessions_with_kwh_requested": 1572,
+      "sessions_with_requested_departure": 1572,
+      "sessions_with_user_inputs": 1572,
+      "user_inputs_rate": 0.956204
+    }
+  },
+  "analysis_window": {
+    "end_exclusive": "2019-06-01T00:00:00-07:00",
+    "start_inclusive": "2019-05-01T00:00:00-07:00"
+  },
+  "api_retry_observation": {
+    "chunk_failure_retry_count": 0,
+    "chunk_failure_retry_count_status": "OBSERVED_FROM_PROGRESS",
+    "http_internal_retry_count": null,
+    "http_internal_retry_count_status": "NOT_OBSERVABLE",
+    "note": "progress.json exposes failed chunk attempts only; retries internal to the HTTP adapter are not observable from saved acquisition state."
+  },
+  "buffer": {
+    "carry_in_session_count": 1,
+    "connection_session_count": 329,
+    "observed_end_exclusive": "2019-05-01T00:00:00-07:00",
+    "observed_start_inclusive": "2019-04-24T00:00:00-07:00",
+    "sufficiency": {
+      "assessment_zh": "七日缓冲只说明局部观测范围，不能证明更早连接且仍活跃的会话不存在；完整性只能由单独的全历史 carry-in 审计支持。",
+      "status": "PARTIAL_OBSERVATION_ONLY"
+    }
+  },
+  "carry_in": {
+    "complete_audit_session_count": 1,
+    "complete_audit_status": "COMPLETE_INPUT_VALIDATED",
+    "completeness": "PROVEN_BY_COMPLETE_AUDIT",
+    "observed_seven_day_session_count": 1,
+    "record_count": 1,
+    "unique_session_ids": 1
+  },
+  "chunks": {
+    "complete_for_query": 38,
+    "data_files_found": 38,
+    "expected": 38,
+    "failed_or_incomplete": 0,
+    "failure_dates": [],
+    "hash_match": 38,
+    "invalid_manifests": 0,
+    "json_decode_errors": 0,
+    "json_errors_total": 0,
+    "jsonl_valid": 38,
+    "manifest_boundary_match": 38,
+    "manifest_contract_match": 38,
+    "manifest_files_found": 38,
+    "manifest_json_errors": 0,
+    "manifest_valid_json": 38,
+    "record_count_match": 38,
+    "remote_total_match": 38,
+    "remote_total_reported_sum": 1973,
+    "sha256_mismatch": 0,
+    "time_boundary_errors": 0,
+    "valid": 38,
+    "valid_manifests": 38
+  },
+  "complete_carry_in_audit": {
+    "carry_in_session_count": 1,
+    "file_count": 42,
+    "inventory_digest": "bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a",
+    "inventory_digest_algorithm": "sha256(sorted filename\\0raw_sha256\\0record_count\\n)",
+    "reason_code": null,
+    "record_count": 33638,
+    "status": "COMPLETE_INPUT_VALIDATED",
+    "valid_manifest_count": 42
+  },
+  "daily": {
+    "metadata_record_counts": {
+      "2019-04-24": 71,
+      "2019-04-25": 72,
+      "2019-04-26": 31,
+      "2019-04-27": 2,
+      "2019-04-28": 0,
+      "2019-04-29": 76,
+      "2019-04-30": 77,
+      "2019-05-01": 72,
+      "2019-05-02": 73,
+      "2019-05-03": 86,
+      "2019-05-04": 4,
+      "2019-05-05": 3,
+      "2019-05-06": 78,
+      "2019-05-07": 73,
+      "2019-05-08": 72,
+      "2019-05-09": 72,
+      "2019-05-10": 32,
+      "2019-05-11": 7,
+      "2019-05-12": 5,
+      "2019-05-13": 81,
+      "2019-05-14": 75,
+      "2019-05-15": 76,
+      "2019-05-16": 79,
+      "2019-05-17": 72,
+      "2019-05-18": 31,
+      "2019-05-19": 25,
+      "2019-05-20": 73,
+      "2019-05-21": 70,
+      "2019-05-22": 71,
+      "2019-05-23": 73,
+      "2019-05-24": 39,
+      "2019-05-25": 3,
+      "2019-05-26": 1,
+      "2019-05-27": 5,
+      "2019-05-28": 71,
+      "2019-05-29": 75,
+      "2019-05-30": 77,
+      "2019-05-31": 70
+    },
+    "timeseries_record_counts": {
+      "2019-04-24": null,
+      "2019-04-25": null,
+      "2019-04-26": null,
+      "2019-04-27": null,
+      "2019-04-28": null,
+      "2019-04-29": null,
+      "2019-04-30": null,
+      "2019-05-01": null,
+      "2019-05-02": null,
+      "2019-05-03": null,
+      "2019-05-04": null,
+      "2019-05-05": null,
+      "2019-05-06": null,
+      "2019-05-07": null,
+      "2019-05-08": null,
+      "2019-05-09": null,
+      "2019-05-10": null,
+      "2019-05-11": null,
+      "2019-05-12": null,
+      "2019-05-13": null,
+      "2019-05-14": null,
+      "2019-05-15": null,
+      "2019-05-16": null,
+      "2019-05-17": null,
+      "2019-05-18": null,
+      "2019-05-19": null,
+      "2019-05-20": null,
+      "2019-05-21": null,
+      "2019-05-22": null,
+      "2019-05-23": null,
+      "2019-05-24": null,
+      "2019-05-25": null,
+      "2019-05-26": null,
+      "2019-05-27": null,
+      "2019-05-28": null,
+      "2019-05-29": null,
+      "2019-05-30": null,
+      "2019-05-31": null
+    },
+    "timeseries_status": "PREFLIGHT_100_ONLY"
+  },
+  "dataset_id": "D0001",
+  "failures": [],
+  "gate": {
+    "conditions": {
+      "all_38_chunks_valid": true,
+      "all_38_remote_totals_match": true,
+      "identifier_integrity": true,
+      "manifest_sha_json_integrity": true,
+      "official_local_month_total_contract_valid": true,
+      "official_local_month_total_equals_B": true
+    },
+    "integrity_conditions_passed": true,
+    "reason_codes": [],
+    "status": "PASS"
+  },
+  "metadata_temporal_quality": {
+    "actual_connection_range_utc": {
+      "maximum": "2019-06-01T04:00:22+00:00",
+      "minimum": "2019-04-24T12:43:13+00:00"
+    },
+    "boundary_deviation_definition": "Connection timestamps are compared with each owning local-day half-open query window.",
+    "boundary_deviation_histogram": {
+      "at_exclusive_end": 0,
+      "deviation_0_to_60_seconds": 0,
+      "deviation_60_to_3600_seconds": 0,
+      "deviation_over_3600_seconds": 0,
+      "invalid_or_missing": 0,
+      "within_half_open_window": 1973
+    },
+    "connection_after_disconnect": 0,
+    "done_after_disconnect": 89,
+    "done_before_connection": 1,
+    "timeseries_boundary_metrics": {
+      "boundary_positive_points": null,
+      "boundary_positive_sessions": null,
+      "status": "NOT_RUN"
+    }
+  },
+  "month_boundary_comparison": {
+    "A_utc_month": {
+      "actual_connection_range_utc": {
+        "maximum": "2019-05-31T23:13:25+00:00",
+        "minimum": "2019-05-01T00:01:22+00:00"
+      },
+      "duplicate_object_id_records": 0,
+      "duplicate_session_id_records": 0,
+      "end_exclusive": "2019-06-01T00:00:00+00:00",
+      "missing_object_ids": 0,
+      "missing_session_ids": 0,
+      "record_count": 1645,
+      "start_inclusive": "2019-05-01T00:00:00+00:00",
+      "unique_object_ids": 1645,
+      "unique_session_ids": 1645
+    },
+    "B_local_month": {
+      "actual_connection_range_utc": {
+        "maximum": "2019-06-01T04:00:22+00:00",
+        "minimum": "2019-05-01T12:04:06+00:00"
+      },
+      "duplicate_object_id_records": 0,
+      "duplicate_session_id_records": 0,
+      "end_exclusive": "2019-06-01T00:00:00-07:00",
+      "missing_object_ids": 0,
+      "missing_session_ids": 0,
+      "record_count": 1644,
+      "start_inclusive": "2019-05-01T00:00:00-07:00",
+      "unique_object_ids": 1644,
+      "unique_session_ids": 1644
+    },
+    "C_left_slice_utc_only": {
+      "actual_connection_range_utc": {
+        "maximum": "2019-05-01T03:34:05+00:00",
+        "minimum": "2019-05-01T00:01:22+00:00"
+      },
+      "duplicate_object_id_records": 0,
+      "duplicate_session_id_records": 0,
+      "end_exclusive": "2019-05-01T07:00:00+00:00",
+      "missing_object_ids": 0,
+      "missing_session_ids": 0,
+      "record_count": 3,
+      "start_inclusive": "2019-05-01T00:00:00+00:00",
+      "unique_object_ids": 3,
+      "unique_session_ids": 3
+    },
+    "D_right_slice_local_only": {
+      "actual_connection_range_utc": {
+        "maximum": "2019-06-01T04:00:22+00:00",
+        "minimum": "2019-06-01T03:16:04+00:00"
+      },
+      "duplicate_object_id_records": 0,
+      "duplicate_session_id_records": 0,
+      "end_exclusive": "2019-06-01T07:00:00+00:00",
+      "missing_object_ids": 0,
+      "missing_session_ids": 0,
+      "record_count": 2,
+      "start_inclusive": "2019-06-01T00:00:00+00:00",
+      "unique_object_ids": 2,
+      "unique_session_ids": 2
+    },
+    "set_identity": {
+      "B_equals_A_minus_C_plus_D": true
+    }
+  },
+  "observed_B_local_month_unique_session_ids": 1644,
+  "observed_analysis_unique_session_ids": 1644,
+  "official_local_month_total": {
+    "contract_valid": true,
+    "reason_code": null,
+    "request_count": 1,
+    "response_fields_consumed": [
+      "_meta.total"
+    ],
+    "scope": "single_official_local_month_meta_total_probe",
+    "source": "ACN-Data official REST API",
+    "status": "VALID",
+    "total": 1644
+  },
+  "privacy": {
+    "identifiers_emitted": false,
+    "raw_response_emitted": false,
+    "status": "PASS",
+    "token_emitted": false
+  },
+  "schema_version": "acn-jpl-metadata-qa/v1",
+  "site": "jpl",
+  "source": "ACN-Data official REST API",
+  "timeseries_linkage": {
+    "missing_timeseries_sessions": 0,
+    "orphan_timeseries_sessions": 0,
+    "status": "PREFLIGHT_100_ONLY"
+  },
+  "timezone": "America/Los_Angeles"
+}

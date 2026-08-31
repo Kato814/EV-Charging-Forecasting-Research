@@ -1132,12 +1132,12 @@ def _validated_preflight_coverage(
     matched_sessions: int,
 ) -> dict[str, dict[str, int | float]]:
     if not isinstance(coverage, Mapping):
-        raise ValueError("preflight_qa field_coverage must be an object")
+        raise TypeError("preflight_qa field_coverage must be an object")
     clean: dict[str, dict[str, int | float]] = {}
     for field in ("chargingCurrent", "pilotSignal", "userInputs"):
         item = coverage.get(field)
         if not isinstance(item, Mapping):
-            raise ValueError(f"preflight_qa field_coverage is missing {field}")
+            raise TypeError(f"preflight_qa field_coverage is missing {field}")
         count = _preflight_count(item, "count")
         denominator = _preflight_count(item, "denominator")
         rate = _preflight_rate(item, "rate")
@@ -1172,7 +1172,7 @@ def _validated_preflight_series(
     field: str,
 ) -> dict[str, Any]:
     if not isinstance(series, Mapping):
-        raise ValueError(f"preflight_qa series is missing {field}")
+        raise TypeError(f"preflight_qa series is missing {field}")
     clean: dict[str, Any] = {
         key: _preflight_count(series, key) for key in _PREFLIGHT_SERIES_COUNT_KEYS
     }

@@ -7,7 +7,7 @@ import inspect
 import json
 import os
 from datetime import date, datetime, time, timedelta, timezone
-from email.utils import format_datetime
+from email.utils import format_datetime, parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -39,6 +39,8 @@ def _record(index: int, *, connected: datetime | None = None) -> dict[str, Any]:
 def _write_raw_dataset(
     root: Path,
     records_by_day: dict[str, list[dict[str, Any]]],
+    *,
+    official_total: int | None = None,
 ) -> None:
     current = ACQUISITION_START
     while current < ACQUISITION_END:
@@ -78,15 +80,85 @@ def _write_raw_dataset(
         manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
         current += timedelta(days=1)
 
+    if official_total is None:
+        local_start = datetime(2019, 5, 1, tzinfo=ZONE)
+        local_end = datetime(2019, 6, 1, tzinfo=ZONE)
+        local_month_session_ids = {
+            str(record["sessionID"])
+            for records in records_by_day.values()
+            for record in records
+            if record.get("sessionID") not in (None, "")
+            and local_start
+            <= parsedate_to_datetime(record["connectionTime"]).astimezone(ZONE)
+            < local_end
+        }
+        official_total = len(local_month_session_ids)
+    _write_official_local_month_total(root, official_total)
+
+
+def _write_official_local_month_total(root: Path, total: int) -> None:
+    local_start = datetime(2019, 5, 1, tzinfo=ZONE)
+    local_end = datetime(2019, 6, 1, tzinfo=ZONE)
+    query = ACNQuery(
+        site="jpl",
+        start=local_start,
+        end=local_end,
+        timeseries=False,
+    )
+    payload = {
+        "schema_version": "acn-jpl-official-local-month-total/v1",
+        "source": "ACN-Data official REST API",
+        "endpoint": query.endpoint,
+        "site": "jpl",
+        "timezone": "America/Los_Angeles",
+        "interval_semantics": "[start,end)",
+        "local_start_inclusive": local_start.isoformat(),
+        "local_end_exclusive": local_end.isoformat(),
+        "utc_start_inclusive": local_start.astimezone(timezone.utc).isoformat(),
+        "utc_end_exclusive": local_end.astimezone(timezone.utc).isoformat(),
+        "query_condition": query.condition,
+        "official_meta_total": total,
+        "request_count": 1,
+        "response_fields_consumed": ["_meta.total"],
+        "token_stored": False,
+    }
+    state_path = root / "state" / "official_local_month_total.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _write_full_metadata_file(
+    root: Path,
+    filename: str,
+    records: list[dict[str, Any]],
+) -> None:
+    data_path = root / filename
+    data_path.parent.mkdir(parents=True, exist_ok=True)
+    with gzip.open(data_path, "wt", encoding="utf-8", newline="\n") as handle:
+        for record in records:
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
+    manifest = {
+        "schema_version": 1,
+        "endpoint": "sessions/jpl",
+        "site": "jpl",
+        "mode": "metadata",
+        "record_count": len(records),
+        "source_total": len(records),
+        "sha256": hashlib.sha256(data_path.read_bytes()).hexdigest(),
+    }
+    data_path.with_name(data_path.name + ".manifest.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+
 
 @pytest.mark.parametrize(
-    ("count", "expected_status"),
-    [(1644, "FAIL"), (1645, "PASS"), (1646, "FAIL")],
+    "count",
+    [1644, 1645, 1646],
 )
-def test_only_exact_expected_analysis_unique_count_passes(
+def test_gate_uses_matching_independent_official_total_not_a_hardcoded_count(
     tmp_path: Path,
     count: int,
-    expected_status: str,
 ) -> None:
     module = importlib.import_module("evcf.data.acn_jpl_metadata_qa")
     raw_root = tmp_path / "raw"
@@ -94,13 +166,15 @@ def test_only_exact_expected_analysis_unique_count_passes(
 
     report = module.evaluate_jpl_metadata(raw_root)
 
-    assert report["gate"]["status"] == expected_status
+    assert report["gate"]["status"] == "PASS"
     assert report["analysis"]["record_count"] == count
     assert report["analysis"]["unique_session_ids"] == count
+    assert report["official_local_month_total"]["total"] == count
+    assert report["gate"]["conditions"]["official_local_month_total_equals_B"]
     assert report["chunks"]["valid"] == 38
 
 
-def test_public_entry_points_freeze_the_1645_gate() -> None:
+def test_public_entry_points_have_no_hardcoded_expected_count() -> None:
     module = importlib.import_module("evcf.data.acn_jpl_metadata_qa")
 
     evaluate_parameters = inspect.signature(module.evaluate_jpl_metadata).parameters
@@ -108,7 +182,168 @@ def test_public_entry_points_freeze_the_1645_gate() -> None:
 
     assert "expected_analysis_unique_sessions" not in evaluate_parameters
     assert "expected_analysis_unique_sessions" not in run_parameters
-    assert module.EXPECTED_ANALYSIS_UNIQUE_SESSIONS == 1645
+    assert not hasattr(module, "EXPECTED_ANALYSIS_UNIQUE_SESSIONS")
+
+
+def test_reports_utc_local_left_and_right_month_slices_from_same_38_chunks(
+    tmp_path: Path,
+) -> None:
+    module = importlib.import_module("evcf.data.acn_jpl_metadata_qa")
+    raw_root = tmp_path / "raw"
+    left = _record(1, connected=datetime(2019, 4, 30, 18, 0, tzinfo=ZONE))
+    middle = _record(2, connected=datetime(2019, 5, 15, 12, 0, tzinfo=ZONE))
+    right = _record(3, connected=datetime(2019, 5, 31, 18, 0, tzinfo=ZONE))
+    outside = _record(4, connected=datetime(2019, 4, 25, 12, 0, tzinfo=ZONE))
+    _write_raw_dataset(
+        raw_root,
+        {
+            "2019-04-25": [outside],
+            "2019-04-30": [left],
+            "2019-05-15": [middle],
+            "2019-05-31": [right],
+        },
+    )
+
+    report = module.evaluate_jpl_metadata(raw_root)
+    comparison = report["month_boundary_comparison"]
+
+    assert comparison["A_utc_month"]["unique_session_ids"] == 2
+    assert comparison["B_local_month"]["unique_session_ids"] == 2
+    assert comparison["C_left_slice_utc_only"]["unique_session_ids"] == 1
+    assert comparison["D_right_slice_local_only"]["unique_session_ids"] == 1
+    assert comparison["set_identity"]["B_equals_A_minus_C_plus_D"] is True
+    assert comparison["A_utc_month"]["start_inclusive"] == "2019-05-01T00:00:00+00:00"
+    assert comparison["A_utc_month"]["end_exclusive"] == "2019-06-01T00:00:00+00:00"
+    assert comparison["B_local_month"]["start_inclusive"].endswith("-07:00")
+    assert report["gate"]["status"] == "PASS"
+
+
+@pytest.mark.parametrize(
+    ("mutation", "reason_code"),
+    [
+        ("missing", "OFFICIAL_LOCAL_MONTH_TOTAL_MISSING"),
+        ("bad_contract", "OFFICIAL_LOCAL_MONTH_TOTAL_CONTRACT_INVALID"),
+        ("mismatch", "OFFICIAL_LOCAL_MONTH_TOTAL_MISMATCH"),
+    ],
+)
+def test_gate_requires_valid_matching_independent_official_local_month_total(
+    tmp_path: Path,
+    mutation: str,
+    reason_code: str,
+) -> None:
+    module = importlib.import_module("evcf.data.acn_jpl_metadata_qa")
+    raw_root = tmp_path / "raw"
+    _write_raw_dataset(raw_root, {"2019-05-01": [_record(1), _record(2)]})
+    state_path = raw_root / "state" / "official_local_month_total.json"
+    if mutation == "missing":
+        state_path.unlink()
+    elif mutation == "bad_contract":
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+        payload["query_condition"] = "tampered"
+        state_path.write_text(json.dumps(payload), encoding="utf-8")
+    else:
+        _write_official_local_month_total(raw_root, 3)
+
+    report = module.evaluate_jpl_metadata(raw_root)
+
+    assert report["gate"]["status"] == "FAIL"
+    assert reason_code in report["gate"]["reason_codes"]
+    assert not report["gate"]["conditions"]["official_local_month_total_equals_B"]
+
+
+def test_full_metadata_path_proves_carry_in_with_aggregate_only_provenance(
+    tmp_path: Path,
+) -> None:
+    module = importlib.import_module("evcf.data.acn_jpl_metadata_qa")
+    raw_root = tmp_path / "raw"
+    full_root = tmp_path / "full_metadata"
+    _write_raw_dataset(raw_root, {"2019-05-01": [_record(10)]})
+    carry = _record(1, connected=datetime(2019, 4, 20, 12, 0, tzinfo=ZONE))
+    carry["disconnectTime"] = _rfc1123(datetime(2019, 5, 1, 1, 0, tzinfo=ZONE))
+    ended = _record(2, connected=datetime(2019, 4, 20, 12, 0, tzinfo=ZONE))
+    observed = _record(3, connected=datetime(2019, 5, 10, 12, 0, tzinfo=ZONE))
+    _write_full_metadata_file(
+        full_root,
+        "part-a.jsonl.gz",
+        [carry, ended],
+    )
+    _write_full_metadata_file(full_root, "part-b.jsonl.gz", [observed])
+
+    report = module.evaluate_jpl_metadata(
+        raw_root,
+        full_metadata_path=full_root,
+    )
+
+    audit = report["complete_carry_in_audit"]
+    assert audit["status"] == "COMPLETE_INPUT_VALIDATED"
+    assert audit["file_count"] == 2
+    assert audit["valid_manifest_count"] == 2
+    assert audit["record_count"] == 3
+    assert audit["carry_in_session_count"] == 1
+    assert len(audit["inventory_digest"]) == 64
+    assert audit["inventory_digest_algorithm"] == (
+        "sha256(sorted filename\\0raw_sha256\\0record_count\\n)"
+    )
+    assert report["carry_in"]["complete_audit_status"] == "COMPLETE_INPUT_VALIDATED"
+    assert report["carry_in"]["complete_audit_session_count"] == 1
+    serialized = json.dumps(report)
+    assert "private-session-1" not in serialized
+    assert "part-a.jsonl.gz" not in serialized
+
+
+def test_seven_day_buffer_alone_never_claims_complete_carry_in_proof(
+    tmp_path: Path,
+) -> None:
+    module = importlib.import_module("evcf.data.acn_jpl_metadata_qa")
+    raw_root = tmp_path / "raw"
+    carry = _record(1, connected=datetime(2019, 4, 30, 23, 30, tzinfo=ZONE))
+    carry["disconnectTime"] = _rfc1123(datetime(2019, 5, 1, 0, 30, tzinfo=ZONE))
+    _write_raw_dataset(raw_root, {"2019-04-30": [carry]})
+
+    report = module.evaluate_jpl_metadata(raw_root)
+
+    assert report["complete_carry_in_audit"]["status"] == "NOT_PROVIDED"
+    assert report["carry_in"]["completeness"] == "NOT_PROVEN"
+    assert report["buffer"]["sufficiency"]["status"] == "PARTIAL_OBSERVATION_ONLY"
+    assert "不能证明" in report["buffer"]["sufficiency"]["assessment_zh"]
+
+
+def test_validated_complete_carry_in_state_is_supported_without_identifiers(
+    tmp_path: Path,
+) -> None:
+    module = importlib.import_module("evcf.data.acn_jpl_metadata_qa")
+    raw_root = tmp_path / "raw"
+    _write_raw_dataset(raw_root, {"2019-05-01": [_record(1)]})
+    state_payload = {
+        "schema_version": "acn-jpl-complete-carry-in-audit/v1",
+        "source": "ACN-Data official REST API",
+        "site": "jpl",
+        "timezone": "America/Los_Angeles",
+        "scope": "full_official_history_before_analysis_start",
+        "analysis_start_utc": "2019-05-01T07:00:00+00:00",
+        "complete_input_validated": True,
+        "file_count": 42,
+        "valid_manifest_count": 42,
+        "record_count": 33638,
+        "inventory_digest": "a" * 64,
+        "inventory_digest_algorithm": (
+            "sha256(sorted filename\\0raw_sha256\\0record_count\\n)"
+        ),
+        "carry_in_session_count": 1,
+        "identifiers_emitted": False,
+        "token_stored": False,
+    }
+    state_path = raw_root / "state" / "complete_carry_in_audit.json"
+    state_path.write_text(json.dumps(state_payload), encoding="utf-8")
+
+    report = module.evaluate_jpl_metadata(raw_root)
+
+    audit = report["complete_carry_in_audit"]
+    assert audit["status"] == "VALIDATED_STATE"
+    assert audit["file_count"] == 42
+    assert audit["record_count"] == 33638
+    assert audit["carry_in_session_count"] == 1
+    assert audit["inventory_digest_algorithm"].startswith("sha256(")
 
 
 def test_aggregates_identifiers_coverage_carry_in_and_excludes_end_boundary(
@@ -177,7 +412,7 @@ def test_aggregates_identifiers_coverage_carry_in_and_excludes_end_boundary(
     assert report["analysis"]["daily_record_counts"]["2019-05-01"] == 4
     assert report["buffer"]["connection_session_count"] == 1
     assert report["buffer"]["carry_in_session_count"] == 1
-    assert report["buffer"]["sufficiency"]["status"] == "OBSERVED_SCOPE_ONLY"
+    assert report["buffer"]["sufficiency"]["status"] == "PARTIAL_OBSERVATION_ONLY"
     assert "不能证明" in report["buffer"]["sufficiency"]["assessment_zh"]
     temporal = report["metadata_temporal_quality"]
     assert temporal["connection_after_disconnect"] == 1
@@ -281,7 +516,7 @@ def test_unicode_corrupt_progress_degrades_retry_observation_without_crashing(
     raw_root = tmp_path / "raw"
     _write_raw_dataset(raw_root, {"2019-05-01": [_record(1)]})
     state_dir = raw_root / "state"
-    state_dir.mkdir(parents=True)
+    state_dir.mkdir(parents=True, exist_ok=True)
     (state_dir / "progress.json").write_bytes(b"\xff\xfe")
 
     report = module.evaluate_jpl_metadata(raw_root)
@@ -303,7 +538,7 @@ def test_zero_denominator_coverage_rates_are_null(tmp_path: Path) -> None:
     assert coverage["user_inputs_rate"] is None
     assert coverage["requested_departure_rate"] is None
     assert coverage["kwh_requested_rate"] is None
-    assert report["gate"]["status"] == "FAIL"
+    assert report["gate"]["status"] == "PASS"
 
 
 def test_explicit_metadata_and_timeseries_skeleton_records_unobserved_items(
@@ -314,7 +549,7 @@ def test_explicit_metadata_and_timeseries_skeleton_records_unobserved_items(
     output_dir = tmp_path / "outputs"
     _write_raw_dataset(raw_root, {"2019-05-01": [_record(1)]})
     state_dir = raw_root / "state"
-    state_dir.mkdir(parents=True)
+    state_dir.mkdir(parents=True, exist_ok=True)
     (state_dir / "progress.json").write_text(
         json.dumps(
             {
@@ -417,6 +652,7 @@ def test_fail_delivery_is_deterministic_atomic_hashed_and_private(tmp_path: Path
     records[0]["userID"] = "fixture-private-user"
     records[0]["userInputs"] = [{"fixtureToken": "fixture-secret-token"}]
     _write_raw_dataset(raw_root, {"2019-05-01": records})
+    _write_official_local_month_total(raw_root, 1645)
 
     result = module.run_phase1_metadata_qa(raw_root, output_dir)
 
@@ -457,7 +693,7 @@ def test_fail_delivery_is_deterministic_atomic_hashed_and_private(tmp_path: Path
     csv_text = (output_dir / "failed_or_incomplete_chunks.csv").read_text(
         encoding="utf-8"
     )
-    assert "ANALYSIS_UNIQUE_SESSION_COUNT_MISMATCH" in csv_text
+    assert "OFFICIAL_LOCAL_MONTH_TOTAL_MISMATCH" in csv_text
     assert "1645,1644" in csv_text
     assert "fixture-private" not in csv_text
     assert "response" not in csv_text.lower()
@@ -488,3 +724,321 @@ def test_fail_delivery_is_deterministic_atomic_hashed_and_private(tmp_path: Path
     os.utime(output_dir / "qa_metadata_jpl_2019-05.json", None)
     rerun = module.run_phase1_metadata_qa(raw_root, output_dir)
     assert {path.name: path.read_bytes() for path in rerun.output_paths} == first_bytes
+
+
+def _aggregate_preflight_qa() -> dict[str, Any]:
+    return {
+        "schema_version": "acn-jpl-ts-preflight-qa/v1",
+        "sample": {
+            "requested_sessions": 100,
+            "selected_unique_sessions": 100,
+            "random_seed": 201905,
+        },
+        "matching": {
+            "metadata_sessions": 100,
+            "timeseries_records": 100,
+            "matched_sessions": 100,
+            "missing_sessions": 0,
+            "orphan_sessions": 0,
+            "match_rate": 1.0,
+        },
+        "field_coverage": {
+            "chargingCurrent": {"count": 100, "denominator": 100, "rate": 1.0},
+            "pilotSignal": {"count": 100, "denominator": 100, "rate": 1.0},
+            "userInputs": {"count": 97, "denominator": 100, "rate": 0.97},
+        },
+        "series": {
+            "chargingCurrent": {
+                "invalid_container_sessions": 0,
+                "invalid_container_rate": 0.0,
+                "length_mismatch_sessions": 0,
+                "duplicate_extra_timestamps": 1,
+                "nonmonotonic_pairs": 0,
+                "timestamp_parse_errors": 0,
+                "invalid_numeric_values": 0,
+                "negative_values": 0,
+                "sparse_minute_rate": 0.00577309,
+                "sparse_minutes_under_10_points": 239,
+                "expected_complete_active_minutes": 41399,
+                "raw_samples": 632687,
+                "usable_samples": 629632,
+                "retained_sample_rate": 0.99517139,
+                "boundary_positive_current_points": 86,
+                "boundary_positive_current_sessions": 28,
+                "boundary_unverifiable_sessions": 0,
+            },
+            "pilotSignal": {
+                "invalid_container_sessions": 0,
+                "invalid_container_rate": 0.0,
+                "length_mismatch_sessions": 0,
+                "duplicate_extra_timestamps": 1,
+                "nonmonotonic_pairs": 0,
+                "timestamp_parse_errors": 0,
+                "invalid_numeric_values": 0,
+                "negative_values": 0,
+                "sparse_minute_rate": 0.00548322,
+                "sparse_minutes_under_10_points": 227,
+                "expected_complete_active_minutes": 41399,
+                "raw_samples": 632816,
+                "usable_samples": 629760,
+                "retained_sample_rate": 0.99517079,
+                "boundary_positive_current_points": None,
+                "boundary_positive_current_sessions": None,
+                "boundary_unverifiable_sessions": None,
+            },
+        },
+        "gate": {
+            "status": "PASS",
+            "invalid_charging_current_limit": 0.1,
+            "invalid_pilot_signal_limit": 0.1,
+            "severe_timestamp_anomalies": 0,
+            "unmatched_metadata_limit": 0.01,
+            "unmatched_metadata_rate": 0.0,
+        },
+        "run": {
+            "downloaded_sessions": 100,
+            "skipped_sessions": 0,
+            "failed_sessions": 0,
+            "serial": True,
+        },
+        "privacy": {
+            "aggregate_only": True,
+            "identifiers_emitted": False,
+            "token_emitted": False,
+        },
+    }
+
+
+def test_pass_delivery_embeds_100_session_preflight_without_claiming_full_month(
+    tmp_path: Path,
+) -> None:
+    module = importlib.import_module("evcf.data.acn_jpl_metadata_qa")
+    raw_root = tmp_path / "raw"
+    output_dir = tmp_path / "outputs"
+    _write_raw_dataset(raw_root, {"2019-05-01": [_record(1)]})
+    _write_official_local_month_total(raw_root, 1)
+
+    result = module.run_phase1_metadata_qa(
+        raw_root,
+        output_dir,
+        preflight_qa=_aggregate_preflight_qa(),
+    )
+
+    assert result.gate_status == "PASS"
+    timeseries = result.qa_timeseries
+    assert timeseries["status"] == "PREFLIGHT_PASS"
+    assert timeseries["download_attempted"] is True
+    assert timeseries["full_month"]["download_attempted"] is False
+    assert timeseries["preflight"]["sample"]["random_seed"] == 201905
+    assert timeseries["field_coverage"]["chargingCurrent"]["rate"] == 1.0
+    assert timeseries["quality"]["chargingCurrent"]["retained_sample_rate"] == 0.99517139
+    assert timeseries["session_linkage"]["match_rate"] == 1.0
+
+    summary = json.loads(
+        (output_dir / "acquisition_summary_jpl_2019-05.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert summary["gate_decision"] == {
+        "metadata_gate": "PASS",
+        "timeseries_preflight_gate": "PASS",
+        "full_month_timeseries": "NOT_RUN",
+        "ready_for_controller_review": True,
+    }
+    markdown = (output_dir / "acquisition_summary_jpl_2019-05.md").read_text(
+        encoding="utf-8"
+    )
+    assert "固定种子 201905" in markdown
+    assert "100/100" in markdown
+    assert "未下载完整月份" in markdown
+    csv_lines = (output_dir / "failed_or_incomplete_chunks.csv").read_text(
+        encoding="utf-8"
+    ).splitlines()
+    assert csv_lines == ["scope,reason_code,expected_count,observed_count"]
+
+
+def test_stale_preflight_is_ignored_and_fail_report_replaces_outputs_when_metadata_fails(
+    tmp_path: Path,
+) -> None:
+    module = importlib.import_module("evcf.data.acn_jpl_metadata_qa")
+    raw_root = tmp_path / "raw"
+    output_dir = tmp_path / "outputs"
+    _write_raw_dataset(raw_root, {"2019-05-01": [_record(1)]})
+    _write_official_local_month_total(raw_root, 2)
+
+    result = module.run_phase1_metadata_qa(
+        raw_root,
+        output_dir,
+        preflight_qa=_aggregate_preflight_qa(),
+    )
+
+    assert result.gate_status == "FAIL"
+    assert result.qa_metadata["gate"]["status"] == "FAIL"
+    assert result.qa_timeseries["status"] == "NOT_RUN"
+    summary = json.loads(
+        (output_dir / "acquisition_summary_jpl_2019-05.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert summary["overall_status"] == "FAIL"
+    assert summary["timeseries"]["preflight"]["status"] == "NOT_RUN"
+
+
+def test_inconsistent_declared_preflight_pass_is_rejected(tmp_path: Path) -> None:
+    module = importlib.import_module("evcf.data.acn_jpl_metadata_qa")
+    raw_root = tmp_path / "raw"
+    _write_raw_dataset(raw_root, {"2019-05-01": [_record(1)]})
+    _write_official_local_month_total(raw_root, 1)
+    preflight = _aggregate_preflight_qa()
+    preflight["matching"].update(
+        {
+            "timeseries_records": 0,
+            "matched_sessions": 0,
+            "missing_sessions": 100,
+            "match_rate": 0.0,
+        }
+    )
+    preflight["run"].update(
+        {"downloaded_sessions": 0, "failed_sessions": 100}
+    )
+    preflight["gate"].update(
+        {"unmatched_metadata_rate": 1.0, "status": "PASS"}
+    )
+
+    with pytest.raises(ValueError, match="preflight_qa"):
+        module.run_phase1_metadata_qa(
+            raw_root,
+            tmp_path / "outputs",
+            preflight_qa=preflight,
+        )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "coverage_without_series_consistency",
+        "invalid_values_exceed_raw_samples",
+        "boundary_sessions_without_points",
+        "orphan_session_declared_pass",
+    ],
+)
+def test_preflight_cross_metric_inconsistencies_are_rejected(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    module = importlib.import_module("evcf.data.acn_jpl_metadata_qa")
+    raw_root = tmp_path / "raw"
+    _write_raw_dataset(raw_root, {"2019-05-01": [_record(1)]})
+    _write_official_local_month_total(raw_root, 1)
+    preflight = _aggregate_preflight_qa()
+    if mutation == "coverage_without_series_consistency":
+        preflight["field_coverage"]["chargingCurrent"] = {
+            "count": 0,
+            "denominator": 100,
+            "rate": 0.0,
+        }
+    elif mutation == "invalid_values_exceed_raw_samples":
+        current = preflight["series"]["chargingCurrent"]
+        current["invalid_numeric_values"] = current["raw_samples"] + 1
+    elif mutation == "boundary_sessions_without_points":
+        current = preflight["series"]["chargingCurrent"]
+        current["boundary_positive_current_points"] = 0
+        current["boundary_positive_current_sessions"] = 1
+    else:
+        preflight["matching"]["timeseries_records"] = 101
+        preflight["matching"]["orphan_sessions"] = 1
+
+    with pytest.raises(ValueError, match="preflight_qa"):
+        module.run_phase1_metadata_qa(
+            raw_root,
+            tmp_path / "outputs",
+            preflight_qa=preflight,
+        )
+
+
+def test_valid_preflight_fail_sets_overall_fail_and_records_aggregate_issue(
+    tmp_path: Path,
+) -> None:
+    module = importlib.import_module("evcf.data.acn_jpl_metadata_qa")
+    raw_root = tmp_path / "raw"
+    output_dir = tmp_path / "outputs"
+    _write_raw_dataset(raw_root, {"2019-05-01": [_record(1)]})
+    _write_official_local_month_total(raw_root, 1)
+    preflight = _aggregate_preflight_qa()
+    preflight["matching"].update(
+        {
+            "timeseries_records": 98,
+            "matched_sessions": 98,
+            "missing_sessions": 2,
+            "match_rate": 0.98,
+        }
+    )
+    preflight["run"].update(
+        {"downloaded_sessions": 98, "failed_sessions": 2}
+    )
+    for coverage in preflight["field_coverage"].values():
+        coverage.update({"count": 98, "rate": 0.98})
+    preflight["gate"].update(
+        {"unmatched_metadata_rate": 0.02, "status": "FAIL"}
+    )
+
+    result = module.run_phase1_metadata_qa(
+        raw_root,
+        output_dir,
+        preflight_qa=preflight,
+    )
+
+    assert result.qa_metadata["gate"]["status"] == "PASS"
+    assert result.qa_timeseries["status"] == "PREFLIGHT_FAIL"
+    assert result.gate_status == "FAIL"
+    summary = json.loads(
+        (output_dir / "acquisition_summary_jpl_2019-05.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert summary["metadata_gate_status"] == "PASS"
+    assert summary["overall_status"] == "FAIL"
+    markdown = (output_dir / "acquisition_summary_jpl_2019-05.md").read_text(
+        encoding="utf-8"
+    )
+    assert "- 总体状态：FAIL" in markdown
+    assert "- 元数据门控：PASS" in markdown
+    assert "- 100 会话预检：FAIL" in markdown
+    assert "TIMESERIES_PREFLIGHT_QA_FAILED" in (
+        output_dir / "failed_or_incomplete_chunks.csv"
+    ).read_text(encoding="utf-8")
+
+
+def test_valid_preflight_fail_accepts_null_rates_for_zero_denominators(
+    tmp_path: Path,
+) -> None:
+    module = importlib.import_module("evcf.data.acn_jpl_metadata_qa")
+    raw_root = tmp_path / "raw"
+    _write_raw_dataset(raw_root, {"2019-05-01": [_record(1)]})
+    _write_official_local_month_total(raw_root, 1)
+    preflight = _aggregate_preflight_qa()
+    for series in preflight["series"].values():
+        series.update(
+            {
+                "invalid_container_sessions": 100,
+                "invalid_container_rate": 1.0,
+                "raw_samples": 0,
+                "usable_samples": 0,
+                "retained_sample_rate": None,
+                "expected_complete_active_minutes": 0,
+                "sparse_minutes_under_10_points": 0,
+                "sparse_minute_rate": None,
+            }
+        )
+    preflight["gate"]["status"] = "FAIL"
+
+    result = module.run_phase1_metadata_qa(
+        raw_root,
+        tmp_path / "outputs",
+        preflight_qa=preflight,
+    )
+
+    assert result.gate_status == "FAIL"
+    assert result.qa_timeseries["quality"]["chargingCurrent"][
+        "retained_sample_rate"
+    ] is None

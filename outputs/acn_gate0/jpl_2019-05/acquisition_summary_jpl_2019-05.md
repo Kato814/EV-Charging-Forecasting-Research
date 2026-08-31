@@ -1,12 +1,28 @@
-# JPL 2019-05 ACN-Data Phase 1 元数据门控
+# JPL 2019-05 ACN-Data Gate 0 修订与预检
 
 - 数据源：ACN-Data official REST API
-- 门控状态：FAIL
-- 分析窗唯一 sessionID：观测 1644，期望 1645
+- 总体状态：PASS
+- 元数据门控：PASS
+- 100 会话预检：PASS
+- 当地月唯一 sessionID：38 块观测 1644，独立官方 `_meta.total` 1644
 - 每日完整块：38/38
-- `/ts` 状态：NOT_RUN，未启动；download_attempted=false
+- 月份口径：A UTC=1645，B 当地=1644，C 左切片=3，D 右切片=2
+- 完整历史 carry-in：1（COMPLETE_INPUT_VALIDATED）
 
-仅凭 1644 与 1645 的计数差异不能定位具体缺失会话。
+当地月唯一会话数与独立官方 `_meta.total` 一致。
+
+## 100 会话 `/ts` 预检
+
+- 固定种子 201905；匹配 100/100；状态 PASS
+- chargingCurrent 覆盖率：1.0
+- pilotSignal 覆盖率：1.0
+- userInputs 覆盖率：0.97
+- 无效容器：current=0，pilot=0
+- 重复时间戳：current=1，pilot=1；非单调时间戳：current=0，pilot=0
+- 稀疏分钟率：current=0.00577309，pilot=0.00548322
+- 采样点保留率：current=0.99517139，pilot=0.99517079
+- 会话边界外正电流：86 点 / 28 会话
+- 未下载完整月份 `/ts`；在100会话预检后停止，等待主控复核。
 
 ## 功率与在线特征语义
 

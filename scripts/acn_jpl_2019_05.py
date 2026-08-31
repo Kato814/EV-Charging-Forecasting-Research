@@ -1,7 +1,8 @@
-"""Resumable metadata-only entry point for the frozen JPL Gate 0 window.
+"""Resumable metadata entry point for the frozen JPL Gate 0 window.
 
-The command intentionally has no time-series mode. Phase 2 must remain unreachable
-after the Phase 1 count gate fails.
+The command only maintains the existing 38 metadata chunks.  The fixed-seed
+100-session ``/ts`` preflight is implemented separately and never expands into a
+full-month time-series acquisition without a later controller decision.
 """
 
 from __future__ import annotations
@@ -68,7 +69,7 @@ def run_metadata(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Acquire the frozen JPL 2019-05 Gate 0 metadata window only"
+        description="Acquire or resume the frozen JPL 2019-05 Gate 0 metadata chunks"
     )
     parser.add_argument("--raw-root", type=Path, default=DEFAULT_RAW_ROOT)
     return parser

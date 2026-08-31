@@ -21,3 +21,16 @@ safety:
   overwrite_by_default: false
   timeseries_opt_in: true
   preserve_raw_timestamp_strings: true
+
+# Frozen protocol for PR #12. This authorizes only the 100-session preflight;
+# a full-month /ts acquisition remains out of scope.
+jpl_2019_05_preflight:
+  timezone: America/Los_Angeles
+  analysis_start: "2019-05-01T00:00:00-07:00"
+  analysis_end_exclusive: "2019-06-01T00:00:00-07:00"
+  random_seed: 201905
+  sample_size: 100
+  invalid_charging_current_rate_limit: 0.10
+  invalid_pilot_signal_rate_limit: 0.10
+  unmatched_metadata_rate_limit: 0.01
+  full_month_timeseries_authorized: false

@@ -7,6 +7,7 @@ import gzip
 import hashlib
 import io
 import json
+import math
 import os
 from collections import Counter
 from collections.abc import Mapping
@@ -25,9 +26,18 @@ from .acn_jpl_gate0 import (
     chunk_paths,
     jpl_acquisition_windows,
 )
+from .acn_jpl_ts_preflight import (
+    PREFLIGHT_INVALID_CHARGING_CURRENT_RATE_LIMIT,
+    PREFLIGHT_INVALID_PILOT_SIGNAL_RATE_LIMIT,
+    PREFLIGHT_RANDOM_SEED,
+    PREFLIGHT_SAMPLE_SIZE,
+    PREFLIGHT_UNMATCHED_METADATA_RATE_LIMIT,
+)
 
-EXPECTED_ANALYSIS_UNIQUE_SESSIONS = 1645
 _SOURCE = "ACN-Data official REST API"
+_INVENTORY_DIGEST_ALGORITHM = "sha256(sorted filename\\0raw_sha256\\0record_count\\n)"
+_UTC_MONTH_START = datetime(2019, 5, 1, tzinfo=timezone.utc)
+_UTC_MONTH_END = datetime(2019, 6, 1, tzinfo=timezone.utc)
 _OUTPUT_FILENAMES = (
     "qa_metadata_jpl_2019-05.json",
     "qa_timeseries_jpl_2019-05.json",
@@ -215,6 +225,249 @@ def _read_retry_observation(raw_root: Path) -> dict[str, Any]:
     }
 
 
+def _official_month_total_contract(payload: Mapping[str, Any]) -> bool:
+    query = ACNQuery(
+        site="jpl",
+        start=JPL_ANALYSIS_START,
+        end=JPL_ANALYSIS_END,
+        timeseries=False,
+    )
+    return (
+        payload.get("schema_version") == "acn-jpl-official-local-month-total/v1"
+        and payload.get("source") == _SOURCE
+        and payload.get("endpoint") == query.endpoint
+        and payload.get("site") == "jpl"
+        and payload.get("timezone") == JPL_TIMEZONE
+        and payload.get("interval_semantics") == "[start,end)"
+        and payload.get("local_start_inclusive") == JPL_ANALYSIS_START.isoformat()
+        and payload.get("local_end_exclusive") == JPL_ANALYSIS_END.isoformat()
+        and payload.get("utc_start_inclusive")
+        == JPL_ANALYSIS_START.astimezone(timezone.utc).isoformat()
+        and payload.get("utc_end_exclusive")
+        == JPL_ANALYSIS_END.astimezone(timezone.utc).isoformat()
+        and payload.get("query_condition") == query.condition
+        and payload.get("request_count") == 1
+        and payload.get("response_fields_consumed") == ["_meta.total"]
+        and payload.get("token_stored") is False
+    )
+
+
+def _read_official_local_month_total(raw_root: Path) -> dict[str, Any]:
+    state_path = raw_root / "state" / "official_local_month_total.json"
+    if not state_path.is_file():
+        return {
+            "status": "MISSING",
+            "contract_valid": False,
+            "total": None,
+            "reason_code": "OFFICIAL_LOCAL_MONTH_TOTAL_MISSING",
+        }
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        payload = None
+    if not isinstance(payload, dict) or not _official_month_total_contract(payload):
+        return {
+            "status": "INVALID",
+            "contract_valid": False,
+            "total": None,
+            "reason_code": "OFFICIAL_LOCAL_MONTH_TOTAL_CONTRACT_INVALID",
+        }
+    total = payload.get("official_meta_total")
+    if not isinstance(total, int) or isinstance(total, bool) or total < 0:
+        return {
+            "status": "INVALID",
+            "contract_valid": False,
+            "total": None,
+            "reason_code": "OFFICIAL_LOCAL_MONTH_TOTAL_CONTRACT_INVALID",
+        }
+    return {
+        "status": "VALID",
+        "contract_valid": True,
+        "total": total,
+        "reason_code": None,
+        "source": _SOURCE,
+        "scope": "single_official_local_month_meta_total_probe",
+        "request_count": 1,
+        "response_fields_consumed": ["_meta.total"],
+    }
+
+
+def _empty_complete_carry_in_audit(status: str, reason_code: str | None) -> dict[str, Any]:
+    return {
+        "status": status,
+        "reason_code": reason_code,
+        "file_count": None,
+        "valid_manifest_count": None,
+        "record_count": None,
+        "inventory_digest": None,
+        "inventory_digest_algorithm": _INVENTORY_DIGEST_ALGORITHM,
+        "carry_in_session_count": None,
+    }
+
+
+def _complete_carry_in_state_contract(payload: Mapping[str, Any]) -> bool:
+    integer_fields = (
+        "file_count",
+        "valid_manifest_count",
+        "record_count",
+        "carry_in_session_count",
+    )
+    values_are_counts = all(
+        isinstance(payload.get(field), int)
+        and not isinstance(payload.get(field), bool)
+        and payload[field] >= 0
+        for field in integer_fields
+    )
+    digest = payload.get("inventory_digest")
+    digest_valid = (
+        isinstance(digest, str)
+        and len(digest) == 64
+        and all(character in "0123456789abcdef" for character in digest)
+    )
+    return (
+        payload.get("schema_version") == "acn-jpl-complete-carry-in-audit/v1"
+        and payload.get("source") == _SOURCE
+        and payload.get("site") == "jpl"
+        and payload.get("timezone") == JPL_TIMEZONE
+        and payload.get("scope") == "full_official_history_before_analysis_start"
+        and payload.get("analysis_start_utc")
+        == JPL_ANALYSIS_START.astimezone(timezone.utc).isoformat()
+        and payload.get("complete_input_validated") is True
+        and payload.get("identifiers_emitted") is False
+        and payload.get("token_stored") is False
+        and values_are_counts
+        and payload.get("valid_manifest_count") == payload.get("file_count")
+        and payload.get("inventory_digest_algorithm") == _INVENTORY_DIGEST_ALGORITHM
+        and digest_valid
+    )
+
+
+def _read_complete_carry_in_state(raw_root: Path) -> dict[str, Any]:
+    state_path = raw_root / "state" / "complete_carry_in_audit.json"
+    if not state_path.is_file():
+        return _empty_complete_carry_in_audit("NOT_PROVIDED", None)
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        payload = None
+    if not isinstance(payload, dict) or not _complete_carry_in_state_contract(payload):
+        return _empty_complete_carry_in_audit(
+            "INVALID_STATE",
+            "COMPLETE_CARRY_IN_AUDIT_STATE_INVALID",
+        )
+    return {
+        "status": "VALIDATED_STATE",
+        "reason_code": None,
+        "file_count": payload["file_count"],
+        "valid_manifest_count": payload["valid_manifest_count"],
+        "record_count": payload["record_count"],
+        "inventory_digest": payload["inventory_digest"],
+        "inventory_digest_algorithm": _INVENTORY_DIGEST_ALGORITHM,
+        "carry_in_session_count": payload["carry_in_session_count"],
+    }
+
+
+def _legacy_full_manifest_valid(
+    manifest: object,
+    *,
+    record_count: int,
+    sha256: str,
+) -> bool:
+    return (
+        isinstance(manifest, Mapping)
+        and manifest.get("schema_version") == 1
+        and manifest.get("endpoint") == "sessions/jpl"
+        and manifest.get("site") == "jpl"
+        and manifest.get("mode") == "metadata"
+        and manifest.get("record_count") == record_count
+        and manifest.get("source_total") == record_count
+        and manifest.get("sha256") == sha256
+    )
+
+
+def _audit_complete_metadata_path(full_metadata_path: str | Path) -> dict[str, Any]:
+    directory = Path(full_metadata_path)
+    files = sorted(directory.glob("*.jsonl.gz")) if directory.is_dir() else []
+    if not files:
+        return _empty_complete_carry_in_audit(
+            "INPUT_INVALID",
+            "COMPLETE_CARRY_IN_INPUT_INVALID",
+        )
+
+    inventory = hashlib.sha256()
+    record_count = 0
+    valid_manifest_count = 0
+    carry_in_session_keys: set[str] = set()
+    analysis_start = JPL_ANALYSIS_START.astimezone(timezone.utc)
+    input_valid = True
+    for data_path in files:
+        digest = _sha256_file(data_path)
+        file_records: list[Mapping[str, Any]] = []
+        try:
+            with gzip.open(data_path, "rt", encoding="utf-8") as handle:
+                for line in handle:
+                    if not line.strip():
+                        continue
+                    item = json.loads(line)
+                    if not isinstance(item, dict):
+                        raise TypeError("full metadata record must be an object")
+                    file_records.append(item)
+        except (
+            OSError,
+            EOFError,
+            UnicodeError,
+            json.JSONDecodeError,
+            TypeError,
+        ):
+            input_valid = False
+            file_records = []
+        manifest_path = data_path.with_name(data_path.name + ".manifest.json")
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            manifest = None
+        if _legacy_full_manifest_valid(
+            manifest,
+            record_count=len(file_records),
+            sha256=digest,
+        ):
+            valid_manifest_count += 1
+        else:
+            input_valid = False
+        inventory.update(
+            f"{data_path.name}\0{digest}\0{len(file_records)}\n".encode()
+        )
+        record_count += len(file_records)
+        for record in file_records:
+            connection = _safe_datetime(record.get("connectionTime"))
+            disconnect = _safe_datetime(record.get("disconnectTime"))
+            session_id = record.get("sessionID")
+            if (
+                connection is not None
+                and disconnect is not None
+                and connection < analysis_start < disconnect
+                and session_id not in (None, "")
+            ):
+                carry_in_session_keys.add(_private_key(session_id))
+
+    if not input_valid or valid_manifest_count != len(files):
+        status = "INPUT_INVALID"
+        reason_code = "COMPLETE_CARRY_IN_INPUT_INVALID"
+    else:
+        status = "COMPLETE_INPUT_VALIDATED"
+        reason_code = None
+    return {
+        "status": status,
+        "reason_code": reason_code,
+        "file_count": len(files),
+        "valid_manifest_count": valid_manifest_count,
+        "record_count": record_count,
+        "inventory_digest": inventory.hexdigest(),
+        "inventory_digest_algorithm": _INVENTORY_DIGEST_ALGORITHM,
+        "carry_in_session_count": len(carry_in_session_keys),
+    }
+
+
 def _empty_boundary_histogram() -> dict[str, int]:
     return {
         "within_half_open_window": 0,
@@ -252,10 +505,50 @@ def _record_boundary_deviation(
         histogram["deviation_over_3600_seconds"] += 1
 
 
-def evaluate_jpl_metadata(raw_root: str | Path) -> dict[str, Any]:
+def _month_slice_summary(
+    records: list[Mapping[str, Any]],
+    connections: list[datetime],
+    *,
+    start: datetime,
+    end: datetime,
+) -> dict[str, Any]:
+    object_ids = _identifier_counts([record.get("_id") for record in records])
+    session_ids = _identifier_counts([record.get("sessionID") for record in records])
+    return {
+        "start_inclusive": start.isoformat(),
+        "end_exclusive": end.isoformat(),
+        "record_count": len(records),
+        "unique_object_ids": object_ids["unique"],
+        "missing_object_ids": object_ids["missing"],
+        "duplicate_object_id_records": object_ids["duplicate_records"],
+        "unique_session_ids": session_ids["unique"],
+        "missing_session_ids": session_ids["missing"],
+        "duplicate_session_id_records": session_ids["duplicate_records"],
+        "actual_connection_range_utc": _datetime_range(connections),
+    }
+
+
+def _session_key_set(records: list[Mapping[str, Any]]) -> set[str]:
+    return {
+        _private_key(record["sessionID"])
+        for record in records
+        if record.get("sessionID") not in (None, "")
+    }
+
+
+def evaluate_jpl_metadata(
+    raw_root: str | Path,
+    *,
+    full_metadata_path: str | Path | None = None,
+) -> dict[str, Any]:
     """Aggregate 38 raw daily chunks while emitting counts, never identifier values."""
 
     root = Path(raw_root)
+    complete_carry_in_audit = (
+        _audit_complete_metadata_path(full_metadata_path)
+        if full_metadata_path is not None
+        else _read_complete_carry_in_state(root)
+    )
     windows = list(jpl_acquisition_windows())
     acquisition_daily = {window.day_key: 0 for window in windows}
     analysis_daily = {
@@ -416,6 +709,12 @@ def evaluate_jpl_metadata(raw_root: str | Path) -> dict[str, Any]:
     acquisition_start_utc = JPL_ACQUISITION_START.astimezone(timezone.utc)
     analysis_records: list[Mapping[str, Any]] = []
     analysis_connections: list[datetime] = []
+    utc_month_records: list[Mapping[str, Any]] = []
+    utc_month_connections: list[datetime] = []
+    left_slice_records: list[Mapping[str, Any]] = []
+    left_slice_connections: list[datetime] = []
+    right_slice_records: list[Mapping[str, Any]] = []
+    right_slice_connections: list[datetime] = []
     acquisition_connections: list[datetime] = []
     buffer_connection_records: list[Mapping[str, Any]] = []
     carry_in_records: list[Mapping[str, Any]] = []
@@ -425,6 +724,15 @@ def evaluate_jpl_metadata(raw_root: str | Path) -> dict[str, Any]:
     for record, connection, disconnect, done in parsed_records:
         if connection is not None:
             acquisition_connections.append(connection)
+        if connection is not None and _UTC_MONTH_START <= connection < _UTC_MONTH_END:
+            utc_month_records.append(record)
+            utc_month_connections.append(connection)
+        if connection is not None and _UTC_MONTH_START <= connection < analysis_start_utc:
+            left_slice_records.append(record)
+            left_slice_connections.append(connection)
+        if connection is not None and _UTC_MONTH_END <= connection < analysis_end_utc:
+            right_slice_records.append(record)
+            right_slice_connections.append(connection)
         if connection is not None and analysis_start_utc <= connection < analysis_end_utc:
             analysis_records.append(record)
             analysis_connections.append(connection)
@@ -452,12 +760,60 @@ def evaluate_jpl_metadata(raw_root: str | Path) -> dict[str, Any]:
 
     acquisition = _summarize_records(acquisition_records, acquisition_daily)
     analysis = _summarize_records(analysis_records, analysis_daily)
+    utc_month_summary = _month_slice_summary(
+        utc_month_records,
+        utc_month_connections,
+        start=_UTC_MONTH_START,
+        end=_UTC_MONTH_END,
+    )
+    local_month_summary = _month_slice_summary(
+        analysis_records,
+        analysis_connections,
+        start=JPL_ANALYSIS_START,
+        end=JPL_ANALYSIS_END,
+    )
+    left_slice_summary = _month_slice_summary(
+        left_slice_records,
+        left_slice_connections,
+        start=_UTC_MONTH_START,
+        end=analysis_start_utc,
+    )
+    right_slice_summary = _month_slice_summary(
+        right_slice_records,
+        right_slice_connections,
+        start=_UTC_MONTH_END,
+        end=analysis_end_utc,
+    )
+    month_boundary_comparison = {
+        "A_utc_month": utc_month_summary,
+        "B_local_month": local_month_summary,
+        "C_left_slice_utc_only": left_slice_summary,
+        "D_right_slice_local_only": right_slice_summary,
+        "set_identity": {
+            "B_equals_A_minus_C_plus_D": (
+                _session_key_set(analysis_records)
+                == (_session_key_set(utc_month_records) - _session_key_set(left_slice_records))
+                | _session_key_set(right_slice_records)
+            )
+        },
+    }
     carry_in_ids = _identifier_counts(
         [record.get("sessionID") for record in carry_in_records]
     )
     carry_in = {
         "record_count": len(carry_in_records),
         "unique_session_ids": carry_in_ids["unique"],
+        "observed_seven_day_session_count": carry_in_ids["unique"],
+        "complete_audit_status": complete_carry_in_audit["status"],
+        "complete_audit_session_count": complete_carry_in_audit[
+            "carry_in_session_count"
+        ],
+        "completeness": (
+            "PROVEN_BY_COMPLETE_AUDIT"
+            if complete_carry_in_audit["status"]
+            in {"COMPLETE_INPUT_VALIDATED", "VALIDATED_STATE"}
+            else "NOT_PROVEN"
+        ),
     }
     buffer = {
         "connection_session_count": len(buffer_connection_records),
@@ -465,9 +821,10 @@ def evaluate_jpl_metadata(raw_root: str | Path) -> dict[str, Any]:
         "observed_start_inclusive": JPL_ACQUISITION_START.isoformat(),
         "observed_end_exclusive": JPL_ANALYSIS_START.isoformat(),
         "sufficiency": {
-            "status": "OBSERVED_SCOPE_ONLY",
+            "status": "PARTIAL_OBSERVATION_ONLY",
             "assessment_zh": (
-                "该统计只说明已观测的七日缓冲范围；它不能证明更早连接且仍活跃的会话不存在。"
+                "七日缓冲只说明局部观测范围，不能证明更早连接且仍活跃的会话不存在；"
+                "完整性只能由单独的全历史 carry-in 审计支持。"
             ),
         },
     }
@@ -513,12 +870,47 @@ def evaluate_jpl_metadata(raw_root: str | Path) -> dict[str, Any]:
     if acquisition["duplicate_session_id_records"]:
         failures.add(("acquisition_window", "DUPLICATE_SESSION_ID"))
 
-    exact_count = analysis["unique_session_ids"] == EXPECTED_ANALYSIS_UNIQUE_SESSIONS
-    if not exact_count:
-        failures.add(("analysis_window", "ANALYSIS_UNIQUE_SESSION_COUNT_MISMATCH"))
+    official_local_month_total = _read_official_local_month_total(root)
+    official_contract_valid = official_local_month_total["contract_valid"] is True
+    official_total_matches = (
+        official_contract_valid
+        and official_local_month_total["total"] == analysis["unique_session_ids"]
+    )
+    if not official_contract_valid:
+        failures.add(
+            (
+                "official_local_month_total",
+                official_local_month_total["reason_code"],
+            )
+        )
+    elif not official_total_matches:
+        failures.add(
+            (
+                "official_local_month_total",
+                "OFFICIAL_LOCAL_MONTH_TOTAL_MISMATCH",
+            )
+        )
     all_chunks_valid = chunk_counts["valid"] == len(windows)
-    integrity_passed = all_chunks_valid and identifier_integrity
-    gate_passed = integrity_passed and exact_count
+    all_remote_totals_match = chunk_counts["remote_total_match"] == len(windows)
+    manifest_sha_json_integrity = all(
+        chunk_counts[field] == len(windows)
+        for field in (
+            "manifest_valid_json",
+            "manifest_contract_match",
+            "manifest_boundary_match",
+            "complete_for_query",
+            "hash_match",
+            "jsonl_valid",
+            "record_count_match",
+        )
+    )
+    integrity_passed = (
+        all_chunks_valid
+        and all_remote_totals_match
+        and manifest_sha_json_integrity
+        and identifier_integrity
+    )
+    gate_passed = integrity_passed and official_total_matches
     ordered_failures = [
         {"scope": scope, "reason_code": reason_code}
         for scope, reason_code in sorted(failures)
@@ -551,8 +943,11 @@ def evaluate_jpl_metadata(raw_root: str | Path) -> dict[str, Any]:
             "start_inclusive": JPL_ANALYSIS_START.isoformat(),
             "end_exclusive": JPL_ANALYSIS_END.isoformat(),
         },
-        "expected_analysis_unique_session_ids": EXPECTED_ANALYSIS_UNIQUE_SESSIONS,
+        "official_local_month_total": official_local_month_total,
         "observed_analysis_unique_session_ids": analysis["unique_session_ids"],
+        "observed_B_local_month_unique_session_ids": analysis["unique_session_ids"],
+        "month_boundary_comparison": month_boundary_comparison,
+        "complete_carry_in_audit": complete_carry_in_audit,
         "actual_scope": actual_scope,
         "daily": {
             "metadata_record_counts": dict(sorted(acquisition_daily.items())),
@@ -598,11 +993,13 @@ def evaluate_jpl_metadata(raw_root: str | Path) -> dict[str, Any]:
         "gate": {
             "status": "PASS" if gate_passed else "FAIL",
             "integrity_conditions_passed": integrity_passed,
-            "exact_analysis_count_passed": exact_count,
             "conditions": {
                 "all_38_chunks_valid": all_chunks_valid,
+                "all_38_remote_totals_match": all_remote_totals_match,
+                "manifest_sha_json_integrity": manifest_sha_json_integrity,
                 "identifier_integrity": identifier_integrity,
-                "analysis_unique_session_ids_equal_expected": exact_count,
+                "official_local_month_total_contract_valid": official_contract_valid,
+                "official_local_month_total_equals_B": official_total_matches,
             },
             "reason_codes": sorted({item["reason_code"] for item in ordered_failures}),
         },
@@ -676,19 +1073,419 @@ def _build_timeseries_not_run(metadata: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _contains_private_identifier_key(value: object) -> bool:
+    if isinstance(value, Mapping):
+        if any(key in {"_id", "sessionID", "userID"} for key in value):
+            return True
+        return any(_contains_private_identifier_key(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_contains_private_identifier_key(item) for item in value)
+    return False
+
+
+def _preflight_count(section: Mapping[str, Any], key: str) -> int:
+    value = section.get(key)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"preflight_qa has invalid count: {key}")
+    return value
+
+
+def _preflight_rate(section: Mapping[str, Any], key: str) -> float:
+    value = section.get(key)
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not math.isfinite(float(value))
+        or not 0.0 <= float(value) <= 1.0
+    ):
+        raise ValueError(f"preflight_qa has invalid rate: {key}")
+    return float(value)
+
+
+def _preflight_nullable_rate(
+    section: Mapping[str, Any],
+    key: str,
+    *,
+    denominator: int,
+) -> float | None:
+    if denominator == 0:
+        if section.get(key) is not None:
+            raise ValueError(f"preflight_qa {key} must be null for a zero denominator")
+        return None
+    return _preflight_rate(section, key)
+
+
+def _rate_consistent(
+    value: float | None,
+    numerator: int,
+    denominator: int,
+) -> bool:
+    if denominator == 0:
+        return value is None
+    expected = round(numerator / denominator, 8)
+    return value is not None and math.isclose(value, expected, abs_tol=1e-8)
+
+
+def _validated_preflight_coverage(
+    coverage: object,
+    *,
+    matched_sessions: int,
+) -> dict[str, dict[str, int | float]]:
+    if not isinstance(coverage, Mapping):
+        raise ValueError("preflight_qa field_coverage must be an object")
+    clean: dict[str, dict[str, int | float]] = {}
+    for field in ("chargingCurrent", "pilotSignal", "userInputs"):
+        item = coverage.get(field)
+        if not isinstance(item, Mapping):
+            raise ValueError(f"preflight_qa field_coverage is missing {field}")
+        count = _preflight_count(item, "count")
+        denominator = _preflight_count(item, "denominator")
+        rate = _preflight_rate(item, "rate")
+        if (
+            denominator != PREFLIGHT_SAMPLE_SIZE
+            or count > matched_sessions
+            or not _rate_consistent(rate, count, denominator)
+        ):
+            raise ValueError(f"preflight_qa has inconsistent {field} coverage")
+        clean[field] = {"count": count, "denominator": denominator, "rate": rate}
+    return clean
+
+
+_PREFLIGHT_SERIES_COUNT_KEYS = (
+    "invalid_container_sessions",
+    "length_mismatch_sessions",
+    "duplicate_extra_timestamps",
+    "nonmonotonic_pairs",
+    "timestamp_parse_errors",
+    "invalid_numeric_values",
+    "negative_values",
+    "raw_samples",
+    "usable_samples",
+    "expected_complete_active_minutes",
+    "sparse_minutes_under_10_points",
+)
+
+
+def _validated_preflight_series(
+    series: object,
+    *,
+    field: str,
+) -> dict[str, Any]:
+    if not isinstance(series, Mapping):
+        raise ValueError(f"preflight_qa series is missing {field}")
+    clean: dict[str, Any] = {
+        key: _preflight_count(series, key) for key in _PREFLIGHT_SERIES_COUNT_KEYS
+    }
+    clean["invalid_container_rate"] = _preflight_rate(
+        series, "invalid_container_rate"
+    )
+    clean["retained_sample_rate"] = _preflight_nullable_rate(
+        series,
+        "retained_sample_rate",
+        denominator=clean["raw_samples"],
+    )
+    clean["sparse_minute_rate"] = _preflight_nullable_rate(
+        series,
+        "sparse_minute_rate",
+        denominator=clean["expected_complete_active_minutes"],
+    )
+    if clean["usable_samples"] > clean["raw_samples"]:
+        raise ValueError(f"preflight_qa {field} usable samples exceed raw samples")
+    if clean["sparse_minutes_under_10_points"] > clean[
+        "expected_complete_active_minutes"
+    ]:
+        raise ValueError(f"preflight_qa {field} sparse minutes exceed denominator")
+    if not _rate_consistent(
+        clean["invalid_container_rate"],
+        clean["invalid_container_sessions"],
+        PREFLIGHT_SAMPLE_SIZE,
+    ):
+        raise ValueError(f"preflight_qa {field} invalid-container rate is inconsistent")
+    if not _rate_consistent(
+        clean["retained_sample_rate"],
+        clean["usable_samples"],
+        clean["raw_samples"],
+    ):
+        raise ValueError(f"preflight_qa {field} retained rate is inconsistent")
+    if not _rate_consistent(
+        clean["sparse_minute_rate"],
+        clean["sparse_minutes_under_10_points"],
+        clean["expected_complete_active_minutes"],
+    ):
+        raise ValueError(f"preflight_qa {field} sparse rate is inconsistent")
+
+    boundary_keys = (
+        "boundary_positive_current_points",
+        "boundary_positive_current_sessions",
+        "boundary_unverifiable_sessions",
+    )
+    if field == "chargingCurrent":
+        for key in boundary_keys:
+            clean[key] = _preflight_count(series, key)
+        if clean["boundary_positive_current_sessions"] > PREFLIGHT_SAMPLE_SIZE:
+            raise ValueError("preflight_qa boundary-positive session count exceeds sample")
+    else:
+        if any(series.get(key) is not None for key in boundary_keys):
+            raise ValueError("preflight_qa pilotSignal must not report current boundaries")
+        clean.update({key: None for key in boundary_keys})
+    return clean
+
+
+def _validated_preflight_copy(preflight: Mapping[str, Any]) -> dict[str, Any]:
+    if (
+        preflight.get("schema_version") != "acn-jpl-ts-preflight-qa/v1"
+        or _contains_private_identifier_key(preflight)
+    ):
+        raise ValueError("preflight_qa must be aggregate-only and free of identifiers")
+    sample = preflight.get("sample")
+    matching = preflight.get("matching")
+    run = preflight.get("run")
+    privacy = preflight.get("privacy")
+    raw_series = preflight.get("series")
+    declared_gate = preflight.get("gate")
+    if not all(
+        isinstance(section, Mapping)
+        for section in (sample, matching, run, privacy, raw_series, declared_gate)
+    ):
+        raise ValueError("preflight_qa is missing required aggregate sections")
+    assert isinstance(sample, Mapping)
+    assert isinstance(matching, Mapping)
+    assert isinstance(run, Mapping)
+    assert isinstance(privacy, Mapping)
+    assert isinstance(raw_series, Mapping)
+    assert isinstance(declared_gate, Mapping)
+    if (
+        _preflight_count(sample, "requested_sessions") != PREFLIGHT_SAMPLE_SIZE
+        or _preflight_count(sample, "selected_unique_sessions")
+        != PREFLIGHT_SAMPLE_SIZE
+        or sample.get("random_seed") != PREFLIGHT_RANDOM_SEED
+    ):
+        raise ValueError("preflight_qa sample contract is not fixed-seed 100-session")
+
+    matched = _preflight_count(matching, "matched_sessions")
+    missing = _preflight_count(matching, "missing_sessions")
+    orphan = _preflight_count(matching, "orphan_sessions")
+    metadata_sessions = _preflight_count(matching, "metadata_sessions")
+    timeseries_records = _preflight_count(matching, "timeseries_records")
+    match_rate = _preflight_rate(matching, "match_rate")
+    if (
+        metadata_sessions != PREFLIGHT_SAMPLE_SIZE
+        or matched + missing != PREFLIGHT_SAMPLE_SIZE
+        or timeseries_records != matched + orphan
+        or not _rate_consistent(match_rate, matched, PREFLIGHT_SAMPLE_SIZE)
+    ):
+        raise ValueError("preflight_qa matching counts are inconsistent")
+
+    downloaded = _preflight_count(run, "downloaded_sessions")
+    skipped = _preflight_count(run, "skipped_sessions")
+    failed = _preflight_count(run, "failed_sessions")
+    if (
+        run.get("serial") is not True
+        or downloaded + skipped != matched
+        or failed != missing
+        or downloaded + skipped + failed != PREFLIGHT_SAMPLE_SIZE
+    ):
+        raise ValueError("preflight_qa run counts are inconsistent")
+
+    current = _validated_preflight_series(
+        raw_series.get("chargingCurrent"),
+        field="chargingCurrent",
+    )
+    pilot = _validated_preflight_series(
+        raw_series.get("pilotSignal"),
+        field="pilotSignal",
+    )
+    coverage = _validated_preflight_coverage(
+        preflight.get("field_coverage"),
+        matched_sessions=matched,
+    )
+    for field, series_evidence in (
+        ("chargingCurrent", current),
+        ("pilotSignal", pilot),
+    ):
+        field_count = coverage[field]["count"]
+        invalid_containers = series_evidence["invalid_container_sessions"]
+        if (
+            invalid_containers > matched
+            or series_evidence["length_mismatch_sessions"] > invalid_containers
+            or field_count < matched - invalid_containers
+            or (field_count == 0 and series_evidence["raw_samples"] != 0)
+            or (
+                series_evidence["invalid_numeric_values"]
+                + series_evidence["negative_values"]
+                > series_evidence["raw_samples"]
+            )
+        ):
+            raise ValueError(
+                f"preflight_qa {field} coverage and series evidence are inconsistent"
+            )
+    if (
+        current["boundary_positive_current_sessions"] > matched
+        or current["boundary_positive_current_points"]
+        < current["boundary_positive_current_sessions"]
+    ):
+        raise ValueError("preflight_qa boundary-positive counts are inconsistent")
+    severe = (
+        current["timestamp_parse_errors"]
+        + current["nonmonotonic_pairs"]
+        + pilot["timestamp_parse_errors"]
+        + pilot["nonmonotonic_pairs"]
+    )
+    unmatched_rate = round(
+        (PREFLIGHT_SAMPLE_SIZE - matched) / PREFLIGHT_SAMPLE_SIZE,
+        8,
+    )
+    expected_status = (
+        "PASS"
+        if current["invalid_container_rate"]
+        <= PREFLIGHT_INVALID_CHARGING_CURRENT_RATE_LIMIT
+        and pilot["invalid_container_rate"]
+        <= PREFLIGHT_INVALID_PILOT_SIGNAL_RATE_LIMIT
+        and unmatched_rate <= PREFLIGHT_UNMATCHED_METADATA_RATE_LIMIT
+        and orphan == 0
+        and severe == 0
+        else "FAIL"
+    )
+    if (
+        declared_gate.get("invalid_charging_current_limit")
+        != PREFLIGHT_INVALID_CHARGING_CURRENT_RATE_LIMIT
+        or declared_gate.get("invalid_pilot_signal_limit")
+        != PREFLIGHT_INVALID_PILOT_SIGNAL_RATE_LIMIT
+        or declared_gate.get("unmatched_metadata_limit")
+        != PREFLIGHT_UNMATCHED_METADATA_RATE_LIMIT
+        or declared_gate.get("unmatched_metadata_rate") != unmatched_rate
+        or declared_gate.get("severe_timestamp_anomalies") != severe
+        or declared_gate.get("status") != expected_status
+    ):
+        raise ValueError("preflight_qa gate is inconsistent with aggregate evidence")
+    if (
+        privacy.get("aggregate_only") is not True
+        or privacy.get("identifiers_emitted") is not False
+        or privacy.get("token_emitted") is not False
+    ):
+        raise ValueError("preflight_qa privacy declaration is invalid")
+
+    return {
+        "schema_version": "acn-jpl-ts-preflight-qa/v1",
+        "sample": {
+            "requested_sessions": PREFLIGHT_SAMPLE_SIZE,
+            "selected_unique_sessions": PREFLIGHT_SAMPLE_SIZE,
+            "random_seed": PREFLIGHT_RANDOM_SEED,
+        },
+        "matching": {
+            "metadata_sessions": metadata_sessions,
+            "timeseries_records": timeseries_records,
+            "matched_sessions": matched,
+            "missing_sessions": missing,
+            "orphan_sessions": orphan,
+            "match_rate": match_rate,
+        },
+        "field_coverage": coverage,
+        "series": {"chargingCurrent": current, "pilotSignal": pilot},
+        "gate": {
+            "status": expected_status,
+            "invalid_charging_current_limit": (
+                PREFLIGHT_INVALID_CHARGING_CURRENT_RATE_LIMIT
+            ),
+            "invalid_pilot_signal_limit": PREFLIGHT_INVALID_PILOT_SIGNAL_RATE_LIMIT,
+            "unmatched_metadata_limit": PREFLIGHT_UNMATCHED_METADATA_RATE_LIMIT,
+            "unmatched_metadata_rate": unmatched_rate,
+            "severe_timestamp_anomalies": severe,
+        },
+        "run": {
+            "downloaded_sessions": downloaded,
+            "skipped_sessions": skipped,
+            "failed_sessions": failed,
+            "serial": True,
+        },
+        "privacy": {
+            "aggregate_only": True,
+            "identifiers_emitted": False,
+            "token_emitted": False,
+        },
+    }
+
+
+def _build_timeseries_preflight(
+    metadata: Mapping[str, Any],
+    preflight: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Wrap an aggregate-only preflight result without implying full-month coverage."""
+
+    clean = _validated_preflight_copy(preflight)
+    matching = clean["matching"]
+    coverage = clean["field_coverage"]
+    series = clean["series"]
+    gate = clean["gate"]
+    preflight_status = str(gate["status"])
+    return {
+        "schema_version": "acn-jpl-timeseries-qa/v2",
+        "dataset_id": "D0001",
+        "site": "jpl",
+        "status": f"PREFLIGHT_{preflight_status}",
+        "scope": "FIXED_SEED_100_SESSION_PREFLIGHT_ONLY",
+        "download_attempted": True,
+        "reason_code": None if preflight_status == "PASS" else "PREFLIGHT_QA_FAILED",
+        "actual_scope": metadata["actual_scope"],
+        "buffer": metadata["buffer"],
+        "daily": metadata["daily"],
+        "metadata_manifest_quality": {
+            "valid_manifests": metadata["chunks"]["valid_manifests"],
+            "invalid_manifests": metadata["chunks"]["invalid_manifests"],
+            "sha256_mismatch": metadata["chunks"]["sha256_mismatch"],
+            "json_errors_total": metadata["chunks"]["json_errors_total"],
+            "failure_dates": metadata["chunks"]["failure_dates"],
+        },
+        "api_retry_observation": metadata["api_retry_observation"],
+        "field_coverage": dict(coverage),
+        "quality": {
+            "chargingCurrent": dict(series.get("chargingCurrent", {})),
+            "pilotSignal": dict(series.get("pilotSignal", {})),
+        },
+        "session_linkage": dict(matching),
+        "daily_timeseries_record_counts": dict(
+            sorted(metadata["daily"]["timeseries_record_counts"].items())
+        ),
+        "preflight": clean,
+        "full_month": {
+            "status": "NOT_RUN",
+            "download_attempted": False,
+            "reason_code": "STOP_AFTER_100_SESSION_PREFLIGHT_FOR_CONTROLLER_REVIEW",
+        },
+        "privacy": _privacy_declaration(),
+    }
+
+
 def _summary_json(metadata: Mapping[str, Any], timeseries: Mapping[str, Any]) -> dict[str, Any]:
+    preflight = timeseries.get("preflight")
+    preflight_gate = "NOT_RUN"
+    if (
+        isinstance(preflight, Mapping)
+        and preflight.get("schema_version") == "acn-jpl-ts-preflight-qa/v1"
+    ):
+        gate = preflight.get("gate")
+        if isinstance(gate, Mapping) and gate.get("status") in {"PASS", "FAIL"}:
+            preflight_gate = str(gate["status"])
+    metadata_gate = str(metadata["gate"]["status"])
+    overall_status = (
+        "FAIL"
+        if metadata_gate == "FAIL" or preflight_gate == "FAIL"
+        else "PASS"
+    )
     return {
         "schema_version": "acn-jpl-acquisition-summary/v1",
         "dataset_id": "D0001",
         "site": "jpl",
         "source": _SOURCE,
-        "gate_status": metadata["gate"]["status"],
-        "expected_analysis_unique_session_ids": metadata[
-            "expected_analysis_unique_session_ids"
-        ],
+        "gate_status": overall_status,
+        "overall_status": overall_status,
+        "metadata_gate_status": metadata_gate,
+        "official_local_month_total": metadata["official_local_month_total"],
         "observed_analysis_unique_session_ids": metadata[
             "observed_analysis_unique_session_ids"
         ],
+        "month_boundary_comparison": metadata["month_boundary_comparison"],
+        "complete_carry_in_audit": metadata["complete_carry_in_audit"],
         "acquisition_record_count": metadata["acquisition"]["record_count"],
         "analysis_record_count": metadata["analysis"]["record_count"],
         "carry_in_record_count": metadata["carry_in"]["record_count"],
@@ -714,13 +1511,26 @@ def _summary_json(metadata: Mapping[str, Any], timeseries: Mapping[str, Any]) ->
             "field_coverage": timeseries["field_coverage"],
             "quality": timeseries["quality"],
             "session_linkage": timeseries["session_linkage"],
+            "preflight": preflight,
+            "full_month": timeseries.get(
+                "full_month",
+                {"status": "NOT_RUN", "download_attempted": False},
+            ),
             "daily_timeseries_record_counts": timeseries[
                 "daily_timeseries_record_counts"
             ],
         },
+        "gate_decision": {
+            "metadata_gate": metadata_gate,
+            "timeseries_preflight_gate": preflight_gate,
+            "full_month_timeseries": "NOT_RUN",
+            "ready_for_controller_review": (
+                metadata_gate == "PASS" and preflight_gate == "PASS"
+            ),
+        },
         "privacy": _privacy_declaration(),
         "limitations": [
-            "A count mismatch alone cannot identify a particular missing session.",
+            "The 100-session preflight does not establish full-month time-series coverage.",
             "Charging current is not direct active power without voltage and phase metadata.",
         ],
     }
@@ -728,25 +1538,118 @@ def _summary_json(metadata: Mapping[str, Any], timeseries: Mapping[str, Any]) ->
 
 def _summary_markdown(metadata: Mapping[str, Any], timeseries: Mapping[str, Any]) -> str:
     observed = metadata["observed_analysis_unique_session_ids"]
-    expected = metadata["expected_analysis_unique_session_ids"]
-    status = metadata["gate"]["status"]
-    mismatch_note = (
-        f"仅凭 {observed} 与 {expected} 的计数差异不能定位具体缺失会话。"
-        if observed != expected
-        else "本次计数与冻结期望一致；会话身份值仍不会写入 QA 输出。"
+    expected = metadata["official_local_month_total"]["total"]
+    metadata_status = str(metadata["gate"]["status"])
+    preflight_payload = timeseries.get("preflight")
+    preflight_status = "NOT_RUN"
+    if (
+        isinstance(preflight_payload, Mapping)
+        and preflight_payload.get("schema_version")
+        == "acn-jpl-ts-preflight-qa/v1"
+    ):
+        preflight_gate = preflight_payload.get("gate")
+        if isinstance(preflight_gate, Mapping):
+            preflight_status = str(preflight_gate.get("status", "NOT_RUN"))
+    overall_status = (
+        "FAIL"
+        if metadata_status == "FAIL" or preflight_status == "FAIL"
+        else "PASS"
     )
-    return "\n".join(
-        [
-            "# JPL 2019-05 ACN-Data Phase 1 元数据门控",
+    if expected is None:
+        mismatch_note = "独立官方当地月 `_meta.total` 缺失或契约无效，不能通过门控。"
+    elif observed != expected:
+        mismatch_note = f"仅凭 {observed} 与 {expected} 的计数差异不能定位具体缺失会话。"
+    else:
+        mismatch_note = "当地月唯一会话数与独立官方 `_meta.total` 一致。"
+    comparison = metadata["month_boundary_comparison"]
+    lines = [
+            "# JPL 2019-05 ACN-Data Gate 0 修订与预检",
             "",
             f"- 数据源：{_SOURCE}",
-            f"- 门控状态：{status}",
-            f"- 分析窗唯一 sessionID：观测 {observed}，期望 {expected}",
+            f"- 总体状态：{overall_status}",
+            f"- 元数据门控：{metadata_status}",
+            f"- 100 会话预检：{preflight_status}",
+            f"- 当地月唯一 sessionID：38 块观测 {observed}，独立官方 `_meta.total` {expected}",
             f"- 每日完整块：{metadata['chunks']['valid']}/{metadata['chunks']['expected']}",
-            f"- `/ts` 状态：{timeseries['status']}，未启动；download_attempted=false",
+            (
+                "- 月份口径："
+                f"A UTC={comparison['A_utc_month']['unique_session_ids']}，"
+                f"B 当地={comparison['B_local_month']['unique_session_ids']}，"
+                f"C 左切片={comparison['C_left_slice_utc_only']['unique_session_ids']}，"
+                f"D 右切片={comparison['D_right_slice_local_only']['unique_session_ids']}"
+            ),
+            (
+                "- 完整历史 carry-in："
+                f"{metadata['complete_carry_in_audit']['carry_in_session_count']}"
+                f"（{metadata['complete_carry_in_audit']['status']}）"
+            ),
             "",
             mismatch_note,
             "",
+    ]
+    preflight = preflight_payload
+    if (
+        isinstance(preflight, Mapping)
+        and preflight.get("schema_version") == "acn-jpl-ts-preflight-qa/v1"
+    ):
+        sample = preflight["sample"]
+        matching = preflight["matching"]
+        coverage = preflight["field_coverage"]
+        current = preflight["series"]["chargingCurrent"]
+        pilot = preflight["series"]["pilotSignal"]
+        lines.extend(
+            [
+                "## 100 会话 `/ts` 预检",
+                "",
+                (
+                    f"- 固定种子 {sample['random_seed']}；"
+                    f"匹配 {matching['matched_sessions']}/{sample['requested_sessions']}；"
+                    f"状态 {preflight['gate']['status']}"
+                ),
+                f"- chargingCurrent 覆盖率：{coverage['chargingCurrent']['rate']}",
+                f"- pilotSignal 覆盖率：{coverage['pilotSignal']['rate']}",
+                f"- userInputs 覆盖率：{coverage['userInputs']['rate']}",
+                (
+                    "- 无效容器："
+                    f"current={current['invalid_container_sessions']}，"
+                    f"pilot={pilot['invalid_container_sessions']}"
+                ),
+                (
+                    "- 重复时间戳："
+                    f"current={current['duplicate_extra_timestamps']}，"
+                    f"pilot={pilot['duplicate_extra_timestamps']}；"
+                    "非单调时间戳："
+                    f"current={current['nonmonotonic_pairs']}，"
+                    f"pilot={pilot['nonmonotonic_pairs']}"
+                ),
+                (
+                    "- 稀疏分钟率："
+                    f"current={current['sparse_minute_rate']}，"
+                    f"pilot={pilot['sparse_minute_rate']}"
+                ),
+                (
+                    "- 采样点保留率："
+                    f"current={current['retained_sample_rate']}，"
+                    f"pilot={pilot['retained_sample_rate']}"
+                ),
+                (
+                    "- 会话边界外正电流："
+                    f"{current['boundary_positive_current_points']} 点 / "
+                    f"{current['boundary_positive_current_sessions']} 会话"
+                ),
+                "- 未下载完整月份 `/ts`；在100会话预检后停止，等待主控复核。",
+                "",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                f"- `/ts` 状态：{timeseries['status']}，未启动；download_attempted=false",
+                "",
+            ]
+        )
+    lines.extend(
+        [
             "## 功率与在线特征语义",
             "",
             "- 语义1：chargingCurrent 是实测电流，不是直接 kW。",
@@ -758,6 +1661,7 @@ def _summary_markdown(metadata: Mapping[str, Any], timeseries: Mapping[str, Any]
             "",
         ]
     )
+    return "\n".join(lines)
 
 
 def _atomic_write(path: Path, payload: bytes) -> None:
@@ -783,11 +1687,28 @@ def _json_bytes(payload: Mapping[str, Any]) -> bytes:
 def run_phase1_metadata_qa(
     raw_root: str | Path,
     output_dir: str | Path,
+    *,
+    full_metadata_path: str | Path | None = None,
+    preflight_qa: Mapping[str, Any] | None = None,
 ) -> Phase1MetadataQAResult:
     """Evaluate Phase 1 and atomically write a deterministic, deidentified delivery."""
 
-    metadata = evaluate_jpl_metadata(raw_root)
-    timeseries = _build_timeseries_not_run(metadata)
+    metadata = evaluate_jpl_metadata(
+        raw_root,
+        full_metadata_path=full_metadata_path,
+    )
+    if preflight_qa is None or metadata["gate"]["status"] != "PASS":
+        timeseries = _build_timeseries_not_run(metadata)
+    else:
+        timeseries = _build_timeseries_preflight(metadata, preflight_qa)
+        matching = preflight_qa["matching"]
+        metadata["actual_scope"]["timeseries_status"] = "PREFLIGHT_100_ONLY"
+        metadata["daily"]["timeseries_status"] = "PREFLIGHT_100_ONLY"
+        metadata["timeseries_linkage"] = {
+            "status": "PREFLIGHT_100_ONLY",
+            "missing_timeseries_sessions": matching.get("missing_sessions"),
+            "orphan_timeseries_sessions": matching.get("orphan_sessions"),
+        }
     summary = _summary_json(metadata, timeseries)
     output = Path(output_dir)
 
@@ -801,21 +1722,22 @@ def run_phase1_metadata_qa(
     csv_rows = []
     for failure in metadata["failures"]:
         row = dict(failure)
-        if failure["reason_code"] == "ANALYSIS_UNIQUE_SESSION_COUNT_MISMATCH":
-            row["expected_count"] = metadata["expected_analysis_unique_session_ids"]
+        if failure["reason_code"] == "OFFICIAL_LOCAL_MONTH_TOTAL_MISMATCH":
+            row["expected_count"] = metadata["official_local_month_total"]["total"]
             row["observed_count"] = metadata["observed_analysis_unique_session_ids"]
         else:
             row["expected_count"] = None
             row["observed_count"] = None
         csv_rows.append(row)
-    csv_rows.append(
-        {
-            "scope": "analysis_window",
-            "reason_code": "ANALYSIS_UNIQUE_SESSION_COUNT_GATE",
-            "expected_count": metadata["expected_analysis_unique_session_ids"],
-            "observed_count": metadata["observed_analysis_unique_session_ids"],
-        }
-    )
+    if timeseries["status"] == "PREFLIGHT_FAIL":
+        csv_rows.append(
+            {
+                "scope": "timeseries_preflight",
+                "reason_code": "TIMESERIES_PREFLIGHT_QA_FAILED",
+                "expected_count": PREFLIGHT_SAMPLE_SIZE,
+                "observed_count": timeseries["session_linkage"]["matched_sessions"],
+            }
+        )
     writer.writerows(csv_rows)
 
     payloads = {
@@ -840,7 +1762,7 @@ def run_phase1_metadata_qa(
     )
     paths = tuple(output / filename for filename in (*_OUTPUT_FILENAMES, "SHA256SUMS"))
     return Phase1MetadataQAResult(
-        gate_status=metadata["gate"]["status"],
+        gate_status=summary["overall_status"],
         qa_metadata=metadata,
         qa_timeseries=timeseries,
         output_paths=paths,

@@ -10,7 +10,7 @@
     },
     "metadata_days_with_records": 37,
     "metadata_record_count": 1973,
-    "timeseries_status": "NOT_RUN"
+    "timeseries_status": "PREFLIGHT_100_ONLY"
   },
   "api_retry_observation": {
     "chunk_failure_retry_count": 0,
@@ -25,8 +25,8 @@
     "observed_end_exclusive": "2019-05-01T00:00:00-07:00",
     "observed_start_inclusive": "2019-04-24T00:00:00-07:00",
     "sufficiency": {
-      "assessment_zh": "该统计只说明已观测的七日缓冲范围；它不能证明更早连接且仍活跃的会话不存在。",
-      "status": "OBSERVED_SCOPE_ONLY"
+      "assessment_zh": "七日缓冲只说明局部观测范围，不能证明更早连接且仍活跃的会话不存在；完整性只能由单独的全历史 carry-in 审计支持。",
+      "status": "PARTIAL_OBSERVATION_ONLY"
     }
   },
   "daily": {
@@ -110,7 +110,7 @@
       "2019-05-30": null,
       "2019-05-31": null
     },
-    "timeseries_status": "NOT_RUN"
+    "timeseries_status": "PREFLIGHT_100_ONLY"
   },
   "daily_timeseries_record_counts": {
     "2019-04-24": null,
@@ -153,13 +153,28 @@
     "2019-05-31": null
   },
   "dataset_id": "D0001",
-  "download_attempted": false,
+  "download_attempted": true,
   "field_coverage": {
-    "chargingCurrent": null,
-    "kWhRequested": null,
-    "pilotSignal": null,
-    "requestedDeparture": null,
-    "userInputs": null
+    "chargingCurrent": {
+      "count": 100,
+      "denominator": 100,
+      "rate": 1.0
+    },
+    "pilotSignal": {
+      "count": 100,
+      "denominator": 100,
+      "rate": 1.0
+    },
+    "userInputs": {
+      "count": 97,
+      "denominator": 100,
+      "rate": 0.97
+    }
+  },
+  "full_month": {
+    "download_attempted": false,
+    "reason_code": "STOP_AFTER_100_SESSION_PREFLIGHT_FOR_CONTROLLER_REVIEW",
+    "status": "NOT_RUN"
   },
   "metadata_manifest_quality": {
     "failure_dates": [],
@@ -169,11 +184,96 @@
     "valid_manifests": 38
   },
   "preflight": {
-    "downloaded_sessions": null,
-    "overlapping_session_count": null,
-    "preflight_sample_size": null,
-    "station_aggregation_feasible": null,
-    "status": "NOT_RUN"
+    "field_coverage": {
+      "chargingCurrent": {
+        "count": 100,
+        "denominator": 100,
+        "rate": 1.0
+      },
+      "pilotSignal": {
+        "count": 100,
+        "denominator": 100,
+        "rate": 1.0
+      },
+      "userInputs": {
+        "count": 97,
+        "denominator": 100,
+        "rate": 0.97
+      }
+    },
+    "gate": {
+      "invalid_charging_current_limit": 0.1,
+      "invalid_pilot_signal_limit": 0.1,
+      "severe_timestamp_anomalies": 0,
+      "status": "PASS",
+      "unmatched_metadata_limit": 0.01,
+      "unmatched_metadata_rate": 0.0
+    },
+    "matching": {
+      "match_rate": 1.0,
+      "matched_sessions": 100,
+      "metadata_sessions": 100,
+      "missing_sessions": 0,
+      "orphan_sessions": 0,
+      "timeseries_records": 100
+    },
+    "privacy": {
+      "aggregate_only": true,
+      "identifiers_emitted": false,
+      "token_emitted": false
+    },
+    "run": {
+      "downloaded_sessions": 100,
+      "failed_sessions": 0,
+      "serial": true,
+      "skipped_sessions": 0
+    },
+    "sample": {
+      "random_seed": 201905,
+      "requested_sessions": 100,
+      "selected_unique_sessions": 100
+    },
+    "schema_version": "acn-jpl-ts-preflight-qa/v1",
+    "series": {
+      "chargingCurrent": {
+        "boundary_positive_current_points": 86,
+        "boundary_positive_current_sessions": 28,
+        "boundary_unverifiable_sessions": 0,
+        "duplicate_extra_timestamps": 1,
+        "expected_complete_active_minutes": 41399,
+        "invalid_container_rate": 0.0,
+        "invalid_container_sessions": 0,
+        "invalid_numeric_values": 0,
+        "length_mismatch_sessions": 0,
+        "negative_values": 0,
+        "nonmonotonic_pairs": 0,
+        "raw_samples": 632687,
+        "retained_sample_rate": 0.99517139,
+        "sparse_minute_rate": 0.00577309,
+        "sparse_minutes_under_10_points": 239,
+        "timestamp_parse_errors": 0,
+        "usable_samples": 629632
+      },
+      "pilotSignal": {
+        "boundary_positive_current_points": null,
+        "boundary_positive_current_sessions": null,
+        "boundary_unverifiable_sessions": null,
+        "duplicate_extra_timestamps": 1,
+        "expected_complete_active_minutes": 41399,
+        "invalid_container_rate": 0.0,
+        "invalid_container_sessions": 0,
+        "invalid_numeric_values": 0,
+        "length_mismatch_sessions": 0,
+        "negative_values": 0,
+        "nonmonotonic_pairs": 0,
+        "raw_samples": 632816,
+        "retained_sample_rate": 0.99517079,
+        "sparse_minute_rate": 0.00548322,
+        "sparse_minutes_under_10_points": 227,
+        "timestamp_parse_errors": 0,
+        "usable_samples": 629760
+      }
+    }
   },
   "privacy": {
     "identifiers_emitted": false,
@@ -182,28 +282,56 @@
     "token_emitted": false
   },
   "quality": {
-    "boundary_positive_points": null,
-    "boundary_positive_session_rate": null,
-    "boundary_positive_sessions": null,
-    "duplicate_timestamps": null,
-    "invalid_containers": null,
-    "invalid_values": null,
-    "length_mismatch": null,
-    "negative_current": null,
-    "non_utc_timestamps": null,
-    "nonmonotonic_timestamps": null,
-    "raw_samples": null,
-    "retained_rate": null,
-    "severe_anomalies": null,
-    "sparse_rate": null,
-    "usable_samples": null
+    "chargingCurrent": {
+      "boundary_positive_current_points": 86,
+      "boundary_positive_current_sessions": 28,
+      "boundary_unverifiable_sessions": 0,
+      "duplicate_extra_timestamps": 1,
+      "expected_complete_active_minutes": 41399,
+      "invalid_container_rate": 0.0,
+      "invalid_container_sessions": 0,
+      "invalid_numeric_values": 0,
+      "length_mismatch_sessions": 0,
+      "negative_values": 0,
+      "nonmonotonic_pairs": 0,
+      "raw_samples": 632687,
+      "retained_sample_rate": 0.99517139,
+      "sparse_minute_rate": 0.00577309,
+      "sparse_minutes_under_10_points": 239,
+      "timestamp_parse_errors": 0,
+      "usable_samples": 629632
+    },
+    "pilotSignal": {
+      "boundary_positive_current_points": null,
+      "boundary_positive_current_sessions": null,
+      "boundary_unverifiable_sessions": null,
+      "duplicate_extra_timestamps": 1,
+      "expected_complete_active_minutes": 41399,
+      "invalid_container_rate": 0.0,
+      "invalid_container_sessions": 0,
+      "invalid_numeric_values": 0,
+      "length_mismatch_sessions": 0,
+      "negative_values": 0,
+      "nonmonotonic_pairs": 0,
+      "raw_samples": 632816,
+      "retained_sample_rate": 0.99517079,
+      "sparse_minute_rate": 0.00548322,
+      "sparse_minutes_under_10_points": 227,
+      "timestamp_parse_errors": 0,
+      "usable_samples": 629760
+    }
   },
-  "reason_code": "METADATA_GATE_FAILED",
-  "schema_version": "acn-jpl-timeseries-qa/v1",
+  "reason_code": null,
+  "schema_version": "acn-jpl-timeseries-qa/v2",
+  "scope": "FIXED_SEED_100_SESSION_PREFLIGHT_ONLY",
   "session_linkage": {
-    "missing_timeseries_sessions": null,
-    "orphan_timeseries_sessions": null
+    "match_rate": 1.0,
+    "matched_sessions": 100,
+    "metadata_sessions": 100,
+    "missing_sessions": 0,
+    "orphan_sessions": 0,
+    "timeseries_records": 100
   },
   "site": "jpl",
-  "status": "NOT_RUN"
+  "status": "PREFLIGHT_PASS"
 }

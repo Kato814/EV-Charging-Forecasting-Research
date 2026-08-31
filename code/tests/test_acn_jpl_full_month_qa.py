@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import copy
 import gzip
 import hashlib
 import json
+import shutil
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
 from pathlib import Path
@@ -193,6 +195,27 @@ def _run_qa(
         expected_carry_sessions=1,
         expected_total_sessions=3,
     )
+
+
+def _public_validation_bundle(
+    output_root: Path,
+) -> tuple[list[dict[str, Any]], dict[str, bytes]]:
+    contents = {
+        name: (output_root / name).read_bytes() for name in full_qa_module._HASHED_ARTIFACT_NAMES
+    }
+    payloads = [
+        json.loads(contents[name])
+        for name in (
+            "qa_full_month_timeseries.json",
+            "acquisition_summary.json",
+            "cleaning_rule_manifest.json",
+        )
+    ]
+    return payloads, contents
+
+
+def _release_snapshot(root: Path) -> dict[str, bytes]:
+    return {name: (root / name).read_bytes() for name in full_qa_module.PUBLIC_ARTIFACT_NAMES}
 
 
 def test_full_pass_emits_exact_verified_aggregate_artifacts(
@@ -518,3 +541,265 @@ def test_public_artifacts_exclude_identifiers_secrets_paths_and_trajectories(
         '"values"',
     ):
         assert forbidden not in combined
+
+
+def test_closed_json_schema_rejects_unknown_identifier_key_and_value(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    metadata_root, raw_root, output_root, acquisition = _pass_layout(tmp_path, monkeypatch)
+    _run_qa(metadata_root, raw_root, output_root, acquisition)
+    payloads, contents = _public_validation_bundle(output_root)
+    payloads[0]["record_ids"] = ["private-object-123"]
+    contents["qa_full_month_timeseries.json"] = (
+        json.dumps(payloads[0], sort_keys=True) + "\n"
+    ).encode()
+
+    with pytest.raises(ValueError, match="schema"):
+        full_qa_module._validate_public_contents(payloads, contents, ())
+
+
+def test_closed_json_schema_rejects_unknown_identifier_style_allowed_value(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    metadata_root, raw_root, output_root, acquisition = _pass_layout(tmp_path, monkeypatch)
+    _run_qa(metadata_root, raw_root, output_root, acquisition)
+    payloads, contents = _public_validation_bundle(output_root)
+    payloads[1]["acquisition"]["status"] = "private-object-123"
+    contents["acquisition_summary.json"] = (json.dumps(payloads[1], sort_keys=True) + "\n").encode()
+
+    with pytest.raises(ValueError, match="schema"):
+        full_qa_module._validate_public_contents(payloads, contents, ())
+
+
+@pytest.mark.parametrize("absolute_path", ["/opt/private/raw/session.json", "/data/raw/x"])
+def test_text_privacy_rejects_generic_posix_absolute_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    absolute_path: str,
+) -> None:
+    metadata_root, raw_root, output_root, acquisition = _pass_layout(tmp_path, monkeypatch)
+    _run_qa(metadata_root, raw_root, output_root, acquisition)
+    payloads, contents = _public_validation_bundle(output_root)
+    contents["acquisition_summary.md"] += f"\ndiagnostic: {absolute_path}\n".encode()
+
+    with pytest.raises(ValueError, match="absolute local path"):
+        full_qa_module._validate_public_contents(payloads, contents, ())
+
+
+@pytest.mark.parametrize(
+    "csv_name",
+    ["daily_chunk_summary.csv", "failed_or_incomplete_chunks.csv"],
+)
+def test_closed_csv_schema_rejects_extra_columns(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    csv_name: str,
+) -> None:
+    metadata_root, raw_root, output_root, acquisition = _pass_layout(tmp_path, monkeypatch)
+    _run_qa(metadata_root, raw_root, output_root, acquisition)
+    payloads, contents = _public_validation_bundle(output_root)
+    lines = contents[csv_name].decode().splitlines()
+    lines[0] += ",record_ids"
+    contents[csv_name] = ("\n".join(lines) + "\n").encode()
+
+    with pytest.raises(ValueError, match="CSV schema"):
+        full_qa_module._validate_public_contents(payloads, contents, ())
+
+
+def test_publish_rename_of_previous_release_failure_preserves_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    metadata_root, raw_root, output_root, acquisition = _pass_layout(tmp_path, monkeypatch)
+    _run_qa(metadata_root, raw_root, output_root, acquisition)
+    contents = _release_snapshot(output_root)
+    previous = copy.deepcopy(contents)
+    original_replace = full_qa_module.os.replace
+
+    def fail_previous_rename(source: Any, destination: Any) -> None:
+        if Path(source) == output_root and ".previous-" in Path(destination).name:
+            raise OSError("synthetic previous rename failure")
+        original_replace(source, destination)
+
+    monkeypatch.setattr(full_qa_module.os, "replace", fail_previous_rename)
+
+    with pytest.raises(OSError, match="previous rename"):
+        full_qa_module._publish_artifact_release(output_root, contents)
+
+    assert _release_snapshot(output_root) == previous
+    assert not list(output_root.parent.glob(f".{output_root.name}.previous-*"))
+
+
+def test_publish_stage_rename_failure_restores_previous_release(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    metadata_root, raw_root, output_root, acquisition = _pass_layout(tmp_path, monkeypatch)
+    _run_qa(metadata_root, raw_root, output_root, acquisition)
+    contents = _release_snapshot(output_root)
+    previous = copy.deepcopy(contents)
+    original_replace = full_qa_module.os.replace
+
+    def fail_stage_rename(source: Any, destination: Any) -> None:
+        source_path = Path(source)
+        if source_path.is_dir() and ".partial-" in source_path.name:
+            raise OSError("synthetic stage rename failure")
+        original_replace(source, destination)
+
+    monkeypatch.setattr(full_qa_module.os, "replace", fail_stage_rename)
+
+    with pytest.raises(OSError, match="stage rename"):
+        full_qa_module._publish_artifact_release(output_root, contents)
+
+    assert _release_snapshot(output_root) == previous
+    assert not list(output_root.parent.glob(f".{output_root.name}.previous-*"))
+
+
+def test_post_publish_verification_failure_restores_previous_release(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    metadata_root, raw_root, output_root, acquisition = _pass_layout(tmp_path, monkeypatch)
+    _run_qa(metadata_root, raw_root, output_root, acquisition)
+    contents = _release_snapshot(output_root)
+    previous = copy.deepcopy(contents)
+    verification_calls = 0
+
+    def fail_post_publish_verification(root: Any) -> bool:
+        nonlocal verification_calls
+        verification_calls += 1
+        return verification_calls == 1
+
+    monkeypatch.setattr(
+        full_qa_module,
+        "verify_public_artifact_hashes",
+        fail_post_publish_verification,
+    )
+
+    with pytest.raises(OSError, match="published public artifact"):
+        full_qa_module._publish_artifact_release(output_root, contents)
+
+    assert _release_snapshot(output_root) == previous
+    assert not list(output_root.parent.glob(f".{output_root.name}.previous-*"))
+
+
+def test_rollback_cleanup_failure_preserves_recoverable_backup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    metadata_root, raw_root, output_root, acquisition = _pass_layout(tmp_path, monkeypatch)
+    _run_qa(metadata_root, raw_root, output_root, acquisition)
+    contents = _release_snapshot(output_root)
+    previous = copy.deepcopy(contents)
+    verification_calls = 0
+    original_rmtree = full_qa_module.shutil.rmtree
+
+    def fail_post_publish_verification(root: Any) -> bool:
+        nonlocal verification_calls
+        verification_calls += 1
+        return verification_calls == 1
+
+    def fail_new_release_cleanup(path: Any) -> None:
+        if Path(path) == output_root:
+            raise OSError("synthetic rollback cleanup failure")
+        original_rmtree(path)
+
+    monkeypatch.setattr(
+        full_qa_module,
+        "verify_public_artifact_hashes",
+        fail_post_publish_verification,
+    )
+    monkeypatch.setattr(full_qa_module.shutil, "rmtree", fail_new_release_cleanup)
+
+    with pytest.raises(OSError, match="rollback cleanup"):
+        full_qa_module._publish_artifact_release(output_root, contents)
+
+    backups = list(output_root.parent.glob(f".{output_root.name}.previous-*"))
+    assert len(backups) == 1
+    assert _release_snapshot(backups[0]) == previous
+
+
+def test_rollback_restore_failure_preserves_recoverable_backup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    metadata_root, raw_root, output_root, acquisition = _pass_layout(tmp_path, monkeypatch)
+    _run_qa(metadata_root, raw_root, output_root, acquisition)
+    contents = _release_snapshot(output_root)
+    previous = copy.deepcopy(contents)
+    verification_calls = 0
+    original_replace = full_qa_module.os.replace
+
+    def fail_post_publish_verification(root: Any) -> bool:
+        nonlocal verification_calls
+        verification_calls += 1
+        return verification_calls == 1
+
+    def fail_backup_restore(source: Any, destination: Any) -> None:
+        if ".previous-" in Path(source).name and Path(destination) == output_root:
+            raise OSError("synthetic backup restore failure")
+        original_replace(source, destination)
+
+    monkeypatch.setattr(
+        full_qa_module,
+        "verify_public_artifact_hashes",
+        fail_post_publish_verification,
+    )
+    monkeypatch.setattr(full_qa_module.os, "replace", fail_backup_restore)
+
+    with pytest.raises(OSError, match="backup restore"):
+        full_qa_module._publish_artifact_release(output_root, contents)
+
+    backups = list(output_root.parent.glob(f".{output_root.name}.previous-*"))
+    assert not output_root.exists()
+    assert len(backups) == 1
+    assert _release_snapshot(backups[0]) == previous
+
+
+def test_single_orphaned_previous_release_is_recovered_before_publish(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    metadata_root, raw_root, output_root, acquisition = _pass_layout(tmp_path, monkeypatch)
+    _run_qa(metadata_root, raw_root, output_root, acquisition)
+    contents = _release_snapshot(output_root)
+    orphan = output_root.with_name(f".{output_root.name}.previous-orphan")
+    output_root.rename(orphan)
+
+    full_qa_module._publish_artifact_release(output_root, contents)
+
+    assert full_qa_module.verify_public_artifact_hashes(output_root)
+    assert not orphan.exists()
+    assert not list(output_root.parent.glob(f".{output_root.name}.previous-*"))
+
+
+@pytest.mark.parametrize("output_exists", [False, True])
+def test_ambiguous_orphaned_previous_releases_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    output_exists: bool,
+) -> None:
+    metadata_root, raw_root, output_root, acquisition = _pass_layout(tmp_path, monkeypatch)
+    _run_qa(metadata_root, raw_root, output_root, acquisition)
+    contents = _release_snapshot(output_root)
+    first = output_root.with_name(f".{output_root.name}.previous-one")
+    second = output_root.with_name(f".{output_root.name}.previous-two")
+    shutil.copytree(output_root, first)
+    if output_exists:
+        shutil.copytree(output_root, second)
+        previous = _release_snapshot(output_root)
+    else:
+        output_root.rename(second)
+        previous = None
+
+    with pytest.raises(OSError, match="orphaned previous"):
+        full_qa_module._publish_artifact_release(output_root, contents)
+
+    assert first.is_dir()
+    assert second.is_dir()
+    if output_exists:
+        assert _release_snapshot(output_root) == previous
+    else:
+        assert not output_root.exists()

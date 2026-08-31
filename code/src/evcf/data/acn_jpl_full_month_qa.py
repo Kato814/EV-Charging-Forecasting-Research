@@ -54,6 +54,33 @@ PUBLIC_ARTIFACT_NAMES = (
     "SHA256SUMS",
 )
 _HASHED_ARTIFACT_NAMES = PUBLIC_ARTIFACT_NAMES[:-1]
+_JSON_ARTIFACT_NAMES = (
+    "qa_full_month_timeseries.json",
+    "acquisition_summary.json",
+    "cleaning_rule_manifest.json",
+)
+_DAILY_CSV_COLUMNS = (
+    "local_date",
+    "status",
+    "data_present",
+    "manifest_present",
+    "manifest_contract_valid",
+    "sha256_verified",
+    "gzip_json_valid",
+    "record_count",
+    "manifest_record_count",
+    "remote_total_reported",
+    "record_count_matches_manifest",
+    "record_count_matches_remote",
+    "reason_code",
+)
+_FAILED_CSV_COLUMNS = (
+    "local_date",
+    "status",
+    "reason_code",
+    "observed_records",
+    "reported_records",
+)
 
 _CURRENT_FIELD = "chargingCurrent"
 _PILOT_FIELD = "pilotSignal"
@@ -72,7 +99,12 @@ _FORBIDDEN_PUBLIC_KEYS = {
     "values",
 }
 _ABSOLUTE_PATH_PATTERN = re.compile(
-    r"(?i)(?:\b[a-z]:[\\/]|\\\\|(?:^|[\s\"'(])/(?:home|users|tmp|var|etc|mnt)/)"
+    r"(?:\b[a-z]:[\\/]|\\\\|(?:^|[\s\"'=:(])/(?!/)[a-z0-9._-]+(?:/[a-z0-9._-]+)+)",
+    re.IGNORECASE | re.MULTILINE,
+)
+_PRIVATE_ID_STYLE_PATTERN = re.compile(
+    r"\bprivate[-_](?:object|session|user)(?:[-_][a-z0-9.-]+)+\b",
+    re.IGNORECASE,
 )
 
 
@@ -839,6 +871,362 @@ def _cleaning_manifest() -> dict[str, Any]:
     }
 
 
+def _object_schema(**fields: Any) -> tuple[str, dict[str, Any]]:
+    return "object", fields
+
+
+def _literal_schema(value: Any) -> tuple[str, Any]:
+    return "literal", value
+
+
+def _enum_schema(*values: Any) -> tuple[str, tuple[Any, ...]]:
+    return "enum", values
+
+
+def _nullable_schema(schema: Any) -> tuple[str, Any]:
+    return "nullable", schema
+
+
+_NONNEGATIVE_INTEGER_SCHEMA = ("nonnegative_integer",)
+_BOOLEAN_SCHEMA = ("boolean",)
+_RATE_SCHEMA = ("nonnegative_number",)
+_NULLABLE_NONNEGATIVE_INTEGER_SCHEMA = _nullable_schema(_NONNEGATIVE_INTEGER_SCHEMA)
+_NULLABLE_RATE_SCHEMA = _nullable_schema(_RATE_SCHEMA)
+
+
+def _coverage_schema() -> Any:
+    return _object_schema(
+        count=_NONNEGATIVE_INTEGER_SCHEMA,
+        denominator=_NONNEGATIVE_INTEGER_SCHEMA,
+        rate=_NULLABLE_RATE_SCHEMA,
+    )
+
+
+def _series_schema(*, current: bool) -> Any:
+    current_count = _NONNEGATIVE_INTEGER_SCHEMA if current else _literal_schema(None)
+    current_rate = _NULLABLE_RATE_SCHEMA if current else _literal_schema(None)
+    return _object_schema(
+        field_coverage=_coverage_schema(),
+        invalid_container_count=_NONNEGATIVE_INTEGER_SCHEMA,
+        invalid_container_rate=_NULLABLE_RATE_SCHEMA,
+        timestamp_value_length_mismatch_sessions=_NONNEGATIVE_INTEGER_SCHEMA,
+        timestamp_parse_errors=_NONNEGATIVE_INTEGER_SCHEMA,
+        non_utc_timestamp_encodings=_NONNEGATIVE_INTEGER_SCHEMA,
+        duplicate_extra_timestamps=_NONNEGATIVE_INTEGER_SCHEMA,
+        duplicate_affected_sessions=_NONNEGATIVE_INTEGER_SCHEMA,
+        duplicate_affected_session_rate=_NULLABLE_RATE_SCHEMA,
+        conflicting_duplicate_timestamps=_NONNEGATIVE_INTEGER_SCHEMA,
+        conflicting_duplicate_sessions=_NONNEGATIVE_INTEGER_SCHEMA,
+        conflicting_duplicate_session_rate=_NULLABLE_RATE_SCHEMA,
+        nonmonotonic_pairs=_NONNEGATIVE_INTEGER_SCHEMA,
+        nonmonotonic_affected_sessions=_NONNEGATIVE_INTEGER_SCHEMA,
+        nonmonotonic_affected_session_rate=_NULLABLE_RATE_SCHEMA,
+        nonnumeric_values=_NONNEGATIVE_INTEGER_SCHEMA,
+        negative_values=current_count,
+        raw_samples=_NONNEGATIVE_INTEGER_SCHEMA,
+        usable_samples=_NONNEGATIVE_INTEGER_SCHEMA,
+        retained_sample_rate=_NULLABLE_RATE_SCHEMA,
+        expected_complete_active_minutes=_NONNEGATIVE_INTEGER_SCHEMA,
+        sparse_minutes_under_10_points=_NONNEGATIVE_INTEGER_SCHEMA,
+        sparse_minute_rate=_NULLABLE_RATE_SCHEMA,
+        boundary_positive_points=current_count,
+        boundary_positive_sessions=current_count,
+        boundary_positive_session_rate=current_rate,
+        boundary_unverifiable_sessions=current_count,
+    )
+
+
+def _privacy_schema() -> Any:
+    return _object_schema(
+        aggregate_only=_literal_schema(True),
+        private_keys_emitted=_literal_schema(False),
+        credentials_emitted=_literal_schema(False),
+        absolute_local_paths_emitted=_literal_schema(False),
+        raw_trajectories_emitted=_literal_schema(False),
+    )
+
+
+def _gate_summary_schema() -> Any:
+    return _object_schema(
+        status=_enum_schema("PASS", "FAIL"),
+        ready_for_cleaning=_BOOLEAN_SCHEMA,
+        ready_for_15_min=_enum_schema("YES_CURRENT_PROXY_ONLY", "NO"),
+        gate1_ready=_literal_schema("NO"),
+    )
+
+
+def _closed_json_schemas() -> dict[str, Any]:
+    local_integrity = _object_schema(
+        expected_records=_NONNEGATIVE_INTEGER_SCHEMA,
+        observed_records=_NONNEGATIVE_INTEGER_SCHEMA,
+        expected_unique_object_keys=_NONNEGATIVE_INTEGER_SCHEMA,
+        unique_object_keys=_NONNEGATIVE_INTEGER_SCHEMA,
+        missing_object_key_records=_NONNEGATIVE_INTEGER_SCHEMA,
+        duplicate_object_key_records=_NONNEGATIVE_INTEGER_SCHEMA,
+        expected_unique_session_keys=_NONNEGATIVE_INTEGER_SCHEMA,
+        unique_session_keys=_NONNEGATIVE_INTEGER_SCHEMA,
+        missing_session_key_records=_NONNEGATIVE_INTEGER_SCHEMA,
+        duplicate_session_key_records=_NONNEGATIVE_INTEGER_SCHEMA,
+        expected_metadata_pairs=_NONNEGATIVE_INTEGER_SCHEMA,
+        matched_metadata_pairs=_NONNEGATIVE_INTEGER_SCHEMA,
+        missing_metadata_pairs=_NONNEGATIVE_INTEGER_SCHEMA,
+        orphan_timeseries_pairs=_NONNEGATIVE_INTEGER_SCHEMA,
+        duplicate_pair_records=_NONNEGATIVE_INTEGER_SCHEMA,
+        metadata_timeseries_match_rate=_NULLABLE_RATE_SCHEMA,
+    )
+    carry_integrity = _object_schema(
+        status=_enum_schema("PASS", "FAIL"),
+        expected_records=_NONNEGATIVE_INTEGER_SCHEMA,
+        observed_records=_NONNEGATIVE_INTEGER_SCHEMA,
+        manifest_records=_NULLABLE_NONNEGATIVE_INTEGER_SCHEMA,
+        remote_records=_NULLABLE_NONNEGATIVE_INTEGER_SCHEMA,
+        data_present=_BOOLEAN_SCHEMA,
+        manifest_present=_BOOLEAN_SCHEMA,
+        manifest_contract_valid=_BOOLEAN_SCHEMA,
+        sha256_verified=_BOOLEAN_SCHEMA,
+        gzip_json_valid=_BOOLEAN_SCHEMA,
+        exact_private_pair_match=_BOOLEAN_SCHEMA,
+    )
+    combined_integrity = _object_schema(
+        expected_records=_NONNEGATIVE_INTEGER_SCHEMA,
+        observed_records=_NONNEGATIVE_INTEGER_SCHEMA,
+        expected_unique_object_keys=_NONNEGATIVE_INTEGER_SCHEMA,
+        unique_object_keys=_NONNEGATIVE_INTEGER_SCHEMA,
+        expected_unique_session_keys=_NONNEGATIVE_INTEGER_SCHEMA,
+        unique_session_keys=_NONNEGATIVE_INTEGER_SCHEMA,
+        duplicate_object_key_records=_NONNEGATIVE_INTEGER_SCHEMA,
+        duplicate_session_key_records=_NONNEGATIVE_INTEGER_SCHEMA,
+        missing_private_key_records=_NONNEGATIVE_INTEGER_SCHEMA,
+    )
+    daily_integrity = _object_schema(
+        expected=_NONNEGATIVE_INTEGER_SCHEMA,
+        data_files_present=_NONNEGATIVE_INTEGER_SCHEMA,
+        manifests_present=_NONNEGATIVE_INTEGER_SCHEMA,
+        manifest_contracts_valid=_NONNEGATIVE_INTEGER_SCHEMA,
+        sha256_verified=_NONNEGATIVE_INTEGER_SCHEMA,
+        gzip_json_valid=_NONNEGATIVE_INTEGER_SCHEMA,
+        record_manifest_matches=_NONNEGATIVE_INTEGER_SCHEMA,
+        record_remote_matches=_NONNEGATIVE_INTEGER_SCHEMA,
+        valid=_NONNEGATIVE_INTEGER_SCHEMA,
+        failed_or_incomplete=_NONNEGATIVE_INTEGER_SCHEMA,
+    )
+    quality = _object_schema(
+        denominator_sessions=_NONNEGATIVE_INTEGER_SCHEMA,
+        observed_validated_sessions=_NONNEGATIVE_INTEGER_SCHEMA,
+        series=_object_schema(
+            chargingCurrent=_series_schema(current=True),
+            pilotSignal=_series_schema(current=False),
+        ),
+        metadata_fields=_object_schema(
+            done_charging_coverage=_coverage_schema(),
+            done_charging_parse_errors=_NONNEGATIVE_INTEGER_SCHEMA,
+            done_charging_before_connection=_coverage_schema(),
+            done_charging_after_disconnect=_coverage_schema(),
+            user_inputs_coverage=_coverage_schema(),
+            requested_departure_coverage=_coverage_schema(),
+            kwh_requested_coverage=_coverage_schema(),
+        ),
+    )
+    check_names = (
+        "metadata_scope_exact",
+        "daily_chunks_complete",
+        "local_record_count_exact",
+        "local_object_keys_unique",
+        "local_session_keys_unique",
+        "metadata_timeseries_exact",
+        "carry_in_exact",
+        "combined_count_exact",
+        "current_invalid_rate_at_most_limit",
+        "pilot_invalid_rate_at_most_limit",
+        "zero_timestamp_parse_anomalies",
+        "zero_timestamp_nonmonotonic_anomalies",
+        "acquisition_complete_if_provided",
+    )
+    acquisition_full = _object_schema(
+        status=_enum_schema("COMPLETE", "INCOMPLETE", "UNKNOWN"),
+        daily_requested=_NULLABLE_NONNEGATIVE_INTEGER_SCHEMA,
+        daily_completed=_NULLABLE_NONNEGATIVE_INTEGER_SCHEMA,
+        daily_failed=_NULLABLE_NONNEGATIVE_INTEGER_SCHEMA,
+        linkage_status=_enum_schema("PASS", "FAIL", "NOT_RUN", "UNKNOWN"),
+        carry_status=_enum_schema("DOWNLOADED", "SKIPPED", "FAILED", "NOT_RUN", "UNKNOWN"),
+    )
+    return {
+        "qa_full_month_timeseries.json": _object_schema(
+            schema_version=_literal_schema("acn-jpl-full-month-timeseries-qa/v1"),
+            integrity=_object_schema(
+                status=_enum_schema("PASS", "FAIL"),
+                metadata_scope=_object_schema(
+                    status=_enum_schema("PASS", "FAIL"),
+                    failure_code=_nullable_schema(
+                        _enum_schema(
+                            "METADATA_SCOPE_INVALID",
+                            "METADATA_SCOPE_COUNT_MISMATCH",
+                        )
+                    ),
+                    analysis_records=_NONNEGATIVE_INTEGER_SCHEMA,
+                    utc_month_records=_NONNEGATIVE_INTEGER_SCHEMA,
+                    carry_records=_NONNEGATIVE_INTEGER_SCHEMA,
+                ),
+                daily_chunks=daily_integrity,
+                local_month=local_integrity,
+                carry_in=carry_integrity,
+                combined=combined_integrity,
+                month_boundary=_object_schema(
+                    timezone=_literal_schema(JPL_TIMEZONE),
+                    local_month_sessions=_NONNEGATIVE_INTEGER_SCHEMA,
+                    utc_month_sessions=_NONNEGATIVE_INTEGER_SCHEMA,
+                    counts_are_not_interchangeable=_literal_schema(True),
+                ),
+            ),
+            quality=quality,
+            gate=_object_schema(
+                status=_enum_schema("PASS", "FAIL"),
+                thresholds=_object_schema(
+                    charging_current_invalid_rate_max=_literal_schema(
+                        INVALID_CHARGING_CURRENT_RATE_LIMIT
+                    ),
+                    pilot_signal_invalid_rate_max=_literal_schema(INVALID_PILOT_SIGNAL_RATE_LIMIT),
+                    metadata_timeseries_match_rate_required=_literal_schema(1.0),
+                    orphan_timeseries_pairs_required=_literal_schema(0),
+                    timestamp_parse_anomalies_required=_literal_schema(0),
+                    timestamp_nonmonotonic_anomalies_required=_literal_schema(0),
+                ),
+                checks=_object_schema(**{name: _BOOLEAN_SCHEMA for name in check_names}),
+                warnings=(
+                    "array",
+                    _enum_schema(
+                        "DUPLICATE_TIMESTAMPS",
+                        "CONFLICTING_DUPLICATE_TIMESTAMPS",
+                        "BOUNDARY_POSITIVE_CURRENT",
+                        "NON_UTC_TIMESTAMP_ENCODING",
+                        "NONNUMERIC_SERIES_VALUES",
+                        "NEGATIVE_CURRENT_VALUES",
+                    ),
+                ),
+                ready_for_cleaning=_BOOLEAN_SCHEMA,
+                ready_for_15_min=_enum_schema("YES_CURRENT_PROXY_ONLY", "NO"),
+                gate1_ready=_literal_schema("NO"),
+            ),
+            power_semantics=_literal_schema(_power_semantics()),
+            privacy=_privacy_schema(),
+        ),
+        "acquisition_summary.json": _object_schema(
+            schema_version=_literal_schema("acn-jpl-full-month-acquisition-summary/v1"),
+            acquisition=(
+                "one_of",
+                (
+                    _object_schema(status=_literal_schema("NOT_PROVIDED")),
+                    acquisition_full,
+                ),
+            ),
+            integrity=_object_schema(
+                status=_enum_schema("PASS", "FAIL"),
+                valid_daily_chunks=_NONNEGATIVE_INTEGER_SCHEMA,
+                local_records=_NONNEGATIVE_INTEGER_SCHEMA,
+                carry_records=_NONNEGATIVE_INTEGER_SCHEMA,
+                combined_records=_NONNEGATIVE_INTEGER_SCHEMA,
+                quality_denominator=_NONNEGATIVE_INTEGER_SCHEMA,
+            ),
+            gate=_gate_summary_schema(),
+            power_semantics=_literal_schema(_power_semantics()),
+            privacy=_privacy_schema(),
+        ),
+        "cleaning_rule_manifest.json": _literal_schema(_cleaning_manifest()),
+    }
+
+
+def _same_json_literal(value: Any, expected: Any) -> bool:
+    if type(value) is not type(expected):
+        return False
+    if isinstance(expected, dict):
+        return set(value) == set(expected) and all(
+            _same_json_literal(value[key], nested) for key, nested in expected.items()
+        )
+    if isinstance(expected, list):
+        return len(value) == len(expected) and all(
+            _same_json_literal(item, wanted) for item, wanted in zip(value, expected)
+        )
+    return value == expected
+
+
+def _validate_json_schema(value: Any, schema: Any, path: str) -> None:
+    kind = schema[0]
+    if kind == "object":
+        fields = schema[1]
+        if not isinstance(value, Mapping) or set(value) != set(fields):
+            raise ValueError(f"closed JSON schema mismatch at {path}")
+        for key, nested_schema in fields.items():
+            _validate_json_schema(value[key], nested_schema, f"{path}.{key}")
+        return
+    if kind == "array":
+        if not isinstance(value, list):
+            raise ValueError(f"closed JSON schema mismatch at {path}")
+        for item in value:
+            _validate_json_schema(item, schema[1], f"{path}[]")
+        return
+    if kind == "literal":
+        if not _same_json_literal(value, schema[1]):
+            raise ValueError(f"closed JSON schema mismatch at {path}")
+        return
+    if kind == "enum":
+        if not any(_same_json_literal(value, candidate) for candidate in schema[1]):
+            raise ValueError(f"closed JSON schema mismatch at {path}")
+        return
+    if kind == "nullable":
+        if value is not None:
+            _validate_json_schema(value, schema[1], path)
+        return
+    if kind == "one_of":
+        for candidate in schema[1]:
+            try:
+                _validate_json_schema(value, candidate, path)
+            except ValueError:
+                continue
+            return
+        raise ValueError(f"closed JSON schema mismatch at {path}")
+    if kind == "nonnegative_integer":
+        if not _is_nonnegative_int(value):
+            raise ValueError(f"closed JSON schema mismatch at {path}")
+        return
+    if kind == "boolean":
+        if not isinstance(value, bool):
+            raise ValueError(f"closed JSON schema mismatch at {path}")
+        return
+    if kind == "nonnegative_number":
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(float(value))
+            or float(value) < 0.0
+        ):
+            raise ValueError(f"closed JSON schema mismatch at {path}")
+        return
+    raise ValueError(f"unknown closed JSON schema at {path}")
+
+
+def _validate_closed_json_payloads(
+    payloads: Iterable[Mapping[str, Any]],
+) -> dict[str, Mapping[str, Any]]:
+    schemas = _closed_json_schemas()
+    version_to_name = {
+        "acn-jpl-full-month-timeseries-qa/v1": "qa_full_month_timeseries.json",
+        "acn-jpl-full-month-acquisition-summary/v1": "acquisition_summary.json",
+        "acn-jpl-full-month-cleaning-rules/v1": "cleaning_rule_manifest.json",
+    }
+    documents: dict[str, Mapping[str, Any]] = {}
+    for payload in payloads:
+        if not isinstance(payload, Mapping):
+            raise TypeError("closed JSON schema requires object documents")
+        name = version_to_name.get(payload.get("schema_version"))
+        if name is None or name in documents:
+            raise ValueError("closed JSON schema has an unknown or duplicate document")
+        _validate_json_schema(payload, schemas[name], name)
+        documents[name] = payload
+    if set(documents) != set(_JSON_ARTIFACT_NAMES):
+        raise ValueError("closed JSON schema requires exactly three documents")
+    return documents
+
+
 def _extract_acquisition_summary(result: Mapping[str, Any] | None) -> dict[str, Any]:
     if not isinstance(result, Mapping):
         return {"status": "NOT_PROVIDED"}
@@ -913,6 +1301,82 @@ def _summary_markdown(summary: Mapping[str, Any]) -> bytes:
     return "\n".join(lines).encode("utf-8")
 
 
+_DAILY_FAILURE_CODES = frozenset(
+    {
+        "MISSING_DATA",
+        "MISSING_MANIFEST",
+        "INVALID_MANIFEST_JSON",
+        "MANIFEST_CONTRACT_MISMATCH",
+        "SHA256_MISMATCH",
+        "INVALID_GZIP_JSONL",
+        "RECORD_COUNT_MISMATCH",
+        "REMOTE_TOTAL_MISMATCH",
+    }
+)
+_NONNEGATIVE_CSV_INTEGER = re.compile(r"0|[1-9][0-9]*")
+
+
+def _csv_rows(data: bytes, expected_columns: tuple[str, ...]) -> list[list[str]]:
+    try:
+        rows = list(csv.reader(io.StringIO(data.decode("utf-8"), newline="")))
+    except (UnicodeError, csv.Error) as exc:
+        raise ValueError("closed CSV schema contains invalid text") from exc
+    if not rows or tuple(rows[0]) != expected_columns:
+        raise ValueError("closed CSV schema has unexpected columns")
+    if any(len(row) != len(expected_columns) for row in rows[1:]):
+        raise ValueError("closed CSV schema has an unexpected row width")
+    return rows[1:]
+
+
+def _csv_nonnegative(value: str, *, nullable: bool = False) -> bool:
+    return (nullable and value == "") or _NONNEGATIVE_CSV_INTEGER.fullmatch(value) is not None
+
+
+def _validate_daily_csv(data: bytes) -> None:
+    rows = _csv_rows(data, _DAILY_CSV_COLUMNS)
+    expected_dates = [f"2019-05-{day:02d}" for day in range(1, 32)]
+    if len(rows) != 31 or [row[0] for row in rows] != expected_dates:
+        raise ValueError("closed CSV schema requires exactly 31 ordered local dates")
+    boolean_indices = (2, 3, 4, 5, 6, 10, 11)
+    for row in rows:
+        status = row[1]
+        reason = row[12]
+        if status not in {"PASS", "FAIL"}:
+            raise ValueError("closed CSV schema has an invalid daily status")
+        if any(row[index] not in {"True", "False"} for index in boolean_indices):
+            raise ValueError("closed CSV schema has an invalid boolean")
+        if not _csv_nonnegative(row[7]):
+            raise ValueError("closed CSV schema has an invalid record count")
+        if not _csv_nonnegative(row[8], nullable=True) or not _csv_nonnegative(
+            row[9], nullable=True
+        ):
+            raise ValueError("closed CSV schema has an invalid nullable count")
+        if (status == "PASS" and reason != "NONE") or (
+            status == "FAIL" and reason not in _DAILY_FAILURE_CODES
+        ):
+            raise ValueError("closed CSV schema has an inconsistent reason code")
+
+
+def _validate_failed_csv(data: bytes) -> None:
+    rows = _csv_rows(data, _FAILED_CSV_COLUMNS)
+    allowed_dates = {f"2019-05-{day:02d}" for day in range(1, 32)} | {"CARRY_IN"}
+    seen_dates: set[str] = set()
+    for row in rows:
+        local_date, status, reason, observed, reported = row
+        if local_date not in allowed_dates or local_date in seen_dates:
+            raise ValueError("closed CSV schema has an invalid or duplicate scope")
+        seen_dates.add(local_date)
+        if status != "FAIL":
+            raise ValueError("closed CSV schema has a non-failure status")
+        allowed_reasons = _DAILY_FAILURE_CODES | {"CARRY_IN_INCOMPLETE"}
+        if reason not in allowed_reasons:
+            raise ValueError("closed CSV schema has an invalid failure reason")
+        if local_date == "CARRY_IN" and reason != "CARRY_IN_INCOMPLETE":
+            raise ValueError("closed CSV schema has an invalid carry-in reason")
+        if not _csv_nonnegative(observed) or not _csv_nonnegative(reported, nullable=True):
+            raise ValueError("closed CSV schema has an invalid failure count")
+
+
 def _validate_public_value(value: Any) -> None:
     if isinstance(value, Mapping):
         for key, nested in value.items():
@@ -930,7 +1394,24 @@ def _validate_public_contents(
     contents: Mapping[str, bytes],
     sensitive_values: Iterable[str],
 ) -> None:
-    for payload in payloads:
+    payload_list = list(payloads)
+    if payload_list:
+        if set(contents) != set(_HASHED_ARTIFACT_NAMES):
+            raise ValueError("closed public artifact schema has unexpected files")
+        documents = _validate_closed_json_payloads(payload_list)
+        for name, payload in documents.items():
+            try:
+                rendered = json.loads(contents[name])
+            except (UnicodeError, json.JSONDecodeError) as exc:
+                raise ValueError("closed JSON schema contains invalid rendered JSON") from exc
+            if not _same_json_literal(rendered, payload):
+                raise ValueError("closed JSON schema payload and rendered JSON differ")
+        _validate_daily_csv(contents["daily_chunk_summary.csv"])
+        _validate_failed_csv(contents["failed_or_incomplete_chunks.csv"])
+    elif set(contents) != {"SHA256SUMS"}:
+        raise ValueError("closed public artifact schema has unexpected text files")
+
+    for payload in payload_list:
         _validate_public_value(payload)
     text = "\n".join(data.decode("utf-8") for data in contents.values())
     lowered = text.lower()
@@ -939,6 +1420,8 @@ def _validate_public_contents(
             raise ValueError("public artifact contains private schema material")
     if _ABSOLUTE_PATH_PATTERN.search(text):
         raise ValueError("public artifact contains an absolute local path")
+    if _PRIVATE_ID_STYLE_PATTERN.search(text):
+        raise ValueError("public artifact contains an identifier-style private value")
     for sensitive in sensitive_values:
         if sensitive and sensitive in text:
             raise ValueError("public artifact contains a sensitive value")
@@ -984,16 +1467,44 @@ def verify_public_artifact_hashes(output_root: str | Path) -> bool:
     )
 
 
+def _recover_orphaned_previous_release(output: Path) -> None:
+    """Recover one verified interrupted-release backup, or fail closed."""
+
+    backups = sorted(output.parent.glob(f".{output.name}.previous-*"))
+    if not backups:
+        return
+    if output.exists() or len(backups) != 1:
+        raise OSError("ambiguous orphaned previous releases require manual recovery")
+
+    backup = backups[0]
+    if not backup.is_dir() or not verify_public_artifact_hashes(backup):
+        raise OSError("orphaned previous release failed checksum verification")
+
+    os.replace(backup, output)
+    if verify_public_artifact_hashes(output):
+        return
+
+    try:
+        os.replace(output, backup)
+    except OSError as restore_error:
+        raise OSError(
+            "orphaned previous release failed verification and recovery restore"
+        ) from restore_error
+    raise OSError("orphaned previous release failed post-restore verification")
+
+
 def _publish_artifact_release(output: Path, contents: Mapping[str, bytes]) -> None:
     """Stage and verify a complete release before swapping the dedicated directory."""
 
     output.parent.mkdir(parents=True, exist_ok=True)
+    _recover_orphaned_previous_release(output)
     stage = Path(tempfile.mkdtemp(prefix=f".{output.name}.partial-", dir=str(output.parent)))
     backup = stage.with_name(
         stage.name.replace(f".{output.name}.partial-", f".{output.name}.previous-", 1)
     )
     published = False
     previous_moved = False
+    committed_verified = False
     try:
         for name in PUBLIC_ARTIFACT_NAMES:
             _atomic_write_bytes(stage / name, contents[name])
@@ -1008,18 +1519,37 @@ def _publish_artifact_release(output: Path, contents: Mapping[str, bytes]) -> No
         published = True
         if not verify_public_artifact_hashes(output):
             raise OSError("published public artifact checksum verification failed")
-    except Exception:
-        if published and output.is_dir():
-            shutil.rmtree(output)
-            published = False
-        if previous_moved and backup.is_dir():
-            os.replace(backup, output)
-            previous_moved = False
+        committed_verified = True
+    except Exception as publish_error:
+        rollback_error: Exception | None = None
+        if published:
+            if output.is_dir():
+                try:
+                    shutil.rmtree(output)
+                except OSError as cleanup_error:
+                    rollback_error = cleanup_error
+                else:
+                    published = False
+            elif output.exists():
+                rollback_error = OSError(
+                    "published public artifact cannot be safely removed during rollback"
+                )
+            else:
+                published = False
+        if not published and previous_moved and backup.is_dir():
+            try:
+                os.replace(backup, output)
+            except OSError as restore_error:
+                rollback_error = restore_error
+            else:
+                previous_moved = False
+        if rollback_error is not None:
+            raise rollback_error from publish_error
         raise
     finally:
         if stage.is_dir():
             shutil.rmtree(stage)
-        if published and previous_moved and backup.is_dir():
+        if committed_verified and previous_moved and backup.is_dir():
             shutil.rmtree(backup)
 
 
@@ -1307,31 +1837,11 @@ def generate_full_month_timeseries_qa(
         "acquisition_summary.md": _summary_markdown(summary),
         "daily_chunk_summary.csv": _csv_bytes(
             daily_rows,
-            [
-                "local_date",
-                "status",
-                "data_present",
-                "manifest_present",
-                "manifest_contract_valid",
-                "sha256_verified",
-                "gzip_json_valid",
-                "record_count",
-                "manifest_record_count",
-                "remote_total_reported",
-                "record_count_matches_manifest",
-                "record_count_matches_remote",
-                "reason_code",
-            ],
+            list(_DAILY_CSV_COLUMNS),
         ),
         "failed_or_incomplete_chunks.csv": _csv_bytes(
             failed_rows,
-            [
-                "local_date",
-                "status",
-                "reason_code",
-                "observed_records",
-                "reported_records",
-            ],
+            list(_FAILED_CSV_COLUMNS),
         ),
         "cleaning_rule_manifest.json": _json_bytes(cleaning),
     }

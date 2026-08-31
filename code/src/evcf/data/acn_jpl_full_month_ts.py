@@ -27,10 +27,9 @@ from .acn_jpl_gate0 import (
     JPL_ANALYSIS_START,
     IncompleteChunkError,
     LocalDayWindow,
-    chunk_paths,
+    _ChunkIdentityInventory,
     jpl_analysis_windows,
     run_daily_chunks,
-    validate_chunk,
 )
 
 EXPECTED_COMPLETE_METADATA_FILE_COUNT = 42
@@ -588,9 +587,9 @@ def _not_run_linkage(scope: _PrivateMetadataScope) -> dict[str, Any]:
 
 
 def _validate_daily_linkage(
-    root: Path,
     windows: Iterable[LocalDayWindow],
     scope: _PrivateMetadataScope,
+    validation_sink: Mapping[str, _ChunkIdentityInventory],
 ) -> dict[str, Any]:
     expected_pairs = {
         (session.object_id, session.session_id) for session in scope.analysis_sessions
@@ -600,28 +599,13 @@ def _validate_daily_linkage(
     record_count = 0
     invalid_identifier_records = 0
     for window in windows:
-        data_path, manifest_path = chunk_paths(root, "timeseries", window)
-        if not validate_chunk(
-            data_path,
-            manifest_path,
-            window=window,
-            endpoint="timeseries",
-        ).valid:
+        inventory = validation_sink.get(window.day_key)
+        if inventory is None:
             continue
         validated_chunks += 1
-        with gzip.open(data_path, "rt", encoding="utf-8") as handle:
-            for line in handle:
-                if not line.strip():
-                    continue
-                item = json.loads(line)
-                if not isinstance(item, dict):
-                    raise ACNSchemaError("validated daily time-series record is not an object")
-                record_count += 1
-                pair = _private_pair(item)
-                if pair is None:
-                    invalid_identifier_records += 1
-                    continue
-                observed[pair] += 1
+        record_count += inventory.record_count
+        invalid_identifier_records += inventory.invalid_identifier_records
+        observed.update(inventory.identifier_pairs)
 
     observed_pairs = set(observed)
     duplicate_records = sum(count - 1 for count in observed.values() if count > 1)
@@ -745,11 +729,13 @@ def run_full_month_timeseries(
     client = client_factory()
     root = Path(raw_root)
     windows = list(jpl_analysis_windows())
+    validation_sink: dict[str, _ChunkIdentityInventory] = {}
     progress = daily_runner(
         client,
         root,
         windows,
         endpoint="timeseries",
+        _private_validation_sink=validation_sink,
     )
     daily, daily_complete = _daily_public_summary(progress, windows)
     if not daily_complete:
@@ -761,7 +747,7 @@ def run_full_month_timeseries(
             complete=False,
         )
 
-    linkage = _validate_daily_linkage(root, windows, scope)
+    linkage = _validate_daily_linkage(windows, scope, validation_sink)
     if linkage["status"] != "PASS":
         return _public_result(
             scope=scope,

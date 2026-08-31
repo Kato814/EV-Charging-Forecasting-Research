@@ -3,6 +3,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
 from pathlib import Path
@@ -11,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from evcf.data import acn_jpl_full_month_ts as full_ts_module
+from evcf.data import acn_jpl_gate0 as gate0_module
 from evcf.data.acn_api import ACNDataError, ACNQuery
 from evcf.data.acn_jpl_full_month_ts import (
     FullMonthAuthorizationError,
@@ -19,7 +21,6 @@ from evcf.data.acn_jpl_full_month_ts import (
 )
 from evcf.data.acn_jpl_gate0 import (
     IncompleteChunkError,
-    download_day_chunk,
     jpl_analysis_windows,
 )
 
@@ -158,8 +159,9 @@ def _complete_daily_runner(
     windows: Any,
     *,
     endpoint: str,
+    _private_validation_sink: Any = None,
 ) -> dict[str, Any]:
-    del client, root
+    del client, root, _private_validation_sink
     materialized = list(windows)
     assert endpoint == "timeseries"
     return {
@@ -186,19 +188,18 @@ def _exact_daily_runner(
         windows: Any,
         *,
         endpoint: str,
+        _private_validation_sink: Any = None,
     ) -> dict[str, Any]:
         del client
         materialized = list(windows)
         private_client = DailyRecordsClient()
-        for window in materialized:
-            download_day_chunk(private_client, root, window, endpoint=endpoint)
-        return {
-            "pending_days": [],
-            "completed_days": [window.day_key for window in materialized],
-            "failed_days": [],
-            "last_success": materialized[-1].day_key,
-            "retry_count": 0,
-        }
+        return gate0_module.run_daily_chunks(
+            private_client,
+            root,
+            materialized,
+            endpoint=endpoint,
+            _private_validation_sink=_private_validation_sink,
+        )
 
     return runner
 
@@ -267,6 +268,52 @@ def test_metadata_scope_filters_1644_local_sessions_from_1645_utc_sessions(
     assert len(result["metadata"]["inventory_digest"]) == 64
     assert result["status"] == "COMPLETE"
     assert len(client.queries) == 1
+
+
+def test_complete_resume_scans_each_daily_gzip_once_for_validation_and_linkage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records, _ = _production_scope_records()
+    analysis_records = records[:-1]
+    metadata_root = tmp_path / "metadata"
+    raw_root = tmp_path / "raw"
+    _write_legacy_metadata(metadata_root, records, monkeypatch=monkeypatch)
+    windows = list(jpl_analysis_windows())
+    _exact_daily_runner(analysis_records)(
+        None,
+        raw_root,
+        windows,
+        endpoint="timeseries",
+    )
+
+    original_gzip_open = gzip.open
+    daily_open_counts: Counter[Path] = Counter()
+
+    def counted_gzip_open(filename: Any, *args: Any, **kwargs: Any) -> Any:
+        path = Path(filename)
+        if path.parent == raw_root / "timeseries":
+            daily_open_counts[path] += 1
+        return original_gzip_open(filename, *args, **kwargs)
+
+    monkeypatch.setattr(gate0_module.gzip, "open", counted_gzip_open)
+    result = run_full_month_timeseries(
+        authorized=True,
+        metadata_root=metadata_root,
+        raw_root=raw_root,
+        client_factory=NoNetworkClient,
+        carry_downloader=lambda *args: {
+            "status": "SKIPPED",
+            "record_count": 1,
+            "remote_total_reported": 1,
+            "complete_for_query": True,
+        },
+    )
+
+    assert result["status"] == "COMPLETE"
+    assert result["linkage"]["status"] == "PASS"
+    assert len(daily_open_counts) == 31
+    assert set(daily_open_counts.values()) == {1}
 
 
 def test_self_consistent_metadata_with_wrong_frozen_digest_fails_before_client(
@@ -348,6 +395,39 @@ def test_daily_linkage_must_equal_the_1644_private_metadata_pairs(
     }
     assert result["carry_in"]["status"] == "NOT_RUN"
     assert client.queries == []
+
+
+def test_daily_linkage_detects_a_duplicate_split_across_local_days(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records, _ = _production_scope_records()
+    analysis_records = records[:-1]
+    metadata_root = tmp_path / "metadata"
+    _write_legacy_metadata(metadata_root, records, monkeypatch=monkeypatch)
+
+    class CrossDayDuplicateClient:
+        def iter_pages(self, query: ACNQuery):  # type: ignore[no-untyped-def]
+            day = query.start.astimezone(ZONE).date().isoformat()
+            if day == "2019-05-02":
+                items = analysis_records
+            elif day == "2019-05-03":
+                items = [analysis_records[0]]
+            else:
+                items = []
+            yield _page(items, len(items))
+
+    result = run_full_month_timeseries(
+        authorized=True,
+        metadata_root=metadata_root,
+        raw_root=tmp_path / "raw",
+        client_factory=CrossDayDuplicateClient,
+    )
+
+    assert result["status"] == "INCOMPLETE"
+    assert result["linkage"]["duplicate_records"] == 1
+    assert result["linkage"]["unique_pairs"] == 1644
+    assert result["carry_in"]["status"] == "NOT_RUN"
 
 
 def test_wrong_metadata_count_or_legacy_manifest_fails_before_client(
@@ -692,8 +772,9 @@ def test_daily_failure_prevents_carry_in_attempt(
         windows: Any,
         *,
         endpoint: str,
+        _private_validation_sink: Any = None,
     ) -> dict[str, Any]:
-        del client, root, endpoint
+        del client, root, endpoint, _private_validation_sink
         days = [window.day_key for window in windows]
         return {
             "pending_days": [],

@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from email.utils import format_datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -249,6 +249,16 @@ class ACNClient:
             if not isinstance(next_link, Mapping) or not next_link.get("href"):
                 break
             next_url = urljoin(self.base_url, str(next_link["href"]))
+            base_origin = urlsplit(self.base_url)
+            next_origin = urlsplit(next_url)
+            if (
+                next_origin.scheme.lower(),
+                next_origin.netloc.lower(),
+            ) != (
+                base_origin.scheme.lower(),
+                base_origin.netloc.lower(),
+            ):
+                raise ACNSchemaError("ACN-Data returned a cross-origin pagination link")
             if next_url in seen_urls:
                 raise ACNSchemaError("ACN-Data pagination loop detected")
             seen_urls.add(next_url)

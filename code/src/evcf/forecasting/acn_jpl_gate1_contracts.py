@@ -20,9 +20,7 @@ _TIME_INTERVAL_NAMES = ("initial_train", "validation", "rolling_test")
 
 _FROZEN_CONFIG: dict[str, Any] = {
     "schema_version": "acn-jpl-gate1-pilot/v1",
-    "data_snapshot_sha256": (
-        "7066ffc8ba42a98f73246acfbc62352fe55a1433a43cba80957c6034e3aeaa5d"
-    ),
+    "data_snapshot_sha256": ("7066ffc8ba42a98f73246acfbc62352fe55a1433a43cba80957c6034e3aeaa5d"),
     "target": "station_current_mean_a",
     "seeds": {"model": 20260901, "bootstrap": 20260902},
     "bootstrap_repetitions": 10_000,
@@ -159,9 +157,8 @@ def _parse_local_boundary(value: Any, *, path: str, zone: ZoneInfo) -> datetime:
         raise FrozenConfigError(f"{path} must use the frozen PDT offset -07:00")
 
     localized = boundary.astimezone(zone)
-    if (
-        localized.utcoffset() != _PDT_OFFSET
-        or localized.replace(tzinfo=None) != boundary.replace(tzinfo=None)
+    if localized.utcoffset() != _PDT_OFFSET or localized.replace(tzinfo=None) != boundary.replace(
+        tzinfo=None
     ):
         raise FrozenConfigError(f"{path} must correspond to ZoneInfo {_TIMEZONE_NAME}")
     return localized
@@ -193,9 +190,7 @@ def parse_time_split_boundaries(time_split: Any) -> dict[str, Any]:
             zone=zone,
         )
         if start >= end:
-            raise FrozenConfigError(
-                f"config.time_split.{name} must place start before end"
-            )
+            raise FrozenConfigError(f"config.time_split.{name} must place start before end")
         if previous_end is not None and previous_end != start:
             raise FrozenConfigError("frozen config.time_split intervals must be contiguous")
         parsed[name] = {"start_local": start, "end_local_exclusive": end}
@@ -213,12 +208,75 @@ def expand_hgb_grid(hgb_config: Mapping[str, Any]) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     for values in itertools.product(*axes):
         selected = dict(zip(varying_keys, values, strict=True))
-        candidates.append(
-            {key: selected.get(key, value) for key, value in declared.items()}
-        )
+        candidates.append({key: selected.get(key, value) for key, value in declared.items()})
     if len(candidates) != 16:
         raise FrozenConfigError("config.hgb frozen Cartesian grid must contain 16 candidates")
     return candidates
+
+
+def _copy_in_frozen_order(actual: Any, expected: Any, *, path: str) -> Any:
+    """Return a plain copy ordered like the frozen schema after exact validation."""
+
+    if type(actual) is not type(expected):
+        raise FrozenConfigError(
+            f"{path} changed frozen type: expected {type(expected).__name__}, "
+            f"found {type(actual).__name__}"
+        )
+    if isinstance(expected, dict):
+        if set(actual) != set(expected) or len(actual) != len(expected):
+            raise FrozenConfigError(
+                f"{path} changed frozen keys: expected {tuple(expected)!r}, found {tuple(actual)!r}"
+            )
+        return {
+            key: _copy_in_frozen_order(actual[key], value, path=f"{path}.{key}")
+            for key, value in expected.items()
+        }
+    if isinstance(expected, list):
+        if len(actual) != len(expected):
+            raise FrozenConfigError(
+                f"{path} changed frozen length: expected {len(expected)}, found {len(actual)}"
+            )
+        return [
+            _copy_in_frozen_order(value, expected_value, path=f"{path}[{index}]")
+            for index, (value, expected_value) in enumerate(zip(actual, expected, strict=True))
+        ]
+    if actual != expected:
+        raise FrozenConfigError(
+            f"{path} changed frozen value: expected {expected!r}, found {actual!r}"
+        )
+    return actual
+
+
+def validate_gate1_config(config: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate every frozen field and return one canonical, path-free copy.
+
+    File loading retains the stricter YAML declaration-order check.  Runtime
+    consumers may receive a JSON-decoded mapping whose insertion order changed,
+    so this function checks the exact recursive key set, types, and values before
+    restoring the one authoritative declaration order.
+    """
+
+    if type(config) is not dict:
+        raise FrozenConfigError("config must be a plain mapping with exact frozen keys")
+    allowed_keys = (tuple(_FROZEN_CONFIG), tuple(_FROZEN_CONFIG) + ("hgb_grid",))
+    if tuple(config) not in allowed_keys and set(config) not in (
+        set(_FROZEN_CONFIG),
+        set(_FROZEN_CONFIG) | {"hgb_grid"},
+    ):
+        raise FrozenConfigError(
+            f"config changed frozen keys: expected {tuple(_FROZEN_CONFIG)!r} "
+            "with optional derived hgb_grid"
+        )
+    base_input = {key: config[key] for key in _FROZEN_CONFIG if key in config}
+    canonical = _copy_in_frozen_order(base_input, _FROZEN_CONFIG, path="config")
+    _validate_frozen(canonical, _FROZEN_CONFIG)
+    parse_time_split_boundaries(canonical["time_split"])
+    expanded = expand_hgb_grid(canonical["hgb"])
+    if "hgb_grid" in config:
+        declared_grid = _copy_in_frozen_order(config["hgb_grid"], expanded, path="config.hgb_grid")
+        _validate_frozen(declared_grid, expanded, path="config.hgb_grid")
+    canonical["hgb_grid"] = expanded
+    return canonical
 
 
 def config_sha256(path: str | Path) -> str:
@@ -233,6 +291,4 @@ def load_gate1_config(path: str | Path) -> dict[str, Any]:
     payload = _parse_yaml(Path(path).read_bytes())
     parse_time_split_boundaries(payload.get("time_split"))
     _validate_frozen(payload, _FROZEN_CONFIG)
-    config = dict(payload)
-    config["hgb_grid"] = expand_hgb_grid(payload["hgb"])
-    return config
+    return validate_gate1_config(payload)

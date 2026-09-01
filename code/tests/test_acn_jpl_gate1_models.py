@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import copy
+import inspect
 import json
 from collections.abc import Mapping
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -11,18 +14,28 @@ import numpy as np
 import pytest
 from evcf.forecasting.acn_jpl_gate1_contracts import load_gate1_config
 from evcf.forecasting.acn_jpl_gate1_data import Gate1Snapshot
-from evcf.forecasting.acn_jpl_gate1_features import FeatureBlock
+from evcf.forecasting.acn_jpl_gate1_features import (
+    FeatureBlock,
+    canonical_feature_schema,
+)
 from evcf.forecasting.acn_jpl_gate1_models import (
     Gate1TimeSplit,
     HGBPreprocessor,
+    PersistencePrediction,
     PredictionBundle,
     RidgePreprocessor,
     SelectionRecord,
+    _feature_block_sha256,
+    _feature_schema_sha256,
+    _rolling_origin_predict_with_factories,
+    _select_model_params_with_factories,
+    _snapshot_target,
     build_model_selection_manifest,
     frozen_model_candidates,
     make_frozen_estimator,
     persistence_predictions,
     rolling_origin_predict,
+    run_model_task,
     select_model_params,
 )
 from sklearn.ensemble import HistGradientBoostingRegressor
@@ -78,24 +91,69 @@ def split(config: Mapping[str, Any]) -> Gate1TimeSplit:
 
 
 def _block(tier: str, issue_times: np.ndarray, *, seed: int = 3) -> FeatureBlock:
-    raw_dimension = RAW_DIMENSIONS[tier]
-    indicator_count = INDICATOR_COUNTS[tier]
+    feature_names, nullable = canonical_feature_schema(tier)
+    raw_dimension = len(feature_names)
     generator = np.random.default_rng(seed)
     values = generator.normal(size=(len(issue_times), raw_dimension))
-    nullable = np.zeros(raw_dimension, dtype=np.bool_)
-    if indicator_count:
-        nullable[-indicator_count:] = True
-        values[::17, -indicator_count] = np.nan
+    nullable_positions = np.flatnonzero(nullable)
+    if len(nullable_positions):
+        values[::17, nullable_positions[0]] = np.nan
     return FeatureBlock(
         issue_times=issue_times,
         values=values,
-        feature_names=tuple(f"{tier.lower()}_{position:04d}" for position in range(raw_dimension)),
+        feature_names=feature_names,
         nullable_mask=nullable,
     )
 
 
 def _target(issue_times: np.ndarray) -> np.ndarray:
     return 10.0 + np.sin(np.arange(len(issue_times), dtype=np.float64) / 13.0)
+
+
+def _model_snapshot(
+    issue_times: np.ndarray,
+    config: Mapping[str, Any],
+    *,
+    labels: np.ndarray | None = None,
+) -> Gate1Snapshot:
+    row_count = len(issue_times)
+    if labels is None:
+        base = _target(issue_times)
+        labels = np.column_stack(
+            [base + position * 100.0 for position, _horizon in enumerate(HORIZONS)]
+        )
+    station_times = np.arange(
+        _epoch("2019-05-10T00:00:00-07:00"),
+        _epoch("2019-06-02T00:00:00-07:00"),
+        900,
+        dtype=np.int64,
+    )
+    station_values = 12.0 + np.sin(np.arange(len(station_times), dtype=np.float64) / 31.0)
+    station_valid = np.ones(len(station_times), dtype=np.bool_)
+    unavailable_previous_week = {
+        _epoch("2019-05-15T19:30:00-07:00"),
+        _epoch("2019-05-15T19:45:00-07:00"),
+        _epoch("2019-05-15T20:00:00-07:00"),
+    }
+    station_valid[np.isin(station_times, tuple(unavailable_previous_week))] = False
+    return Gate1Snapshot(
+        data_snapshot_sha256=str(config["data_snapshot_sha256"]),
+        artifact_sha256={},
+        issue_times=issue_times,
+        horizons=np.asarray(HORIZONS, dtype=np.int16),
+        labels=np.asarray(labels, dtype=np.float32),
+        m1_history=np.zeros((row_count, 96), dtype=np.float64),
+        m1_history_mask=np.ones((row_count, 96), dtype=np.bool_),
+        m1_calendar=np.zeros((row_count, 3), dtype=np.int16),
+        m2_current_state=np.zeros((row_count, 6), dtype=np.float64),
+        m3_rows=(),
+        m4_rows=(),
+        m3_by_issue_time=tuple(() for _ in range(row_count)),
+        m4_by_issue_time=tuple(() for _ in range(row_count)),
+        station_times=station_times,
+        station_current_mean_a=station_values,
+        station_valid_90=station_valid,
+    )
 
 
 def test_frozen_pdt_split_exact_counts_days_and_coverage(split: Gate1TimeSplit) -> None:
@@ -117,6 +175,33 @@ def test_frozen_pdt_split_exact_counts_days_and_coverage(split: Gate1TimeSplit) 
     off_grid[100] += 1
     with pytest.raises(ValueError, match="15-minute"):
         Gate1TimeSplit.from_config(off_grid, split.config)
+
+
+def test_time_split_has_no_count_bypass_and_revalidates_replaced_state(
+    split: Gate1TimeSplit,
+) -> None:
+    assert "require_frozen_counts" not in inspect.signature(Gate1TimeSplit.from_config).parameters
+    with pytest.raises(ValueError, match="split|train|cohort|provenance"):
+        replace(split, train_rows=split.train_rows[1:])
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected"),
+    [
+        (lambda value: value.__setitem__("schema_version", "mutated/v0"), "schema_version|frozen"),
+        (lambda value: value.__setitem__("data_snapshot_sha256", "0" * 64), "snapshot|frozen"),
+        (lambda value: value.__setitem__("windows_minutes", [5, 15, 30]), "windows|frozen"),
+        (lambda value: value.__setitem__("bounded_hold_seconds", 13), "hold|frozen"),
+        (lambda value: value.__setitem__("unexpected", True), "keys|unexpected|frozen"),
+    ],
+)
+def test_model_split_reuses_the_complete_frozen_config_contract(
+    config: Mapping[str, Any], mutation: Any, expected: str
+) -> None:
+    changed = copy.deepcopy(dict(config))
+    mutation(changed)
+    with pytest.raises(ValueError, match=expected):
+        Gate1TimeSplit.from_config(_formal_issue_times(), changed)
 
 
 def test_label_availability_and_rolling_fit_rows_are_exact(split: Gate1TimeSplit) -> None:
@@ -243,15 +328,14 @@ def test_preprocessors_fail_closed_on_schema_all_nan_and_infinity() -> None:
     all_nan = block.values.copy()
     all_nan[:5, 4] = np.nan
     all_nan_block = FeatureBlock(times, all_nan, block.feature_names, block.nullable_mask)
-    with pytest.raises(ValueError, match="all-NaN|all missing|m3_0004"):
+    with pytest.raises(ValueError, match=f"all-NaN|all missing|{block.feature_names[4]}"):
         RidgePreprocessor().fit(all_nan_block, np.arange(5))
 
     hgb = HGBPreprocessor().fit(block, np.arange(5))
     encoded = hgb.transform(block, np.arange(8))
     assert hgb.input_dimension == 391
-    assert np.isnan(encoded[0, -INDICATOR_COUNTS["M3"] - 1]) == np.isnan(
-        block.values[0, -INDICATOR_COUNTS["M3"] - 1]
-    )
+    first_nullable = int(np.flatnonzero(block.nullable_mask)[0])
+    assert np.isnan(encoded[0, first_nullable]) == np.isnan(block.values[0, first_nullable])
     assert np.isnan(encoded[:, : RAW_DIMENSIONS["M3"]]).sum() == np.isnan(block.values).sum()
     assert set(np.unique(encoded[:, RAW_DIMENSIONS["M3"] :])).issubset({0.0, 1.0})
 
@@ -265,11 +349,73 @@ def test_preprocessors_fail_closed_on_schema_all_nan_and_infinity() -> None:
         hgb.transform(changed_names, np.arange(8))
 
     with pytest.raises(ValueError, match="infinite|infinity"):
-        HGBPreprocessor().transform_values(
+        hgb.transform_values(
             np.full((1, RAW_DIMENSIONS["M3"]), np.inf),
             feature_names=block.feature_names,
             nullable_mask=block.nullable_mask,
         )
+
+
+def test_preprocessors_require_exact_canonical_feature_names_and_nullable_positions() -> None:
+    times = np.arange(8, dtype=np.int64) + 1
+    block = _block("M2", times)
+    changed_names = FeatureBlock(
+        times,
+        block.values,
+        ("not_the_canonical_first_feature",) + block.feature_names[1:],
+        block.nullable_mask,
+    )
+    with pytest.raises(ValueError, match="canonical|feature names|schema"):
+        RidgePreprocessor().fit(changed_names, np.arange(5))
+
+    shifted_nullable = block.nullable_mask.copy()
+    old_position = int(np.flatnonzero(shifted_nullable)[0])
+    shifted_nullable[old_position] = False
+    shifted_nullable[0] = True
+    changed_nullable = FeatureBlock(
+        times,
+        block.values,
+        block.feature_names,
+        shifted_nullable,
+    )
+    with pytest.raises(ValueError, match="canonical|nullable|schema"):
+        HGBPreprocessor().fit(changed_nullable, np.arange(5))
+
+
+def test_formal_model_api_binds_snapshot_and_hides_test_factories() -> None:
+    select_parameters = inspect.signature(select_model_params).parameters
+    rolling_parameters = inspect.signature(rolling_origin_predict).parameters
+    task_parameters = inspect.signature(run_model_task).parameters
+    assert "snapshot" in select_parameters
+    assert "target" not in select_parameters
+    assert "snapshot" in rolling_parameters
+    assert "target" not in rolling_parameters
+    assert "snapshot" in task_parameters
+    assert "target" not in task_parameters
+    assert "estimator_factory" not in task_parameters
+    assert "preprocessor_factory" not in task_parameters
+
+
+def test_snapshot_target_requires_verified_index_and_horizon_dtypes(
+    split: Gate1TimeSplit, config: Mapping[str, Any]
+) -> None:
+    snapshot = _model_snapshot(split.issue_times, config)
+    with pytest.raises(ValueError, match="issue.*int64|index.*dtype"):
+        _snapshot_target(
+            replace(snapshot, issue_times=snapshot.issue_times.astype(float)), split, 15
+        )
+    with pytest.raises(ValueError, match="horizon.*int16|horizon.*dtype"):
+        _snapshot_target(replace(snapshot, horizons=snapshot.horizons.astype(float)), split, 15)
+    with pytest.raises(ValueError, match="label.*float32|label.*dtype"):
+        _snapshot_target(replace(snapshot, labels=snapshot.labels.astype(np.float64)), split, 15)
+
+
+def test_manifest_api_requires_actual_blocks_persistence_and_formal_results() -> None:
+    parameters = inspect.signature(build_model_selection_manifest).parameters
+    assert "feature_blocks" in parameters
+    assert "persistence_by_horizon" in parameters
+    assert "feature_dimensions" not in parameters
+    assert "persistence_coverage" not in parameters
 
 
 class _ConstantEstimator:
@@ -294,33 +440,71 @@ class _MeanEstimator:
         return np.full(len(x), self.value, dtype=np.float64)
 
 
+def _preprocessor_factory(learner: str) -> RidgePreprocessor | HGBPreprocessor:
+    return RidgePreprocessor() if learner == "ridge" else HGBPreprocessor()
+
+
+def _record(
+    *,
+    learner: str,
+    tier: str,
+    horizon: int,
+    feature_block: FeatureBlock,
+    snapshot: Gate1Snapshot,
+    split: Gate1TimeSplit,
+    config: Mapping[str, Any],
+    scores: np.ndarray | list[float] | None = None,
+) -> SelectionRecord:
+    candidates = frozen_model_candidates(learner, config)
+    if scores is None:
+        scores = np.linspace(1.0, 2.0, len(candidates))
+    _values, target_sha256 = _snapshot_target(snapshot, split, horizon)
+    return SelectionRecord.create(
+        learner=learner,
+        tier=tier,
+        horizon_minutes=horizon,
+        candidate_params=candidates,
+        candidate_validation_mae=scores,
+        selected_candidate_index=int(np.argmin(scores)),
+        selection_fit_count=len(split.selection_fit_rows(horizon)),
+        validation_score_count=len(split.validation_score_rows(horizon)),
+        data_snapshot_sha256=snapshot.data_snapshot_sha256,
+        split_provenance_sha256=split.frozen_provenance_sha256,
+        target_sha256=target_sha256,
+        feature_schema_sha256=_feature_schema_sha256(feature_block),
+        feature_block_sha256=_feature_block_sha256(feature_block),
+    )
+
+
 def test_full_candidate_budgets_ties_and_canonical_hash(
     split: Gate1TimeSplit, config: Mapping[str, Any]
 ) -> None:
     block = _block("M1", split.issue_times)
-    target = _target(split.issue_times)
+    snapshot = _model_snapshot(split.issue_times, config)
     ridge_calls: list[tuple[int, int]] = []
     hgb_calls: list[tuple[int, int]] = []
 
-    ridge_record = select_model_params(
+    ridge_record = _select_model_params_with_factories(
         learner="ridge",
         tier="M1",
         horizon_minutes=15,
         feature_block=block,
-        target=target,
+        snapshot=snapshot,
         split=split,
         config=config,
         estimator_factory=lambda _learner, _params: _ConstantEstimator(3.0, ridge_calls),
+        preprocessor_factory=_preprocessor_factory,
     )
-    hgb_record = select_model_params(
+    hgb_record = _select_model_params_with_factories(
         learner="hgb",
         tier="M1",
         horizon_minutes=15,
         feature_block=block,
-        target=target,
+        snapshot=snapshot,
         split=split,
         config=config,
         estimator_factory=lambda _learner, _params: _ConstantEstimator(3.0, hgb_calls),
+        preprocessor_factory=_preprocessor_factory,
     )
 
     assert len(ridge_calls) == 4
@@ -328,6 +512,14 @@ def test_full_candidate_budgets_ties_and_canonical_hash(
     assert all(call == (1_248, 1_248) for call in ridge_calls + hgb_calls)
     assert ridge_record.selected_candidate_index == 0
     assert hgb_record.selected_candidate_index == 0
+    expected_15_minute_mae = np.mean(
+        np.abs(snapshot.labels[split.validation_score_rows(15), 0].astype(np.float64) - 3.0)
+    )
+    expected_240_minute_mae = np.mean(
+        np.abs(snapshot.labels[split.validation_score_rows(15), 4].astype(np.float64) - 3.0)
+    )
+    assert ridge_record.candidate_validation_mae[0] == expected_15_minute_mae
+    assert ridge_record.candidate_validation_mae[0] != expected_240_minute_mae
     assert ridge_record.selected_params["alpha"] == 0.1
     assert hgb_record.selected_params["learning_rate"] == 0.03
     assert len(ridge_record.selected_param_sha256) == 64
@@ -342,6 +534,11 @@ def test_full_candidate_budgets_ties_and_canonical_hash(
             selected_candidate_index=0,
             selection_fit_count=1_248,
             validation_score_count=276,
+            data_snapshot_sha256=snapshot.data_snapshot_sha256,
+            split_provenance_sha256=split.frozen_provenance_sha256,
+            target_sha256=_snapshot_target(snapshot, split, 15)[1],
+            feature_schema_sha256=_feature_schema_sha256(block),
+            feature_block_sha256=_feature_block_sha256(block),
         )
 
 
@@ -349,6 +546,7 @@ def test_selection_executes_every_candidate_or_fails(
     split: Gate1TimeSplit, config: Mapping[str, Any]
 ) -> None:
     block = _block("M1", split.issue_times)
+    snapshot = _model_snapshot(split.issue_times, config)
     calls = 0
 
     def factory(_learner: str, _params: Mapping[str, Any]) -> _ConstantEstimator:
@@ -359,15 +557,16 @@ def test_selection_executes_every_candidate_or_fails(
         return _ConstantEstimator(1.0, [])
 
     with pytest.raises(RuntimeError, match="candidate 2"):
-        select_model_params(
+        _select_model_params_with_factories(
             learner="ridge",
             tier="M1",
             horizon_minutes=30,
             feature_block=block,
-            target=_target(split.issue_times),
+            snapshot=snapshot,
             split=split,
             config=config,
             estimator_factory=factory,
+            preprocessor_factory=_preprocessor_factory,
         )
     assert calls == 3
 
@@ -376,16 +575,17 @@ def test_rolling_refits_once_per_day_without_retuning_or_clipping(
     split: Gate1TimeSplit, config: Mapping[str, Any]
 ) -> None:
     block = _block("M1", split.issue_times)
-    target = _target(split.issue_times)
-    selected = SelectionRecord.create(
+    snapshot = _model_snapshot(split.issue_times, config)
+    target = snapshot.labels[:, HORIZONS.index(60)]
+    selected = _record(
         learner="ridge",
         tier="M1",
-        horizon_minutes=60,
-        candidate_params=frozen_model_candidates("ridge", config),
-        candidate_validation_mae=[4.0, 3.0, 2.0, 1.0],
-        selected_candidate_index=3,
-        selection_fit_count=1_245,
-        validation_score_count=273,
+        horizon=60,
+        feature_block=block,
+        snapshot=snapshot,
+        split=split,
+        config=config,
+        scores=[4.0, 3.0, 2.0, 1.0],
     )
     calls: list[tuple[int, int]] = []
     factory_parameters: list[dict[str, Any]] = []
@@ -395,12 +595,13 @@ def test_rolling_refits_once_per_day_without_retuning_or_clipping(
         factory_parameters.append(dict(params))
         return _ConstantEstimator(-2.5, calls)
 
-    result = rolling_origin_predict(
+    result = _rolling_origin_predict_with_factories(
         feature_block=block,
-        target=target,
+        snapshot=snapshot,
         split=split,
         selection=selected,
         estimator_factory=factory,
+        preprocessor_factory=_preprocessor_factory,
     )
     assert len(calls) == 14
     assert [count for count, _ in calls] == [1_521 + 96 * day for day in range(14)]
@@ -414,12 +615,13 @@ def test_rolling_refits_once_per_day_without_retuning_or_clipping(
     with pytest.raises(ValueError):
         result.predictions[0] = 0.0
 
-    repeat = rolling_origin_predict(
+    repeat = _rolling_origin_predict_with_factories(
         feature_block=block,
-        target=target,
+        snapshot=snapshot,
         split=split,
         selection=selected,
         estimator_factory=factory,
+        preprocessor_factory=_preprocessor_factory,
     )
     np.testing.assert_array_equal(result.predictions, repeat.predictions)
 
@@ -427,23 +629,26 @@ def test_rolling_refits_once_per_day_without_retuning_or_clipping(
 def test_rolling_nonfinite_prediction_is_execution_failure(
     split: Gate1TimeSplit, config: Mapping[str, Any]
 ) -> None:
-    selected = SelectionRecord.create(
+    block = _block("M1", split.issue_times)
+    snapshot = _model_snapshot(split.issue_times, config)
+    selected = _record(
         learner="hgb",
         tier="M1",
-        horizon_minutes=15,
-        candidate_params=frozen_model_candidates("hgb", config),
-        candidate_validation_mae=np.arange(16, dtype=np.float64),
-        selected_candidate_index=0,
-        selection_fit_count=1_248,
-        validation_score_count=276,
+        horizon=15,
+        feature_block=block,
+        snapshot=snapshot,
+        split=split,
+        config=config,
+        scores=np.arange(16, dtype=np.float64),
     )
     with pytest.raises(ValueError, match="non-finite"):
-        rolling_origin_predict(
-            feature_block=_block("M1", split.issue_times),
-            target=_target(split.issue_times),
+        _rolling_origin_predict_with_factories(
+            feature_block=block,
+            snapshot=snapshot,
             split=split,
             selection=selected,
             estimator_factory=lambda _learner, _params: _ConstantEstimator(np.nan, []),
+            preprocessor_factory=_preprocessor_factory,
         )
 
 
@@ -452,28 +657,35 @@ def test_selection_and_midnight_refit_ignore_unavailable_labels(
 ) -> None:
     block = _block("M1", split.issue_times)
     target = _target(split.issue_times)
+    labels = np.column_stack([target + position * 100.0 for position in range(len(HORIZONS))])
+    snapshot = _model_snapshot(split.issue_times, config, labels=labels)
     poisoned_test = target.copy()
     poisoned_test[split.test_rows] += 1e9
+    poisoned_test_labels = labels.copy()
+    poisoned_test_labels[:, 0] = poisoned_test
+    poisoned_test_snapshot = _model_snapshot(split.issue_times, config, labels=poisoned_test_labels)
     factory = lambda _learner, _params: _MeanEstimator()
-    baseline_selection = select_model_params(
+    baseline_selection = _select_model_params_with_factories(
         learner="ridge",
         tier="M1",
         horizon_minutes=15,
         feature_block=block,
-        target=target,
+        snapshot=snapshot,
         split=split,
         config=config,
         estimator_factory=factory,
+        preprocessor_factory=_preprocessor_factory,
     )
-    poisoned_selection = select_model_params(
+    poisoned_selection = _select_model_params_with_factories(
         learner="ridge",
         tier="M1",
         horizon_minutes=15,
         feature_block=block,
-        target=poisoned_test,
+        snapshot=poisoned_test_snapshot,
         split=split,
         config=config,
         estimator_factory=factory,
+        preprocessor_factory=_preprocessor_factory,
     )
     np.testing.assert_array_equal(
         baseline_selection.candidate_validation_mae,
@@ -483,19 +695,35 @@ def test_selection_and_midnight_refit_ignore_unavailable_labels(
     first_day_rows = next(iter(split.test_day_rows.values()))
     poisoned_day = target.copy()
     poisoned_day[first_day_rows] += 1e9
-    baseline_roll = rolling_origin_predict(
+    poisoned_day_labels = labels.copy()
+    poisoned_day_labels[:, 0] = poisoned_day
+    poisoned_day_snapshot = _model_snapshot(split.issue_times, config, labels=poisoned_day_labels)
+    poisoned_day_selection = _select_model_params_with_factories(
+        learner="ridge",
+        tier="M1",
+        horizon_minutes=15,
         feature_block=block,
-        target=target,
+        snapshot=poisoned_day_snapshot,
         split=split,
-        selection=baseline_selection,
+        config=config,
         estimator_factory=factory,
+        preprocessor_factory=_preprocessor_factory,
     )
-    poisoned_roll = rolling_origin_predict(
+    baseline_roll = _rolling_origin_predict_with_factories(
         feature_block=block,
-        target=poisoned_day,
+        snapshot=snapshot,
         split=split,
         selection=baseline_selection,
         estimator_factory=factory,
+        preprocessor_factory=_preprocessor_factory,
+    )
+    poisoned_roll = _rolling_origin_predict_with_factories(
+        feature_block=block,
+        snapshot=poisoned_day_snapshot,
+        split=split,
+        selection=poisoned_day_selection,
+        estimator_factory=factory,
+        preprocessor_factory=_preprocessor_factory,
     )
     np.testing.assert_array_equal(
         baseline_roll.predictions[: len(first_day_rows)],
@@ -536,24 +764,25 @@ def _dummy_record(
     horizon: int,
     config: Mapping[str, Any],
     split: Gate1TimeSplit,
+    feature_block: FeatureBlock,
+    snapshot: Gate1Snapshot,
 ) -> SelectionRecord:
-    candidates = frozen_model_candidates(learner, config)
-    return SelectionRecord.create(
+    return _record(
         learner=learner,
         tier=tier,
-        horizon_minutes=horizon,
-        candidate_params=candidates,
-        candidate_validation_mae=np.linspace(1.0, 2.0, len(candidates)),
-        selected_candidate_index=0,
-        selection_fit_count=len(split.selection_fit_rows(horizon)),
-        validation_score_count=len(split.validation_score_rows(horizon)),
+        horizon=horizon,
+        feature_block=feature_block,
+        snapshot=snapshot,
+        split=split,
+        config=config,
     )
 
 
 def _dummy_prediction(
-    record: SelectionRecord, split: Gate1TimeSplit, target: np.ndarray
+    record: SelectionRecord, split: Gate1TimeSplit, snapshot: Gate1Snapshot
 ) -> PredictionBundle:
     test_rows = split.test_rows
+    target = snapshot.labels[:, HORIZONS.index(record.horizon_minutes)]
     day_starts = np.empty(len(test_rows), dtype=np.int64)
     for day, rows in split.test_day_rows.items():
         positions = np.searchsorted(test_rows, rows)
@@ -573,34 +802,35 @@ def _dummy_prediction(
 def test_manifest_is_complete_aggregate_only_and_fail_closed(
     split: Gate1TimeSplit, config: Mapping[str, Any]
 ) -> None:
-    target = _target(split.issue_times)
+    snapshot = _model_snapshot(split.issue_times, config)
+    feature_blocks = {tier: _block(tier, split.issue_times) for tier in TIERS}
     records = [
-        _dummy_record(learner, tier, horizon, config, split)
+        _dummy_record(
+            learner,
+            tier,
+            horizon,
+            config,
+            split,
+            feature_blocks[tier],
+            snapshot,
+        )
         for learner in LEARNERS
         for tier in TIERS
         for horizon in HORIZONS
     ]
-    predictions = [_dummy_prediction(record, split, target) for record in records]
-    coverage = {
-        baseline: {
-            str(horizon): 1_329 if baseline != "previous_week" else 1_326 for horizon in HORIZONS
-        }
-        for baseline in ("last_value", "previous_day", "previous_week")
+    predictions = [_dummy_prediction(record, split, snapshot) for record in records]
+    persistence_by_horizon = {
+        horizon: persistence_predictions(snapshot, split.test_rows, horizon_minutes=horizon)
+        for horizon in HORIZONS
     }
     manifest = build_model_selection_manifest(
         config=config,
+        snapshot=snapshot,
         split=split,
+        feature_blocks=feature_blocks,
         selections=records,
         predictions=predictions,
-        feature_dimensions={
-            tier: {
-                "raw": RAW_DIMENSIONS[tier],
-                "indicators": INDICATOR_COUNTS[tier],
-                "input": RAW_DIMENSIONS[tier] + INDICATOR_COUNTS[tier],
-            }
-            for tier in TIERS
-        },
-        persistence_coverage=coverage,
+        persistence_by_horizon=persistence_by_horizon,
     )
     assert manifest["schema_version"] == "acn-jpl-gate1-model-selection/v1"
     assert len(manifest["selections"]) == 40
@@ -612,15 +842,19 @@ def test_manifest_is_complete_aggregate_only_and_fail_closed(
     assert "predictions" not in encoded.lower()
     assert "preprocessor_statistics" not in encoded
     assert "issue_times" not in manifest
+    assert "PASS" not in encoded
+    assert manifest["provenance"]["data_snapshot_sha256"] == config["data_snapshot_sha256"]
+    assert manifest["audits"]["common_row_identity"] is True
 
     with pytest.raises(ValueError, match="40|complete"):
         build_model_selection_manifest(
             config=config,
+            snapshot=snapshot,
             split=split,
+            feature_blocks=feature_blocks,
             selections=records[:-1],
             predictions=predictions[:-1],
-            feature_dimensions=manifest["preprocessing"]["tier_dimensions"],
-            persistence_coverage=coverage,
+            persistence_by_horizon=persistence_by_horizon,
         )
 
     changed_truth = predictions[5].y_true.copy()
@@ -639,11 +873,57 @@ def test_manifest_is_complete_aggregate_only_and_fail_closed(
     with pytest.raises(ValueError, match="truth differs"):
         build_model_selection_manifest(
             config=config,
+            snapshot=snapshot,
             split=split,
+            feature_blocks=feature_blocks,
             selections=records,
             predictions=inconsistent,
-            feature_dimensions=manifest["preprocessing"]["tier_dimensions"],
-            persistence_coverage=coverage,
+            persistence_by_horizon=persistence_by_horizon,
+        )
+
+    forged_persistence = dict(persistence_by_horizon)
+    forged_horizon = dict(forged_persistence[15])
+    original = forged_horizon["last_value"]
+    forged_predictions = original.predictions.copy()
+    forged_predictions[0] += 1.0
+    forged_horizon["last_value"] = PersistencePrediction(
+        name=original.name,
+        horizon_minutes=original.horizon_minutes,
+        issue_times=original.issue_times,
+        predictions=forged_predictions,
+        availability=original.availability,
+        reference_times=original.reference_times,
+    )
+    forged_persistence[15] = forged_horizon
+    with pytest.raises(ValueError, match="persistence.*recomputation"):
+        build_model_selection_manifest(
+            config=config,
+            snapshot=snapshot,
+            split=split,
+            feature_blocks=feature_blocks,
+            selections=records,
+            predictions=predictions,
+            persistence_by_horizon=forged_persistence,
+        )
+
+    changed_blocks = dict(feature_blocks)
+    changed_values = feature_blocks["M1"].values.copy()
+    changed_values[:, 0] += 1.0
+    changed_blocks["M1"] = FeatureBlock(
+        issue_times=feature_blocks["M1"].issue_times,
+        values=changed_values,
+        feature_names=feature_blocks["M1"].feature_names,
+        nullable_mask=feature_blocks["M1"].nullable_mask,
+    )
+    with pytest.raises(ValueError, match="feature block.*provenance"):
+        build_model_selection_manifest(
+            config=config,
+            snapshot=snapshot,
+            split=split,
+            feature_blocks=changed_blocks,
+            selections=records,
+            predictions=predictions,
+            persistence_by_horizon=persistence_by_horizon,
         )
 
 
@@ -678,3 +958,31 @@ def test_local_calendar_shift_survives_dst_boundary() -> None:
     result = persistence_predictions(snapshot, np.asarray([0]), horizon_minutes=60)
     assert result["previous_day"].reference_times[0] == expected_reference
     assert issue + 60 * 60 - 900 - expected_reference == 23 * 60 * 60
+
+
+@pytest.mark.parametrize("case", ("unsorted", "off_grid", "reference_dtype", "formula"))
+def test_persistence_prediction_rejects_invalid_index_and_reference_provenance(case: str) -> None:
+    issue = _epoch("2019-05-18T01:00:00-07:00")
+    issue_times = np.asarray([issue, issue + 900], dtype=np.int64)
+    references: np.ndarray = issue_times - 900
+    if case == "unsorted":
+        issue_times = issue_times[::-1].copy()
+        references = issue_times - 900
+    elif case == "off_grid":
+        issue_times = issue_times.copy()
+        issue_times[1] += 1
+        references = issue_times - 900
+    elif case == "reference_dtype":
+        references = references.astype(np.float64)
+    elif case == "formula":
+        references = references.copy()
+        references[0] -= 900
+    with pytest.raises(ValueError, match="issue|grid|reference|formula|int64"):
+        PersistencePrediction(
+            name="last_value",
+            horizon_minutes=15,
+            issue_times=issue_times,
+            predictions=np.ones(2, dtype=np.float64),
+            availability=np.ones(2, dtype=np.bool_),
+            reference_times=references,
+        )

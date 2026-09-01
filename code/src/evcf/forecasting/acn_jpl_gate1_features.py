@@ -207,6 +207,42 @@ class FeatureBlock:
         object.__setattr__(self, "nullable_mask", _immutable(nullable))
 
 
+def validate_feature_block_schema(
+    block: FeatureBlock,
+    *,
+    tier: str | None = None,
+) -> str:
+    """Bind one block to the sole canonical tier schema and return that tier."""
+
+    if not isinstance(block, FeatureBlock):
+        raise TypeError("feature block schema validation requires a FeatureBlock")
+    matching = [
+        name for name, width in _EXPECTED_RAW_DIMENSIONS.items() if width == block.values.shape[1]
+    ]
+    if len(matching) != 1:
+        raise ValueError("feature block width is outside the canonical M1-M4 schema")
+    inferred = matching[0]
+    if tier is not None and tier != inferred:
+        raise ValueError("declared feature tier differs from the canonical width")
+    if block.feature_names != _EXPECTED_FEATURE_NAMES[inferred]:
+        raise ValueError(f"{inferred} feature names or order differ from the canonical schema")
+    expected_nullable = np.asarray(_EXPECTED_NULLABLE_MASKS[inferred], dtype=np.bool_)
+    if not np.array_equal(block.nullable_mask, expected_nullable):
+        raise ValueError(f"{inferred} nullable mask differs from the canonical schema")
+    return inferred
+
+
+def canonical_feature_schema(tier: str) -> tuple[tuple[str, ...], np.ndarray]:
+    """Return immutable names and nullable positions for one frozen tier."""
+
+    if tier not in _EXPECTED_FEATURE_NAMES:
+        raise ValueError("tier must be one of M1, M2, M3, or M4")
+    return (
+        _EXPECTED_FEATURE_NAMES[tier],
+        _immutable(np.asarray(_EXPECTED_NULLABLE_MASKS[tier], dtype=np.bool_)),
+    )
+
+
 def fixed_pool(
     values: Sequence[float | None] | np.ndarray,
     *,
@@ -936,16 +972,7 @@ def _validate_feature_blocks(blocks: Mapping[str, FeatureBlock]) -> None:
     canonical_times: np.ndarray | None = None
     for tier in tier_order:
         block = blocks[tier]
-        if not isinstance(block, FeatureBlock):
-            raise TypeError(f"{tier} must be a FeatureBlock")
-        expected_dimension = _EXPECTED_RAW_DIMENSIONS[tier]
-        if block.values.shape[1] != expected_dimension:
-            raise ValueError(f"{tier} raw dimension differs from the frozen contract")
-        if block.feature_names != _EXPECTED_FEATURE_NAMES[tier]:
-            raise ValueError(f"{tier} feature names or order differ from the frozen contract")
-        expected_nullable = np.asarray(_EXPECTED_NULLABLE_MASKS[tier], dtype=np.bool_)
-        if not np.array_equal(block.nullable_mask, expected_nullable):
-            raise ValueError(f"{tier} nullable mask differs from the frozen contract")
+        validate_feature_block_schema(block, tier=tier)
         if canonical_times is None:
             canonical_times = block.issue_times
         elif not np.array_equal(block.issue_times, canonical_times):

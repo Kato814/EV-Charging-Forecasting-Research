@@ -26,9 +26,14 @@ from sklearn.linear_model import Ridge
 from evcf.forecasting.acn_jpl_gate1_contracts import (
     expand_hgb_grid,
     parse_time_split_boundaries,
+    validate_gate1_config,
 )
 from evcf.forecasting.acn_jpl_gate1_data import Gate1Snapshot
-from evcf.forecasting.acn_jpl_gate1_features import FeatureBlock
+from evcf.forecasting.acn_jpl_gate1_features import (
+    FeatureBlock,
+    canonical_feature_schema,
+    validate_feature_block_schema,
+)
 
 MODEL_SEED = 20260901
 BOOTSTRAP_SEED = 20260902
@@ -39,9 +44,18 @@ PERSISTENCE_ORDER = ("last_value", "previous_day", "previous_week")
 TIMEZONE_NAME = "America/Los_Angeles"
 _ZONE = ZoneInfo(TIMEZONE_NAME)
 _SHA256_HEX_LENGTH = 64
-_EXPECTED_RAW_DIMENSIONS = MappingProxyType({"M1": 195, "M2": 201, "M3": 311, "M4": 671})
-_EXPECTED_INDICATOR_COUNTS = MappingProxyType({"M1": 0, "M2": 3, "M3": 80, "M4": 332})
-_EXPECTED_INPUT_DIMENSIONS = MappingProxyType({"M1": 195, "M2": 204, "M3": 391, "M4": 1003})
+_CANONICAL_FEATURE_SCHEMAS = MappingProxyType(
+    {tier: canonical_feature_schema(tier) for tier in TIER_ORDER}
+)
+_EXPECTED_RAW_DIMENSIONS = MappingProxyType(
+    {tier: len(_CANONICAL_FEATURE_SCHEMAS[tier][0]) for tier in TIER_ORDER}
+)
+_EXPECTED_INDICATOR_COUNTS = MappingProxyType(
+    {tier: int(np.sum(_CANONICAL_FEATURE_SCHEMAS[tier][1])) for tier in TIER_ORDER}
+)
+_EXPECTED_INPUT_DIMENSIONS = MappingProxyType(
+    {tier: _EXPECTED_RAW_DIMENSIONS[tier] + _EXPECTED_INDICATOR_COUNTS[tier] for tier in TIER_ORDER}
+)
 _EXPECTED_COHORT_COUNTS = (1_248, 276, 1_329)
 _EXPECTED_TEST_DAY_COUNTS = (96,) * 13 + (81,)
 _EXPECTED_SELECTION_COUNTS = MappingProxyType(
@@ -153,43 +167,12 @@ def _validate_sha256(value: Any, context: str) -> str:
     return value
 
 
-def _require_model_config(config: Mapping[str, Any]) -> None:
-    if not isinstance(config, Mapping):
-        raise TypeError("config must be a frozen Gate 1 mapping")
-    if config.get("target") != "station_current_mean_a":
-        raise ValueError("config target differs from the frozen current target")
-    if tuple(config.get("horizons_minutes", ())) != HORIZONS_MINUTES:
-        raise ValueError("config horizons differ from the frozen Gate 1 horizons")
-    if config.get("seeds") != {"model": MODEL_SEED, "bootstrap": BOOTSTRAP_SEED}:
-        raise ValueError("config seeds differ from the frozen Gate 1 seeds")
-    if config.get("bootstrap_repetitions") != 10_000:
-        raise ValueError("config bootstrap repetitions differ from the frozen protocol")
-    ridge = config.get("ridge")
-    if not isinstance(ridge, Mapping) or tuple(ridge.get("alpha", ())) != (0.1, 1, 10, 100):
-        raise ValueError("config Ridge grid differs from the frozen four candidates")
-    hgb = config.get("hgb")
-    if not isinstance(hgb, Mapping):
-        raise TypeError("config HGB grid must be a mapping")
-    expanded = expand_hgb_grid(hgb)
-    if len(expanded) != 16:
-        raise ValueError("config HGB grid differs from the frozen 16 candidates")
-    if "hgb_grid" in config and list(config["hgb_grid"]) != expanded:
-        raise ValueError("config expanded HGB grid differs from its frozen declaration")
-    parsed = parse_time_split_boundaries(config.get("time_split"))
-    expected_epochs = (
-        1_556_780_400,
-        1_557_903_600,
-        1_558_162_800,
-        1_559_372_400,
-    )
-    actual_epochs = (
-        int(parsed["initial_train"]["start_local"].timestamp()),
-        int(parsed["initial_train"]["end_local_exclusive"].timestamp()),
-        int(parsed["validation"]["end_local_exclusive"].timestamp()),
-        int(parsed["rolling_test"]["end_local_exclusive"].timestamp()),
-    )
-    if actual_epochs != expected_epochs:
-        raise ValueError("config time boundaries differ from the frozen May 2019 protocol")
+def _require_model_config(config: Mapping[str, Any]) -> dict[str, Any]:
+    """Delegate the complete runtime contract to the authoritative config module."""
+
+    if type(config) is not dict:
+        raise TypeError("config must be a plain frozen Gate 1 mapping")
+    return validate_gate1_config(config)
 
 
 def _row_indexes(rows: Any, row_count: int, context: str) -> np.ndarray:
@@ -216,9 +199,23 @@ def _local_date_label(epoch_seconds: int) -> str:
     return datetime.fromtimestamp(epoch_seconds, timezone.utc).astimezone(_ZONE).date().isoformat()
 
 
+def _split_provenance_sha256(
+    config_json: bytes,
+    arrays: Sequence[np.ndarray],
+) -> str:
+    digest = hashlib.sha256()
+    digest.update(config_json)
+    for array in arrays:
+        value = np.ascontiguousarray(array)
+        digest.update(value.dtype.str.encode("ascii"))
+        digest.update(np.asarray(value.shape, dtype=np.int64).tobytes())
+        digest.update(value.tobytes(order="C"))
+    return digest.hexdigest()
+
+
 @dataclass(frozen=True, slots=True)
 class Gate1TimeSplit:
-    """Immutable row identities for the frozen PDT rolling-origin protocol."""
+    """Self-validating row identities for the sole frozen PDT protocol."""
 
     issue_times: np.ndarray
     train_rows: np.ndarray
@@ -229,24 +226,141 @@ class Gate1TimeSplit:
     _validation_start_utc_s: int
     _test_start_utc_s: int
     _config_json: bytes
+    _frozen_provenance_sha256: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self._config_json, bytes):
+            raise TypeError("split config provenance must be canonical JSON bytes")
+        try:
+            decoded = json.loads(self._config_json.decode("ascii"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("split config provenance is invalid") from exc
+        canonical = _require_model_config(decoded)
+        config_payload = {key: canonical[key] for key in canonical if key != "hgb_grid"}
+        config_json = _canonical_json_bytes(config_payload)
+        if config_json != self._config_json:
+            raise ValueError("split config provenance differs from the full frozen contract")
+
+        times = np.asarray(self.issue_times)
+        if times.dtype != np.dtype(np.int64) or times.ndim != 1:
+            raise ValueError("issue-time index must be a one-dimensional int64 array")
+        if len(times) != sum(_EXPECTED_COHORT_COUNTS) or np.any(np.diff(times) <= 0):
+            raise ValueError("frozen issue-time index must contain 2,853 unique increasing rows")
+        if np.any(times % 900 != 0):
+            raise ValueError("issue-time index must remain on the frozen 15-minute UTC grid")
+
+        parsed = parse_time_split_boundaries(canonical["time_split"])
+        train_start = int(parsed["initial_train"]["start_local"].timestamp())
+        validation_start = int(parsed["validation"]["start_local"].timestamp())
+        test_start = int(parsed["rolling_test"]["start_local"].timestamp())
+        test_end = int(parsed["rolling_test"]["end_local_exclusive"].timestamp())
+        expected_train = np.flatnonzero((times >= train_start) & (times < validation_start)).astype(
+            np.int64
+        )
+        expected_validation = np.flatnonzero(
+            (times >= validation_start) & (times < test_start)
+        ).astype(np.int64)
+        expected_test = np.flatnonzero((times >= test_start) & (times < test_end)).astype(np.int64)
+        rows = tuple(
+            np.asarray(value) for value in (self.train_rows, self.validation_rows, self.test_rows)
+        )
+        if any(value.dtype != np.dtype(np.int64) or value.ndim != 1 for value in rows):
+            raise ValueError("split cohort rows must be one-dimensional int64 arrays")
+        if not all(
+            np.array_equal(actual, expected)
+            for actual, expected in zip(
+                rows, (expected_train, expected_validation, expected_test), strict=True
+            )
+        ):
+            raise ValueError("split cohorts differ from the frozen half-open boundaries")
+        if tuple(len(value) for value in rows) != _EXPECTED_COHORT_COUNTS:
+            raise ValueError("split cohort counts differ from 1248/276/1329")
+        covered = np.concatenate(rows)
+        if not np.array_equal(np.sort(covered), np.arange(len(times), dtype=np.int64)):
+            raise ValueError("split cohorts overlap or do not cover the complete issue index")
+
+        day_values = np.asarray(
+            [_local_midnight_epoch(int(times[row])) for row in expected_test], dtype=np.int64
+        )
+        expected_day_starts = np.unique(day_values)
+        expected_day_rows = tuple(
+            expected_test[day_values == day].astype(np.int64) for day in expected_day_starts
+        )
+        actual_day_starts = np.asarray(self._test_day_starts)
+        actual_day_rows = tuple(np.asarray(value) for value in self._test_day_row_values)
+        if actual_day_starts.dtype != np.dtype(np.int64) or actual_day_starts.ndim != 1:
+            raise ValueError("test day starts must be a one-dimensional int64 array")
+        if not np.array_equal(actual_day_starts, expected_day_starts) or len(
+            actual_day_rows
+        ) != len(expected_day_rows):
+            raise ValueError("test day blocks differ from the frozen local-day partition")
+        if not all(
+            actual.dtype == np.dtype(np.int64)
+            and actual.ndim == 1
+            and np.array_equal(actual, expected)
+            for actual, expected in zip(actual_day_rows, expected_day_rows, strict=True)
+        ):
+            raise ValueError("test day row blocks are inconsistent with the test cohort")
+        expected_days = tuple(
+            int(datetime(2019, 5, day, tzinfo=_ZONE).timestamp()) for day in range(18, 32)
+        )
+        if (
+            tuple(int(value) for value in expected_day_starts) != expected_days
+            or tuple(len(value) for value in expected_day_rows) != _EXPECTED_TEST_DAY_COUNTS
+        ):
+            raise ValueError("test split must contain the exact 14 frozen local-day blocks")
+        if self._validation_start_utc_s != validation_start or self._test_start_utc_s != test_start:
+            raise ValueError("split boundary fields differ from the frozen config")
+
+        immutable_times = _immutable(times, dtype=np.int64)
+        immutable_rows = tuple(_immutable(value, dtype=np.int64) for value in rows)
+        immutable_days = _immutable(actual_day_starts, dtype=np.int64)
+        immutable_day_rows = tuple(_immutable(value, dtype=np.int64) for value in actual_day_rows)
+        provenance_arrays = (
+            immutable_times,
+            *immutable_rows,
+            immutable_days,
+            *immutable_day_rows,
+        )
+        expected_provenance = _split_provenance_sha256(config_json, provenance_arrays)
+        if self._frozen_provenance_sha256 != expected_provenance:
+            raise ValueError("split frozen provenance digest is inconsistent")
+        object.__setattr__(self, "issue_times", immutable_times)
+        object.__setattr__(self, "train_rows", immutable_rows[0])
+        object.__setattr__(self, "validation_rows", immutable_rows[1])
+        object.__setattr__(self, "test_rows", immutable_rows[2])
+        object.__setattr__(self, "_test_day_starts", immutable_days)
+        object.__setattr__(self, "_test_day_row_values", immutable_day_rows)
+
+        for horizon in HORIZONS_MINUTES:
+            selection_counts = (
+                len(self.selection_fit_rows(horizon)),
+                len(self.validation_score_rows(horizon)),
+            )
+            if selection_counts != _EXPECTED_SELECTION_COUNTS[horizon]:
+                raise ValueError(
+                    f"horizon {horizon} selection row counts differ from the frozen protocol"
+                )
+            rolling = self.rolling_fit_rows(horizon)
+            if (
+                len(next(iter(rolling.values()))) != _EXPECTED_FIRST_ROLLING_COUNTS[horizon]
+                or len(next(reversed(rolling.values()))) != _EXPECTED_LAST_ROLLING_COUNTS[horizon]
+            ):
+                raise ValueError(
+                    f"horizon {horizon} rolling-fit row counts differ from the frozen protocol"
+                )
 
     @classmethod
     def from_config(
         cls,
         issue_times: Any,
         config: Mapping[str, Any],
-        *,
-        require_frozen_counts: bool = True,
     ) -> Gate1TimeSplit:
-        _require_model_config(config)
+        canonical = _require_model_config(config)
         times = np.asarray(issue_times)
         if times.dtype != np.dtype(np.int64) or times.ndim != 1:
             raise ValueError("issue-time index must be a one-dimensional int64 array")
-        if not len(times) or np.any(np.diff(times) <= 0):
-            raise ValueError("issue-time index must be strictly increasing and unique")
-        if np.any(times % 900 != 0):
-            raise ValueError("issue-time index must remain on the frozen 15-minute UTC grid")
-        parsed = parse_time_split_boundaries(config["time_split"])
+        parsed = parse_time_split_boundaries(canonical["time_split"])
         train_start = int(parsed["initial_train"]["start_local"].timestamp())
         validation_start = int(parsed["validation"]["start_local"].timestamp())
         test_start = int(parsed["rolling_test"]["start_local"].timestamp())
@@ -256,90 +370,44 @@ class Gate1TimeSplit:
             np.int64
         )
         test = np.flatnonzero((times >= test_start) & (times < test_end)).astype(np.int64)
-        covered = np.concatenate((train, validation, test))
-        if len(covered) != len(times) or not np.array_equal(
-            np.sort(covered), np.arange(len(times))
-        ):
-            raise ValueError("issue-time rows must be fully covered by the three half-open cohorts")
-
         day_values = np.asarray(
             [_local_midnight_epoch(int(times[row])) for row in test], dtype=np.int64
         )
         day_starts = np.unique(day_values)
-        day_rows = tuple(_immutable(test[day_values == day], dtype=np.int64) for day in day_starts)
-        if require_frozen_counts:
-            actual_counts = (len(train), len(validation), len(test))
-            if actual_counts != _EXPECTED_COHORT_COUNTS:
-                raise ValueError(
-                    "frozen split must contain exactly 2,853 rows as 1248/276/1329; "
-                    f"found {actual_counts!r}"
-                )
-            if len(day_starts) != 14 or tuple(len(rows) for rows in day_rows) != (
-                _EXPECTED_TEST_DAY_COUNTS
-            ):
-                raise ValueError("frozen test split must contain the exact 14 local-day row blocks")
-            expected_days = tuple(
-                int(datetime(2019, 5, day, tzinfo=_ZONE).timestamp()) for day in range(18, 32)
-            )
-            if tuple(int(value) for value in day_starts) != expected_days:
-                raise ValueError(
-                    "frozen test split must cover local dates 2019-05-18 through 2019-05-31"
-                )
-
-        config_payload = {key: value for key, value in config.items() if key != "hgb_grid"}
-        result = cls(
-            issue_times=_immutable(times, dtype=np.int64),
-            train_rows=_immutable(train, dtype=np.int64),
-            validation_rows=_immutable(validation, dtype=np.int64),
-            test_rows=_immutable(test, dtype=np.int64),
-            _test_day_starts=_immutable(day_starts, dtype=np.int64),
-            _test_day_row_values=day_rows,
+        day_rows = tuple(test[day_values == day].astype(np.int64) for day in day_starts)
+        config_payload = {key: canonical[key] for key in canonical if key != "hgb_grid"}
+        config_json = _canonical_json_bytes(config_payload)
+        immutable_values = (
+            _immutable(times, dtype=np.int64),
+            _immutable(train, dtype=np.int64),
+            _immutable(validation, dtype=np.int64),
+            _immutable(test, dtype=np.int64),
+            _immutable(day_starts, dtype=np.int64),
+            *(_immutable(value, dtype=np.int64) for value in day_rows),
+        )
+        provenance = _split_provenance_sha256(config_json, immutable_values)
+        return cls(
+            issue_times=immutable_values[0],
+            train_rows=immutable_values[1],
+            validation_rows=immutable_values[2],
+            test_rows=immutable_values[3],
+            _test_day_starts=immutable_values[4],
+            _test_day_row_values=tuple(immutable_values[5:]),
             _validation_start_utc_s=validation_start,
             _test_start_utc_s=test_start,
-            _config_json=_canonical_json_bytes(config_payload),
+            _config_json=config_json,
+            _frozen_provenance_sha256=provenance,
         )
-        if require_frozen_counts:
-            for horizon in HORIZONS_MINUTES:
-                selection_counts = (
-                    len(result.selection_fit_rows(horizon)),
-                    len(result.validation_score_rows(horizon)),
-                )
-                if selection_counts != _EXPECTED_SELECTION_COUNTS[horizon]:
-                    raise ValueError(
-                        f"horizon {horizon} selection row counts differ from the frozen protocol"
-                    )
-                rolling = result.rolling_fit_rows(horizon)
-                if (
-                    len(next(iter(rolling.values()))) != _EXPECTED_FIRST_ROLLING_COUNTS[horizon]
-                    or len(next(reversed(rolling.values())))
-                    != _EXPECTED_LAST_ROLLING_COUNTS[horizon]
-                ):
-                    raise ValueError(
-                        f"horizon {horizon} rolling-fit row counts differ from the frozen protocol"
-                    )
-        return result
 
     @property
     def config(self) -> dict[str, Any]:
-        """Return a fresh JSON-decoded copy of the path-free frozen config."""
+        """Return a fresh fully validated config in authoritative declaration order."""
 
-        payload = json.loads(self._config_json.decode("ascii"))
-        hgb = payload["hgb"]
-        payload["hgb"] = {
-            key: hgb[key]
-            for key in (
-                "learning_rate",
-                "max_leaf_nodes",
-                "min_samples_leaf",
-                "l2_regularization",
-                "max_iter",
-                "early_stopping",
-                "loss",
-                "random_state",
-                "categorical_features",
-            )
-        }
-        return payload
+        return _require_model_config(json.loads(self._config_json.decode("ascii")))
+
+    @property
+    def frozen_provenance_sha256(self) -> str:
+        return self._frozen_provenance_sha256
 
     @property
     def test_day_rows(self) -> Mapping[int, np.ndarray]:
@@ -375,23 +443,7 @@ class Gate1TimeSplit:
 
 
 def _schema_tier(block: FeatureBlock) -> str:
-    if not isinstance(block, FeatureBlock):
-        raise TypeError("preprocessing input must be a FeatureBlock")
-    raw_dimension = block.values.shape[1]
-    matching = [
-        tier for tier, dimension in _EXPECTED_RAW_DIMENSIONS.items() if dimension == raw_dimension
-    ]
-    if len(matching) != 1:
-        raise ValueError("feature block raw dimension is outside the frozen M1-M4 schema")
-    tier = matching[0]
-    if int(np.sum(block.nullable_mask)) != _EXPECTED_INDICATOR_COUNTS[tier]:
-        raise ValueError(f"{tier} nullable-mask count differs from the frozen schema")
-    lowered = {name.lower() for name in block.feature_names}
-    if lowered & _FORBIDDEN_FEATURE_NAMES:
-        raise ValueError("feature schema contains a forbidden structural index")
-    if any("trajectory_ref" in name.lower() for name in block.feature_names):
-        raise ValueError("feature schema contains a forbidden trajectory reference")
-    return tier
+    return validate_feature_block_schema(block)
 
 
 class _SchemaBoundPreprocessor:
@@ -422,19 +474,21 @@ class _SchemaBoundPreprocessor:
         nullable = np.asarray(nullable_mask)
         if nullable.dtype != np.dtype(np.bool_) or nullable.shape != (len(names),):
             raise ValueError("feature nullable-mask schema is invalid")
+        if self._feature_names is not None and (
+            names != self._feature_names or not np.array_equal(nullable, self._nullable_mask)
+        ):
+            raise ValueError("transform feature schema differs from the fitted schema")
         raw_dimension = len(names)
         matches = [
             tier
             for tier, dimension in _EXPECTED_RAW_DIMENSIONS.items()
             if dimension == raw_dimension
         ]
-        if len(matches) != 1 or int(np.sum(nullable)) != _EXPECTED_INDICATOR_COUNTS[matches[0]]:
-            raise ValueError("feature schema differs from the frozen M1-M4 dimensions")
+        if len(matches) != 1:
+            raise ValueError("feature schema differs from the canonical M1-M4 dimensions")
         tier = matches[0]
-        if self._feature_names is not None and (
-            names != self._feature_names or not np.array_equal(nullable, self._nullable_mask)
-        ):
-            raise ValueError("transform feature schema differs from the fitted schema")
+        if self._tier != tier:
+            raise ValueError("transform feature tier differs from the fitted canonical schema")
         return tier, nullable
 
 
@@ -620,15 +674,15 @@ def frozen_model_candidates(
 ) -> tuple[Mapping[str, Any], ...]:
     """Return the complete effective parameter grid in frozen declaration order."""
 
-    _require_model_config(config)
+    canonical_config = _require_model_config(config)
     learner_name = _strict_learner(learner)
     candidates = _frozen_candidates_without_config(learner_name)
     if learner_name == "ridge":
-        config_alphas = tuple(config["ridge"]["alpha"])
+        config_alphas = tuple(canonical_config["ridge"]["alpha"])
         if tuple(candidate["alpha"] for candidate in candidates) != config_alphas:
             raise ValueError("effective Ridge candidates differ from config")
     else:
-        varying = expand_hgb_grid(config["hgb"])
+        varying = expand_hgb_grid(canonical_config["hgb"])
         for effective, declared in zip(candidates, varying, strict=True):
             for key in (
                 "learning_rate",
@@ -665,6 +719,69 @@ def make_frozen_estimator(
     return HistGradientBoostingRegressor(**decoded)
 
 
+def _feature_schema_sha256(block: FeatureBlock) -> str:
+    tier = validate_feature_block_schema(block)
+    payload = {
+        "tier": tier,
+        "feature_names": list(block.feature_names),
+        "nullable_mask": [bool(value) for value in block.nullable_mask],
+    }
+    return hashlib.sha256(_canonical_json_bytes(payload)).hexdigest()
+
+
+def _feature_block_sha256(block: FeatureBlock) -> str:
+    """Bind a selection result to the exact row-indexed feature matrix."""
+
+    digest = hashlib.sha256()
+    digest.update(_feature_schema_sha256(block).encode("ascii"))
+    for array in (block.issue_times, block.values):
+        value = np.ascontiguousarray(array)
+        digest.update(value.dtype.str.encode("ascii"))
+        digest.update(np.asarray(value.shape, dtype=np.int64).tobytes())
+        digest.update(value.tobytes(order="C"))
+    return digest.hexdigest()
+
+
+def _snapshot_target(
+    snapshot: Gate1Snapshot,
+    split: Gate1TimeSplit,
+    horizon_minutes: int,
+) -> tuple[np.ndarray, str]:
+    """Bind one label column to its verified snapshot, issue index, and horizon."""
+
+    if not isinstance(snapshot, Gate1Snapshot):
+        raise TypeError("model target source must be a verified Gate1Snapshot")
+    horizon = _strict_horizon(horizon_minutes)
+    config = split.config
+    if snapshot.data_snapshot_sha256 != config["data_snapshot_sha256"]:
+        raise ValueError("target snapshot SHA differs from the frozen config")
+    snapshot_issue_times = np.asarray(snapshot.issue_times)
+    if snapshot_issue_times.dtype != np.dtype(np.int64) or snapshot_issue_times.ndim != 1:
+        raise ValueError("target snapshot issue index must retain its verified int64 dtype")
+    if not np.array_equal(snapshot_issue_times, split.issue_times):
+        raise ValueError("target snapshot and split must share the exact ordered issue index")
+    horizons = np.asarray(snapshot.horizons)
+    if horizons.dtype != np.dtype(np.int16) or horizons.ndim != 1:
+        raise ValueError("target snapshot horizons must retain their verified int16 dtype")
+    if tuple(int(value) for value in horizons) != HORIZONS_MINUTES:
+        raise ValueError("target snapshot horizons differ from the frozen declaration")
+    labels = np.asarray(snapshot.labels)
+    if labels.dtype != np.dtype(np.float32):
+        raise ValueError("target snapshot labels must retain their verified float32 dtype")
+    if labels.shape != (len(split.issue_times), len(HORIZONS_MINUTES)):
+        raise ValueError("target snapshot labels must align with all issue rows and horizons")
+    if not np.isfinite(labels).all():
+        raise ValueError("target snapshot labels must be complete finite numeric values")
+    position = HORIZONS_MINUTES.index(horizon)
+    values = _immutable(labels[:, position], dtype=np.float64)
+    digest = hashlib.sha256()
+    digest.update(snapshot.data_snapshot_sha256.encode("ascii"))
+    digest.update(split.frozen_provenance_sha256.encode("ascii"))
+    digest.update(np.asarray([horizon], dtype=np.int16).tobytes())
+    digest.update(values.tobytes(order="C"))
+    return values, digest.hexdigest()
+
+
 @dataclass(frozen=True, slots=True)
 class SelectionRecord:
     """Immutable validation evidence for one learner, tier, and horizon."""
@@ -677,6 +794,11 @@ class SelectionRecord:
     selected_candidate_index: int
     selection_fit_count: int
     validation_score_count: int
+    data_snapshot_sha256: str
+    split_provenance_sha256: str
+    target_sha256: str
+    feature_schema_sha256: str
+    feature_block_sha256: str
 
     def __post_init__(self) -> None:
         learner = _strict_learner(self.learner)
@@ -713,6 +835,11 @@ class SelectionRecord:
             <= 0
         ):
             raise AssertionError("unreachable")
+        _validate_sha256(self.data_snapshot_sha256, "selection data snapshot")
+        _validate_sha256(self.split_provenance_sha256, "selection split provenance")
+        _validate_sha256(self.target_sha256, "selection target provenance")
+        _validate_sha256(self.feature_schema_sha256, "selection feature schema")
+        _validate_sha256(self.feature_block_sha256, "selection feature block")
         object.__setattr__(self, "learner", learner)
         object.__setattr__(self, "tier", str(self.tier))
         object.__setattr__(self, "horizon_minutes", int(self.horizon_minutes))
@@ -731,6 +858,11 @@ class SelectionRecord:
         selected_candidate_index: int,
         selection_fit_count: int,
         validation_score_count: int,
+        data_snapshot_sha256: str,
+        split_provenance_sha256: str,
+        target_sha256: str,
+        feature_schema_sha256: str,
+        feature_block_sha256: str,
     ) -> SelectionRecord:
         parameter_json = tuple(_canonical_json_bytes(dict(params)) for params in candidate_params)
         return cls(
@@ -742,6 +874,11 @@ class SelectionRecord:
             selected_candidate_index=selected_candidate_index,
             selection_fit_count=selection_fit_count,
             validation_score_count=validation_score_count,
+            data_snapshot_sha256=data_snapshot_sha256,
+            split_provenance_sha256=split_provenance_sha256,
+            target_sha256=target_sha256,
+            feature_schema_sha256=feature_schema_sha256,
+            feature_block_sha256=feature_block_sha256,
         )
 
     @property
@@ -855,13 +992,17 @@ class PersistencePrediction:
     def __post_init__(self) -> None:
         if self.name not in PERSISTENCE_ORDER:
             raise ValueError("unknown persistence baseline")
-        _strict_horizon(self.horizon_minutes)
+        horizon = _strict_horizon(self.horizon_minutes)
         times = np.asarray(self.issue_times)
         predictions = np.asarray(self.predictions)
         available = np.asarray(self.availability)
         references = np.asarray(self.reference_times)
         if times.dtype != np.dtype(np.int64) or times.ndim != 1 or not len(times):
             raise ValueError("persistence issue index must be a nonempty int64 vector")
+        if np.any(np.diff(times) <= 0):
+            raise ValueError("persistence issue index must be strictly increasing and unique")
+        if np.any(times % 900 != 0):
+            raise ValueError("persistence issue index must remain on the 15-minute UTC grid")
         if predictions.shape != times.shape or references.shape != times.shape:
             raise ValueError("persistence values and references must align with issue times")
         if available.dtype != np.dtype(np.bool_) or available.shape != times.shape:
@@ -870,6 +1011,20 @@ class PersistencePrediction:
             raise ValueError("persistence unavailable rows must be exactly the NaN predictions")
         if not np.isfinite(predictions[available]).all():
             raise ValueError("available persistence predictions must be finite")
+        if references.dtype != np.dtype(np.int64):
+            raise ValueError("persistence reference index must be int64")
+        if self.name == "last_value":
+            expected_references = times - 900
+        else:
+            days = 1 if self.name == "previous_day" else 7
+            expected_references = np.asarray(
+                [_calendar_shift_epoch(int(issue + horizon * 60 - 900), days) for issue in times],
+                dtype=np.int64,
+            )
+        if not np.array_equal(references, expected_references):
+            raise ValueError("persistence reference formula differs from the frozen baseline")
+        object.__setattr__(self, "name", str(self.name))
+        object.__setattr__(self, "horizon_minutes", horizon)
         object.__setattr__(self, "issue_times", _immutable(times, dtype=np.int64))
         object.__setattr__(self, "predictions", _immutable(predictions, dtype=np.float64))
         object.__setattr__(self, "availability", _immutable(available, dtype=np.bool_))
@@ -942,21 +1097,10 @@ def persistence_predictions(
     return MappingProxyType(output)
 
 
-def _target_vector(target: Any, row_count: int) -> np.ndarray:
-    values = np.asarray(target)
-    if (
-        values.ndim != 1
-        or values.shape != (row_count,)
-        or not np.issubdtype(values.dtype, np.number)
-    ):
-        raise ValueError("target must be one numeric vector aligned to the feature block")
-    values = values.astype(np.float64, copy=False)
-    if not np.isfinite(values).all():
-        raise ValueError("target must be finite for the complete common row universe")
-    return values
-
-
 def _require_block_split_identity(feature_block: FeatureBlock, split: Gate1TimeSplit) -> str:
+    if not isinstance(split, Gate1TimeSplit):
+        raise TypeError("model split must be a frozen Gate1TimeSplit")
+    split.__post_init__()
     tier = _schema_tier(feature_block)
     if not np.array_equal(feature_block.issue_times, split.issue_times):
         raise ValueError("feature block and time split must share the exact ordered row index")
@@ -967,27 +1111,31 @@ def _default_preprocessor_factory(learner: str) -> RidgePreprocessor | HGBPrepro
     return RidgePreprocessor() if learner == "ridge" else HGBPreprocessor()
 
 
-def select_model_params(
+def _select_model_params_with_factories(
     *,
     learner: str,
     tier: str,
     horizon_minutes: int,
     feature_block: FeatureBlock,
-    target: Any,
+    snapshot: Gate1Snapshot,
     split: Gate1TimeSplit,
     config: Mapping[str, Any],
-    estimator_factory: EstimatorFactory = make_frozen_estimator,
-    preprocessor_factory: PreprocessorFactory = _default_preprocessor_factory,
+    estimator_factory: EstimatorFactory,
+    preprocessor_factory: PreprocessorFactory,
 ) -> SelectionRecord:
-    """Evaluate every frozen candidate on the embargo-safe validation rows."""
+    """Injection seam for focused tests; formal callers use the public wrapper."""
 
     learner_name = _strict_learner(learner)
     tier_name = _strict_tier(tier)
     horizon = _strict_horizon(horizon_minutes)
+    canonical_config = _require_model_config(config)
+    split_config = split.config
+    if _canonical_json_bytes(canonical_config) != _canonical_json_bytes(split_config):
+        raise ValueError("model config differs from the split's frozen config provenance")
     actual_tier = _require_block_split_identity(feature_block, split)
     if actual_tier != tier_name:
         raise ValueError("declared tier differs from the feature-block schema")
-    values = _target_vector(target, len(split.issue_times))
+    values, target_sha256 = _snapshot_target(snapshot, split, horizon)
     fit_rows = split.selection_fit_rows(horizon)
     score_rows = split.validation_score_rows(horizon)
     processor = preprocessor_factory(learner_name)
@@ -999,7 +1147,7 @@ def select_model_params(
         raise RuntimeError(
             f"{learner_name} {tier_name} horizon {horizon} preprocessing failed"
         ) from exc
-    candidates = frozen_model_candidates(learner_name, config)
+    candidates = frozen_model_candidates(learner_name, canonical_config)
     scores = np.empty(len(candidates), dtype=np.float64)
     for position, params in enumerate(candidates):
         try:
@@ -1028,27 +1176,67 @@ def select_model_params(
         selected_candidate_index=selected,
         selection_fit_count=len(fit_rows),
         validation_score_count=len(score_rows),
+        data_snapshot_sha256=snapshot.data_snapshot_sha256,
+        split_provenance_sha256=split.frozen_provenance_sha256,
+        target_sha256=target_sha256,
+        feature_schema_sha256=_feature_schema_sha256(feature_block),
+        feature_block_sha256=_feature_block_sha256(feature_block),
     )
 
 
-def rolling_origin_predict(
+def select_model_params(
+    *,
+    learner: str,
+    tier: str,
+    horizon_minutes: int,
+    feature_block: FeatureBlock,
+    snapshot: Gate1Snapshot,
+    split: Gate1TimeSplit,
+    config: Mapping[str, Any],
+) -> SelectionRecord:
+    """Evaluate every frozen candidate on its snapshot-bound validation target."""
+
+    return _select_model_params_with_factories(
+        learner=learner,
+        tier=tier,
+        horizon_minutes=horizon_minutes,
+        feature_block=feature_block,
+        snapshot=snapshot,
+        split=split,
+        config=config,
+        estimator_factory=make_frozen_estimator,
+        preprocessor_factory=_default_preprocessor_factory,
+    )
+
+
+def _rolling_origin_predict_with_factories(
     *,
     feature_block: FeatureBlock,
-    target: Any,
+    snapshot: Gate1Snapshot,
     split: Gate1TimeSplit,
     selection: SelectionRecord,
-    estimator_factory: EstimatorFactory = make_frozen_estimator,
-    preprocessor_factory: PreprocessorFactory = _default_preprocessor_factory,
+    estimator_factory: EstimatorFactory,
+    preprocessor_factory: PreprocessorFactory,
 ) -> PredictionBundle:
-    """Refit fixed selected parameters once per local test day and predict that day."""
+    """Injection seam for rolling tests; formal callers use the public wrapper."""
 
     if not isinstance(selection, SelectionRecord):
         raise TypeError("rolling prediction requires an immutable SelectionRecord")
     tier = _require_block_split_identity(feature_block, split)
     if tier != selection.tier:
         raise ValueError("selection tier differs from the rolling feature block")
-    target_values = _target_vector(target, len(split.issue_times))
     horizon = selection.horizon_minutes
+    target_values, target_sha256 = _snapshot_target(snapshot, split, horizon)
+    if selection.data_snapshot_sha256 != snapshot.data_snapshot_sha256:
+        raise ValueError("selection data snapshot differs from the rolling snapshot")
+    if selection.split_provenance_sha256 != split.frozen_provenance_sha256:
+        raise ValueError("selection split provenance differs from the rolling split")
+    if selection.target_sha256 != target_sha256:
+        raise ValueError("selection target provenance differs from the rolling target")
+    if selection.feature_schema_sha256 != _feature_schema_sha256(feature_block):
+        raise ValueError("selection feature schema differs from the rolling feature block")
+    if selection.feature_block_sha256 != _feature_block_sha256(feature_block):
+        raise ValueError("selection feature block provenance differs from the rolling block")
     expected_selection_counts = (
         len(split.selection_fit_rows(horizon)),
         len(split.validation_score_rows(horizon)),
@@ -1112,88 +1300,114 @@ def rolling_origin_predict(
     )
 
 
+def rolling_origin_predict(
+    *,
+    feature_block: FeatureBlock,
+    snapshot: Gate1Snapshot,
+    split: Gate1TimeSplit,
+    selection: SelectionRecord,
+) -> PredictionBundle:
+    """Refit one fixed selected model per local test day without test-time injection."""
+
+    return _rolling_origin_predict_with_factories(
+        feature_block=feature_block,
+        snapshot=snapshot,
+        split=split,
+        selection=selection,
+        estimator_factory=make_frozen_estimator,
+        preprocessor_factory=_default_preprocessor_factory,
+    )
+
+
 def run_model_task(
     *,
     learner: str,
     tier: str,
     horizon_minutes: int,
     feature_block: FeatureBlock,
-    target: Any,
+    snapshot: Gate1Snapshot,
     split: Gate1TimeSplit,
     config: Mapping[str, Any],
-    estimator_factory: EstimatorFactory = make_frozen_estimator,
-    preprocessor_factory: PreprocessorFactory = _default_preprocessor_factory,
 ) -> tuple[SelectionRecord, PredictionBundle]:
-    """Run one canonical outer-parallel task; all work inside remains serial."""
+    """Run one formal canonical task with no estimator/preprocessor injection surface."""
 
     selection = select_model_params(
         learner=learner,
         tier=tier,
         horizon_minutes=horizon_minutes,
         feature_block=feature_block,
-        target=target,
+        snapshot=snapshot,
         split=split,
         config=config,
-        estimator_factory=estimator_factory,
-        preprocessor_factory=preprocessor_factory,
     )
     bundle = rolling_origin_predict(
         feature_block=feature_block,
-        target=target,
+        snapshot=snapshot,
         split=split,
         selection=selection,
-        estimator_factory=estimator_factory,
-        preprocessor_factory=preprocessor_factory,
     )
     return selection, bundle
 
 
-def _validate_feature_dimensions(
-    value: Mapping[str, Mapping[str, Any]],
+def _feature_dimensions_from_blocks(
+    value: Mapping[str, FeatureBlock],
+    split: Gate1TimeSplit,
 ) -> dict[str, dict[str, int]]:
     if tuple(value) != TIER_ORDER:
-        raise ValueError("feature dimensions must use the complete canonical M1-M4 order")
+        raise ValueError("feature blocks must use the complete canonical M1-M4 order")
     result: dict[str, dict[str, int]] = {}
     for tier in TIER_ORDER:
-        item = value[tier]
-        if set(item) != {"raw", "indicators", "input"}:
-            raise ValueError(f"{tier} feature dimensions must contain raw/indicators/input only")
+        block = value[tier]
+        validate_feature_block_schema(block, tier=tier)
+        if not np.array_equal(block.issue_times, split.issue_times):
+            raise ValueError(f"{tier} feature block differs from the frozen split issue index")
         expected = {
             "raw": _EXPECTED_RAW_DIMENSIONS[tier],
             "indicators": _EXPECTED_INDICATOR_COUNTS[tier],
             "input": _EXPECTED_INPUT_DIMENSIONS[tier],
         }
         actual = {
-            "raw": _strict_integer(item["raw"], f"{tier} raw", positive=True),
-            "indicators": _strict_integer(item["indicators"], f"{tier} indicators"),
-            "input": _strict_integer(item["input"], f"{tier} input", positive=True),
+            "raw": int(block.values.shape[1]),
+            "indicators": int(np.sum(block.nullable_mask)),
+            "input": int(block.values.shape[1] + np.sum(block.nullable_mask)),
         }
-        if actual["indicators"] < 0:
-            raise ValueError(f"{tier} indicators must be nonnegative")
         if actual != expected:
             raise ValueError(f"{tier} feature dimensions differ from the frozen schema")
         result[tier] = actual
     return result
 
 
-def _validate_persistence_coverage(
-    value: Mapping[str, Mapping[str, Any]],
+def _persistence_coverage_from_results(
+    value: Mapping[int, Mapping[str, PersistencePrediction]],
+    snapshot: Gate1Snapshot,
+    split: Gate1TimeSplit,
 ) -> dict[str, dict[str, int]]:
-    if tuple(value) != PERSISTENCE_ORDER:
-        raise ValueError("persistence coverage must use the complete canonical baseline order")
-    result: dict[str, dict[str, int]] = {}
-    for baseline in PERSISTENCE_ORDER:
-        per_horizon = value[baseline]
-        if set(per_horizon) != {str(horizon) for horizon in HORIZONS_MINUTES}:
-            raise ValueError("persistence coverage must contain all five horizon keys")
-        expected = _EXPECTED_PERSISTENCE_COVERAGE[baseline]
-        result[baseline] = {}
-        for horizon in HORIZONS_MINUTES:
-            count = _strict_integer(
-                per_horizon[str(horizon)], f"{baseline} horizon {horizon} coverage"
-            )
-            if count != expected:
-                raise ValueError(f"{baseline} horizon {horizon} availability must equal {expected}")
+    if tuple(value) != HORIZONS_MINUTES:
+        raise ValueError("persistence results must use the complete canonical horizon order")
+    result: dict[str, dict[str, int]] = {baseline: {} for baseline in PERSISTENCE_ORDER}
+    for horizon in HORIZONS_MINUTES:
+        per_horizon = value[horizon]
+        if tuple(per_horizon) != PERSISTENCE_ORDER:
+            raise ValueError("persistence results must use the complete canonical baseline order")
+        recomputed = persistence_predictions(snapshot, split.test_rows, horizon_minutes=horizon)
+        for baseline in PERSISTENCE_ORDER:
+            actual = per_horizon[baseline]
+            expected_result = recomputed[baseline]
+            if not isinstance(actual, PersistencePrediction):
+                raise TypeError("persistence manifest inputs must be PersistencePrediction objects")
+            if actual.name != baseline or actual.horizon_minutes != horizon:
+                raise ValueError("persistence result identity differs from its manifest key")
+            for field in ("issue_times", "availability", "reference_times"):
+                if not np.array_equal(getattr(actual, field), getattr(expected_result, field)):
+                    raise ValueError(f"persistence {baseline} {field} differs from recomputation")
+            if not np.array_equal(actual.predictions, expected_result.predictions, equal_nan=True):
+                raise ValueError(f"persistence {baseline} predictions differ from recomputation")
+            count = int(np.sum(actual.availability))
+            if count != _EXPECTED_PERSISTENCE_COVERAGE[baseline]:
+                raise ValueError(
+                    f"{baseline} horizon {horizon} availability must equal "
+                    f"{_EXPECTED_PERSISTENCE_COVERAGE[baseline]}"
+                )
             result[baseline][str(horizon)] = count
     return result
 
@@ -1201,19 +1415,39 @@ def _validate_persistence_coverage(
 def build_model_selection_manifest(
     *,
     config: Mapping[str, Any],
+    snapshot: Gate1Snapshot,
     split: Gate1TimeSplit,
+    feature_blocks: Mapping[str, FeatureBlock],
     selections: Sequence[SelectionRecord],
     predictions: Sequence[PredictionBundle],
-    feature_dimensions: Mapping[str, Mapping[str, Any]],
-    persistence_coverage: Mapping[str, Mapping[str, Any]],
+    persistence_by_horizon: Mapping[int, Mapping[str, PersistencePrediction]],
 ) -> dict[str, Any]:
     """Build the complete aggregate-only model-selection manifest."""
 
-    _require_model_config(config)
+    canonical_config = _require_model_config(config)
     if not isinstance(split, Gate1TimeSplit):
         raise TypeError("manifest split must be a Gate1TimeSplit")
-    dimensions = _validate_feature_dimensions(feature_dimensions)
-    persistence = _validate_persistence_coverage(persistence_coverage)
+    split.__post_init__()
+    if _canonical_json_bytes(canonical_config) != _canonical_json_bytes(split.config):
+        raise ValueError("manifest config differs from the split's frozen provenance")
+    target_provenance = {
+        str(horizon): _snapshot_target(snapshot, split, horizon)[1] for horizon in HORIZONS_MINUTES
+    }
+    dimensions = _feature_dimensions_from_blocks(feature_blocks, split)
+    feature_schema_provenance = {
+        tier: _feature_schema_sha256(feature_blocks[tier]) for tier in TIER_ORDER
+    }
+    feature_block_provenance = {
+        tier: _feature_block_sha256(feature_blocks[tier]) for tier in TIER_ORDER
+    }
+    row_index_used_as_feature = any(
+        name in _FORBIDDEN_FEATURE_NAMES
+        for block in feature_blocks.values()
+        for name in block.feature_names
+    )
+    if row_index_used_as_feature:
+        raise ValueError("row identity or session identifier entered the model feature schema")
+    persistence = _persistence_coverage_from_results(persistence_by_horizon, snapshot, split)
     canonical_tasks = [
         (learner, tier, horizon)
         for learner in LEARNER_ORDER
@@ -1241,11 +1475,43 @@ def build_model_selection_manifest(
 
     selection_items: list[dict[str, Any]] = []
     canonical_test_times = split.issue_times[split.test_rows]
+    common_row_identity = all(
+        np.array_equal(prediction_map[key].issue_times, canonical_test_times)
+        for key in canonical_tasks
+    )
+    finite_learning_outputs = all(
+        np.isfinite(prediction_map[key].y_true).all()
+        and np.isfinite(prediction_map[key].predictions).all()
+        and np.isfinite(selection_map[key].candidate_validation_mae).all()
+        for key in canonical_tasks
+    )
+    parameter_hash_constant = all(
+        len(np.unique(prediction_map[key].parameter_hashes)) == 1 for key in canonical_tasks
+    )
+    if not common_row_identity:
+        raise ValueError("test-refit bundles do not share the canonical test row identity")
+    if not finite_learning_outputs:
+        raise ValueError("manifest model results contain non-finite learning outputs")
+    if not parameter_hash_constant:
+        raise ValueError("manifest model results changed parameters during testing")
     truth_by_horizon: dict[int, np.ndarray] = {}
     for key in canonical_tasks:
         record = selection_map[key]
         bundle = prediction_map[key]
         horizon = record.horizon_minutes
+        target_values, target_sha256 = _snapshot_target(snapshot, split, horizon)
+        if record.data_snapshot_sha256 != snapshot.data_snapshot_sha256:
+            raise ValueError("selection snapshot provenance differs from the manifest snapshot")
+        if record.split_provenance_sha256 != split.frozen_provenance_sha256:
+            raise ValueError("selection split provenance differs from the manifest split")
+        if record.target_sha256 != target_provenance[str(horizon)] or (
+            target_sha256 != target_provenance[str(horizon)]
+        ):
+            raise ValueError("selection target provenance differs from the snapshot label column")
+        if record.feature_schema_sha256 != feature_schema_provenance[record.tier]:
+            raise ValueError("selection feature schema differs from the actual feature block")
+        if record.feature_block_sha256 != feature_block_provenance[record.tier]:
+            raise ValueError("selection feature block provenance differs from the manifest block")
         expected_counts = (
             len(split.selection_fit_rows(horizon)),
             len(split.validation_score_rows(horizon)),
@@ -1254,6 +1520,8 @@ def build_model_selection_manifest(
             raise ValueError("selection manifest row counts differ from the split")
         if not np.array_equal(bundle.issue_times, canonical_test_times):
             raise ValueError("test-refit bundle row identity differs from the common test rows")
+        if not np.array_equal(bundle.y_true, target_values[split.test_rows]):
+            raise ValueError("test-refit truth differs from the snapshot-bound horizon target")
         if horizon in truth_by_horizon:
             if not np.array_equal(bundle.y_true, truth_by_horizon[horizon]):
                 raise ValueError(
@@ -1325,8 +1593,17 @@ def build_model_selection_manifest(
         "horizon_row_counts": row_counts,
         "candidate_budgets": {"ridge": 4, "hgb": 16},
         "candidate_grids": {
-            learner: [dict(candidate) for candidate in frozen_model_candidates(learner, config)]
+            learner: [
+                dict(candidate) for candidate in frozen_model_candidates(learner, canonical_config)
+            ]
             for learner in LEARNER_ORDER
+        },
+        "provenance": {
+            "data_snapshot_sha256": snapshot.data_snapshot_sha256,
+            "split_sha256": split.frozen_provenance_sha256,
+            "target_sha256_by_horizon": target_provenance,
+            "feature_schema_sha256_by_tier": feature_schema_provenance,
+            "feature_block_sha256_by_tier": feature_block_provenance,
         },
         "preprocessing": {
             "ridge": (
@@ -1354,14 +1631,14 @@ def build_model_selection_manifest(
         "test_refit_count_per_task": 14,
         "selections": selection_items,
         "audits": {
-            "common_row_identity": "PASS",
-            "per_horizon_tier_row_identity": "PASS",
-            "test_parameter_hash_constant": "PASS",
+            "common_row_identity": common_row_identity,
+            "per_horizon_tier_row_identity": len(truth_by_horizon) == len(HORIZONS_MINUTES),
+            "test_parameter_hash_constant": parameter_hash_constant,
             "test_time_retuning": False,
             "test_prediction_clipping": False,
             "test_prediction_calibration": False,
-            "finite_learning_outputs": "PASS",
-            "row_index_used_as_feature": False,
+            "finite_learning_outputs": finite_learning_outputs,
+            "row_index_used_as_feature": row_index_used_as_feature,
             "full_test_values_published": False,
             "model_objects_published": False,
             "fitted_transform_statistics_published": False,

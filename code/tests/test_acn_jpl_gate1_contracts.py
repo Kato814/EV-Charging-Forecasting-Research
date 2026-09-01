@@ -4,8 +4,10 @@ import copy
 import hashlib
 import importlib
 import re
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import ModuleType
+from zoneinfo import ZoneInfo
 
 import pytest
 import tomllib
@@ -14,7 +16,22 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / "code/configs/acn_jpl_gate1_pilot_2019-05.yaml"
 ENVIRONMENT_PATH = ROOT / "environment-gate1-pilot.yml"
-EXPECTED_CONFIG_SHA256 = "dbc08a76d760a908273db4bf3394f6b24c01aaed37b0c0f3b5e31daa655645ec"
+EXPECTED_CONFIG_SHA256 = "852949542474f931159284365e5f54cbe1e2ca2437b4bc8f7ca40599cbeeeab5"
+EXPECTED_TIME_SPLIT = {
+    "timezone": "America/Los_Angeles",
+    "initial_train": {
+        "start_local": "2019-05-02T00:00:00-07:00",
+        "end_local_exclusive": "2019-05-15T00:00:00-07:00",
+    },
+    "validation": {
+        "start_local": "2019-05-15T00:00:00-07:00",
+        "end_local_exclusive": "2019-05-18T00:00:00-07:00",
+    },
+    "rolling_test": {
+        "start_local": "2019-05-18T00:00:00-07:00",
+        "end_local_exclusive": "2019-06-01T00:00:00-07:00",
+    },
+}
 
 
 def _contracts_module() -> ModuleType:
@@ -43,6 +60,7 @@ def test_frozen_gate1_grid_and_seeds() -> None:
         "max_iter",
         "early_stopping",
         "loss",
+        "random_state",
     )
     assert grid == [
         {
@@ -53,12 +71,14 @@ def test_frozen_gate1_grid_and_seeds() -> None:
             "max_iter": 300,
             "early_stopping": False,
             "loss": "squared_error",
+            "random_state": 20260901,
         }
         for learning_rate in (0.03, 0.08)
         for max_leaf_nodes in (15, 31)
         for min_samples_leaf in (20, 50)
         for l2_regularization in (0, 1)
     ]
+    assert {candidate["random_state"] for candidate in grid} == {config["seeds"]["model"]}
 
 
 def test_frozen_dates_horizons_windows_target_and_snapshot() -> None:
@@ -72,21 +92,39 @@ def test_frozen_dates_horizons_windows_target_and_snapshot() -> None:
     assert config["data_snapshot_sha256"] == (
         "7066ffc8ba42a98f73246acfbc62352fe55a1433a43cba80957c6034e3aeaa5d"
     )
-    assert config["time_split"] == {
-        "timezone": "America/Los_Angeles",
+    assert config["time_split"] == EXPECTED_TIME_SPLIT
+
+    zone = ZoneInfo("America/Los_Angeles")
+    boundaries = config["time_split_boundaries"]
+    assert boundaries == {
+        "timezone": zone,
         "initial_train": {
-            "start_local_date": "2019-05-02",
-            "end_local_date_inclusive": "2019-05-14",
+            "start_local": datetime(2019, 5, 2, tzinfo=zone),
+            "end_local_exclusive": datetime(2019, 5, 15, tzinfo=zone),
         },
         "validation": {
-            "start_local_date": "2019-05-15",
-            "end_local_date_inclusive": "2019-05-17",
+            "start_local": datetime(2019, 5, 15, tzinfo=zone),
+            "end_local_exclusive": datetime(2019, 5, 18, tzinfo=zone),
         },
         "rolling_test": {
-            "start_local_date": "2019-05-18",
-            "end_local_date_inclusive": "2019-05-31",
+            "start_local": datetime(2019, 5, 18, tzinfo=zone),
+            "end_local_exclusive": datetime(2019, 6, 1, tzinfo=zone),
         },
     }
+    intervals = ("initial_train", "validation", "rolling_test")
+    for name in intervals:
+        assert boundaries[name]["start_local"].tzinfo == zone
+        assert boundaries[name]["end_local_exclusive"].tzinfo == zone
+        assert boundaries[name]["start_local"].utcoffset() == timedelta(hours=-7)
+        assert boundaries[name]["start_local"] < boundaries[name]["end_local_exclusive"]
+    assert (
+        boundaries["initial_train"]["end_local_exclusive"]
+        == boundaries["validation"]["start_local"]
+    )
+    assert (
+        boundaries["validation"]["end_local_exclusive"]
+        == boundaries["rolling_test"]["start_local"]
+    )
 
 
 def test_config_sha256_covers_exact_file_bytes() -> None:
@@ -126,6 +164,45 @@ def test_loader_rejects_duplicate_yaml_keys(
 
     with pytest.raises(contracts_module.FrozenConfigError, match="duplicate"):
         contracts_module.load_gate1_config(duplicated)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("naive", "timezone-aware"),
+        ("wrong_offset", "-07:00"),
+        ("reversed", "start before end"),
+        ("non_contiguous", "contiguous"),
+    ],
+)
+def test_loader_rejects_invalid_time_split_semantics(
+    tmp_path: Path,
+    mutation: str,
+    message: str,
+) -> None:
+    contracts_module = _contracts_module()
+    payload = copy.deepcopy(yaml.safe_load(CONFIG_PATH.read_bytes()))
+    payload["time_split"] = copy.deepcopy(EXPECTED_TIME_SPLIT)
+    payload["hgb"]["random_state"] = 20260901
+    if mutation == "naive":
+        payload["time_split"]["initial_train"]["start_local"] = "2019-05-02T00:00:00"
+    elif mutation == "wrong_offset":
+        payload["time_split"]["initial_train"]["start_local"] = (
+            "2019-05-02T00:00:00-08:00"
+        )
+    elif mutation == "reversed":
+        payload["time_split"]["initial_train"]["end_local_exclusive"] = (
+            "2019-05-01T00:00:00-07:00"
+        )
+    else:
+        payload["time_split"]["validation"]["start_local"] = (
+            "2019-05-15T00:15:00-07:00"
+        )
+    mutated = tmp_path / f"time-split-{mutation}.yaml"
+    mutated.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(contracts_module.FrozenConfigError, match=message):
+        contracts_module.load_gate1_config(mutated)
 
 
 def test_gate1_environment_is_exact_path_free_and_cpu_only() -> None:

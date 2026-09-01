@@ -11,14 +11,14 @@ horizons_minutes: [15, 30, 60, 120, 240]
 time_split:
   timezone: America/Los_Angeles
   initial_train:
-    start_local_date: "2019-05-02"
-    end_local_date_inclusive: "2019-05-14"
+    start_local: "2019-05-02T00:00:00-07:00"
+    end_local_exclusive: "2019-05-15T00:00:00-07:00"
   validation:
-    start_local_date: "2019-05-15"
-    end_local_date_inclusive: "2019-05-17"
+    start_local: "2019-05-15T00:00:00-07:00"
+    end_local_exclusive: "2019-05-18T00:00:00-07:00"
   rolling_test:
-    start_local_date: "2019-05-18"
-    end_local_date_inclusive: "2019-05-31"
+    start_local: "2019-05-18T00:00:00-07:00"
+    end_local_exclusive: "2019-06-01T00:00:00-07:00"
 
 ridge:
   alpha: [0.1, 1, 10, 100]
@@ -31,6 +31,7 @@ hgb:
   max_iter: 300
   early_stopping: false
   loss: squared_error
+  random_state: 20260901
 
 windows_minutes: [5, 15, 30, 60]
 bounded_hold_seconds: 12

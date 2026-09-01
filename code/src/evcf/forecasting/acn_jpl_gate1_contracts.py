@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 import itertools
 from collections.abc import Mapping
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import yaml
 from yaml.constructor import ConstructorError
@@ -15,6 +17,9 @@ from yaml.nodes import MappingNode
 DEFAULT_CONFIG_PATH = (
     Path(__file__).resolve().parents[3] / "configs/acn_jpl_gate1_pilot_2019-05.yaml"
 )
+_TIMEZONE_NAME = "America/Los_Angeles"
+_PDT_OFFSET = timedelta(hours=-7)
+_TIME_INTERVAL_NAMES = ("initial_train", "validation", "rolling_test")
 
 _FROZEN_CONFIG: dict[str, Any] = {
     "schema_version": "acn-jpl-gate1-pilot/v1",
@@ -26,18 +31,18 @@ _FROZEN_CONFIG: dict[str, Any] = {
     "bootstrap_repetitions": 10_000,
     "horizons_minutes": [15, 30, 60, 120, 240],
     "time_split": {
-        "timezone": "America/Los_Angeles",
+        "timezone": _TIMEZONE_NAME,
         "initial_train": {
-            "start_local_date": "2019-05-02",
-            "end_local_date_inclusive": "2019-05-14",
+            "start_local": "2019-05-02T00:00:00-07:00",
+            "end_local_exclusive": "2019-05-15T00:00:00-07:00",
         },
         "validation": {
-            "start_local_date": "2019-05-15",
-            "end_local_date_inclusive": "2019-05-17",
+            "start_local": "2019-05-15T00:00:00-07:00",
+            "end_local_exclusive": "2019-05-18T00:00:00-07:00",
         },
         "rolling_test": {
-            "start_local_date": "2019-05-18",
-            "end_local_date_inclusive": "2019-05-31",
+            "start_local": "2019-05-18T00:00:00-07:00",
+            "end_local_exclusive": "2019-06-01T00:00:00-07:00",
         },
     },
     "ridge": {"alpha": [0.1, 1, 10, 100]},
@@ -49,6 +54,7 @@ _FROZEN_CONFIG: dict[str, Any] = {
         "max_iter": 300,
         "early_stopping": False,
         "loss": "squared_error",
+        "random_state": 20260901,
     },
     "windows_minutes": [5, 15, 30, 60],
     "bounded_hold_seconds": 12,
@@ -142,6 +148,61 @@ def _validate_frozen(actual: Any, expected: Any, *, path: str = "config") -> Non
         )
 
 
+def _parse_local_boundary(value: Any, *, path: str, zone: ZoneInfo) -> datetime:
+    if not isinstance(value, str):
+        raise FrozenConfigError(f"{path} must be a frozen timezone-aware ISO datetime string")
+    try:
+        boundary = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise FrozenConfigError(f"{path} must be a frozen timezone-aware ISO datetime") from exc
+    if boundary.tzinfo is None or boundary.utcoffset() is None:
+        raise FrozenConfigError(f"{path} must be timezone-aware")
+    if boundary.utcoffset() != _PDT_OFFSET:
+        raise FrozenConfigError(f"{path} must use the frozen PDT offset -07:00")
+
+    localized = boundary.astimezone(zone)
+    if (
+        localized.utcoffset() != _PDT_OFFSET
+        or localized.replace(tzinfo=None) != boundary.replace(tzinfo=None)
+    ):
+        raise FrozenConfigError(f"{path} must correspond to ZoneInfo {_TIMEZONE_NAME}")
+    return localized
+
+
+def _parse_time_split(time_split: Any) -> dict[str, Any]:
+    if type(time_split) is not dict:
+        raise FrozenConfigError("frozen config.time_split must be a mapping")
+    if time_split.get("timezone") != _TIMEZONE_NAME:
+        raise FrozenConfigError(f"frozen config.time_split timezone must be {_TIMEZONE_NAME}")
+
+    zone = ZoneInfo(_TIMEZONE_NAME)
+    parsed: dict[str, Any] = {"timezone": zone}
+    previous_end: datetime | None = None
+    for name in _TIME_INTERVAL_NAMES:
+        interval = time_split.get(name)
+        if type(interval) is not dict:
+            raise FrozenConfigError(f"frozen config.time_split.{name} must be a mapping")
+        start = _parse_local_boundary(
+            interval.get("start_local"),
+            path=f"config.time_split.{name}.start_local",
+            zone=zone,
+        )
+        end = _parse_local_boundary(
+            interval.get("end_local_exclusive"),
+            path=f"config.time_split.{name}.end_local_exclusive",
+            zone=zone,
+        )
+        if start >= end:
+            raise FrozenConfigError(
+                f"config.time_split.{name} must place start before end"
+            )
+        if previous_end is not None and previous_end != start:
+            raise FrozenConfigError("frozen config.time_split intervals must be contiguous")
+        parsed[name] = {"start_local": start, "end_local_exclusive": end}
+        previous_end = end
+    return parsed
+
+
 def expand_hgb_grid(hgb_config: Mapping[str, Any]) -> list[dict[str, Any]]:
     """Expand the frozen HGB Cartesian grid in YAML declaration order."""
 
@@ -170,7 +231,9 @@ def load_gate1_config(path: str | Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
     """Load, strictly validate, and expand the frozen Gate 1 pilot config."""
 
     payload = _parse_yaml(Path(path).read_bytes())
+    time_split_boundaries = _parse_time_split(payload.get("time_split"))
     _validate_frozen(payload, _FROZEN_CONFIG)
     config = dict(payload)
     config["hgb_grid"] = expand_hgb_grid(payload["hgb"])
+    config["time_split_boundaries"] = time_split_boundaries
     return config

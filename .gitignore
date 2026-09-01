@@ -42,6 +42,20 @@ artifacts/**
 !outputs/acn_gate0/jpl_2019-05/failed_or_incomplete_chunks.csv
 !outputs/acn_gate0/jpl_2019-05/SHA256SUMS
 
+# Deidentified, aggregate-only JPL full-month time-series QA delivery.
+!outputs/acn_gate0/jpl_2019-05-full-ts/
+!outputs/acn_gate0/jpl_2019-05-full-ts/qa_full_month_timeseries.json
+!outputs/acn_gate0/jpl_2019-05-full-ts/acquisition_summary.json
+!outputs/acn_gate0/jpl_2019-05-full-ts/acquisition_summary.md
+!outputs/acn_gate0/jpl_2019-05-full-ts/daily_chunk_summary.csv
+!outputs/acn_gate0/jpl_2019-05-full-ts/failed_or_incomplete_chunks.csv
+!outputs/acn_gate0/jpl_2019-05-full-ts/cleaning_rule_manifest.json
+!outputs/acn_gate0/jpl_2019-05-full-ts/SHA256SUMS
+
+# Public compute-environment record; all other output files remain ignored.
+!outputs/environment/
+!outputs/environment/local_rtx5080.json
+
 # Literature full text: metadata/notes only by default
 literature/fulltext/**
 !literature/fulltext/README.md

@@ -1,0 +1,49 @@
+{
+  "gpu": {
+    "count": 1,
+    "devices": [
+      {
+        "compute_capability": "12.0",
+        "index": 0,
+        "multiprocessor_count": 84,
+        "name": "NVIDIA GeForce RTX 5080",
+        "total_memory_gib": 15.92
+      }
+    ]
+  },
+  "platform": {
+    "logical_cpu_count": 20,
+    "machine": "AMD64",
+    "release": "11",
+    "system": "Windows"
+  },
+  "privacy": {
+    "absolute_paths_included": false,
+    "environment_variables_included": false,
+    "hostname_included": false,
+    "username_included": false
+  },
+  "python": {
+    "executable_basename": "python.exe",
+    "implementation": "CPython",
+    "version": "3.13.14"
+  },
+  "pytorch": {
+    "cuda_available": true,
+    "cuda_runtime": "13.0",
+    "cudnn_version": 92000,
+    "installed": true,
+    "version": "2.13.0.dev20260518+cu130"
+  },
+  "requirements": {
+    "failures": [],
+    "min_vram_gb": 14.0,
+    "require_cuda": true,
+    "status": "PASS"
+  },
+  "schema_version": "compute-environment/v1",
+  "working_disk": {
+    "free_gib": 126.298,
+    "total_gib": 326.517
+  }
+}

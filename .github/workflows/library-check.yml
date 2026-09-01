@@ -31,17 +31,23 @@ jobs:
           code/src/evcf/data/acn_api.py
           code/src/evcf/data/acn_audit.py
           code/src/evcf/data/acn_coverage.py
+          code/src/evcf/data/acn_jpl_full_month_qa.py
+          code/src/evcf/data/acn_jpl_full_month_ts.py
           code/src/evcf/data/acn_jpl_gate0.py
           code/src/evcf/data/acn_jpl_metadata_qa.py
           code/src/evcf/data/acn_jpl_official_reference.py
           code/src/evcf/data/acn_jpl_ts_preflight.py
           scripts/acn_gate0.py
           scripts/acn_jpl_2019_05.py
+          scripts/acn_jpl_full_month_ts.py
           scripts/acn_monthly_coverage.py
           scripts/check_compute_environment.py
           code/tests/test_acn_gate0.py
           code/tests/test_acn_coverage.py
           code/tests/test_acn_jpl_gate0.py
+          code/tests/test_acn_jpl_full_month_cli.py
+          code/tests/test_acn_jpl_full_month_qa.py
+          code/tests/test_acn_jpl_full_month_ts.py
           code/tests/test_acn_jpl_metadata_qa.py
           code/tests/test_acn_jpl_official_reference.py
           code/tests/test_acn_jpl_ts_preflight.py

@@ -1,0 +1,50 @@
+{
+  "acquisition": {
+    "carry_status": "DOWNLOADED",
+    "daily_completed": 31,
+    "daily_failed": 0,
+    "daily_requested": 31,
+    "linkage_status": "PASS",
+    "status": "COMPLETE"
+  },
+  "gate": {
+    "gate1_ready": "NO",
+    "ready_for_15_min": "YES_CURRENT_PROXY_ONLY",
+    "ready_for_cleaning": true,
+    "status": "PASS"
+  },
+  "integrity": {
+    "carry_records": 1,
+    "combined_records": 1645,
+    "local_records": 1644,
+    "quality_denominator": 1645,
+    "status": "PASS",
+    "valid_daily_chunks": 31
+  },
+  "power_semantics": {
+    "approved_15_min_representation": "CURRENT_PROXY_ONLY",
+    "charging_current": {
+      "interpretation": "measured current; not direct active power in kW",
+      "unit": "ampere"
+    },
+    "fixed_voltage_assumption": false,
+    "kw_conversion_requires": [
+      "voltage",
+      "phase",
+      "topology",
+      "power factor",
+      "network context"
+    ],
+    "pilot_signal": {
+      "interpretation": "control signal or limit; not measured active power"
+    }
+  },
+  "privacy": {
+    "absolute_local_paths_emitted": false,
+    "aggregate_only": true,
+    "credentials_emitted": false,
+    "private_keys_emitted": false,
+    "raw_trajectories_emitted": false
+  },
+  "schema_version": "acn-jpl-full-month-acquisition-summary/v1"
+}

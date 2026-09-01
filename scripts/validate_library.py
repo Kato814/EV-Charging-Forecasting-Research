@@ -178,7 +178,7 @@ def main() -> int:
             if not valid_url(row.get("primary_source", "").strip()):
                 errors.append(f"{relative}:{line}: malformed primary_source")
 
-    field_rows, field_ids = unique_ids(ROOT / "datasets/field_audit.csv", "dataset_id", errors)
+    field_rows, _field_ids = unique_ids(ROOT / "datasets/field_audit.csv", "dataset_id", errors)
     for line, row in enumerate(field_rows, start=2):
         if row.get("dataset_id", "").strip() not in dataset_ids:
             errors.append(

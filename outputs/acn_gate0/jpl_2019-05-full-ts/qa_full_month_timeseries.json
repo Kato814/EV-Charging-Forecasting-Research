@@ -1,0 +1,237 @@
+{
+  "gate": {
+    "checks": {
+      "acquisition_complete_if_provided": true,
+      "carry_in_exact": true,
+      "combined_count_exact": true,
+      "current_invalid_rate_at_most_limit": true,
+      "daily_chunks_complete": true,
+      "local_object_keys_unique": true,
+      "local_record_count_exact": true,
+      "local_session_keys_unique": true,
+      "metadata_scope_exact": true,
+      "metadata_timeseries_exact": true,
+      "pilot_invalid_rate_at_most_limit": true,
+      "zero_timestamp_nonmonotonic_anomalies": true,
+      "zero_timestamp_parse_anomalies": true
+    },
+    "gate1_ready": "NO",
+    "ready_for_15_min": "YES_CURRENT_PROXY_ONLY",
+    "ready_for_cleaning": true,
+    "status": "PASS",
+    "thresholds": {
+      "charging_current_invalid_rate_max": 0.1,
+      "metadata_timeseries_match_rate_required": 1.0,
+      "orphan_timeseries_pairs_required": 0,
+      "pilot_signal_invalid_rate_max": 0.1,
+      "timestamp_nonmonotonic_anomalies_required": 0,
+      "timestamp_parse_anomalies_required": 0
+    },
+    "warnings": [
+      "DUPLICATE_TIMESTAMPS",
+      "CONFLICTING_DUPLICATE_TIMESTAMPS",
+      "BOUNDARY_POSITIVE_CURRENT"
+    ]
+  },
+  "integrity": {
+    "carry_in": {
+      "data_present": true,
+      "exact_private_pair_match": true,
+      "expected_records": 1,
+      "gzip_json_valid": true,
+      "manifest_contract_valid": true,
+      "manifest_present": true,
+      "manifest_records": 1,
+      "observed_records": 1,
+      "remote_records": 1,
+      "sha256_verified": true,
+      "status": "PASS"
+    },
+    "combined": {
+      "duplicate_object_key_records": 0,
+      "duplicate_session_key_records": 0,
+      "expected_records": 1645,
+      "expected_unique_object_keys": 1645,
+      "expected_unique_session_keys": 1645,
+      "missing_private_key_records": 0,
+      "observed_records": 1645,
+      "unique_object_keys": 1645,
+      "unique_session_keys": 1645
+    },
+    "daily_chunks": {
+      "data_files_present": 31,
+      "expected": 31,
+      "failed_or_incomplete": 0,
+      "gzip_json_valid": 31,
+      "manifest_contracts_valid": 31,
+      "manifests_present": 31,
+      "record_manifest_matches": 31,
+      "record_remote_matches": 31,
+      "sha256_verified": 31,
+      "valid": 31
+    },
+    "local_month": {
+      "duplicate_object_key_records": 0,
+      "duplicate_pair_records": 0,
+      "duplicate_session_key_records": 0,
+      "expected_metadata_pairs": 1644,
+      "expected_records": 1644,
+      "expected_unique_object_keys": 1644,
+      "expected_unique_session_keys": 1644,
+      "matched_metadata_pairs": 1644,
+      "metadata_timeseries_match_rate": 1.0,
+      "missing_metadata_pairs": 0,
+      "missing_object_key_records": 0,
+      "missing_session_key_records": 0,
+      "observed_records": 1644,
+      "orphan_timeseries_pairs": 0,
+      "unique_object_keys": 1644,
+      "unique_session_keys": 1644
+    },
+    "metadata_scope": {
+      "analysis_records": 1644,
+      "carry_records": 1,
+      "failure_code": null,
+      "status": "PASS",
+      "utc_month_records": 1645
+    },
+    "month_boundary": {
+      "counts_are_not_interchangeable": true,
+      "local_month_sessions": 1644,
+      "timezone": "America/Los_Angeles",
+      "utc_month_sessions": 1645
+    },
+    "status": "PASS"
+  },
+  "power_semantics": {
+    "approved_15_min_representation": "CURRENT_PROXY_ONLY",
+    "charging_current": {
+      "interpretation": "measured current; not direct active power in kW",
+      "unit": "ampere"
+    },
+    "fixed_voltage_assumption": false,
+    "kw_conversion_requires": [
+      "voltage",
+      "phase",
+      "topology",
+      "power factor",
+      "network context"
+    ],
+    "pilot_signal": {
+      "interpretation": "control signal or limit; not measured active power"
+    }
+  },
+  "privacy": {
+    "absolute_local_paths_emitted": false,
+    "aggregate_only": true,
+    "credentials_emitted": false,
+    "private_keys_emitted": false,
+    "raw_trajectories_emitted": false
+  },
+  "quality": {
+    "denominator_sessions": 1645,
+    "metadata_fields": {
+      "done_charging_after_disconnect": {
+        "count": 86,
+        "denominator": 1645,
+        "rate": 0.05227964
+      },
+      "done_charging_before_connection": {
+        "count": 1,
+        "denominator": 1645,
+        "rate": 0.0006079
+      },
+      "done_charging_coverage": {
+        "count": 1645,
+        "denominator": 1645,
+        "rate": 1.0
+      },
+      "done_charging_parse_errors": 0,
+      "kwh_requested_coverage": {
+        "count": 1573,
+        "denominator": 1645,
+        "rate": 0.956231
+      },
+      "requested_departure_coverage": {
+        "count": 1573,
+        "denominator": 1645,
+        "rate": 0.956231
+      },
+      "user_inputs_coverage": {
+        "count": 1573,
+        "denominator": 1645,
+        "rate": 0.956231
+      }
+    },
+    "observed_validated_sessions": 1645,
+    "series": {
+      "chargingCurrent": {
+        "boundary_positive_points": 1397,
+        "boundary_positive_session_rate": 0.31367781,
+        "boundary_positive_sessions": 516,
+        "boundary_unverifiable_sessions": 0,
+        "conflicting_duplicate_session_rate": 0.01033435,
+        "conflicting_duplicate_sessions": 17,
+        "conflicting_duplicate_timestamps": 35,
+        "duplicate_affected_session_rate": 0.01398176,
+        "duplicate_affected_sessions": 23,
+        "duplicate_extra_timestamps": 55,
+        "expected_complete_active_minutes": 687766,
+        "field_coverage": {
+          "count": 1645,
+          "denominator": 1645,
+          "rate": 1.0
+        },
+        "invalid_container_count": 0,
+        "invalid_container_rate": 0.0,
+        "negative_values": 0,
+        "non_utc_timestamp_encodings": 0,
+        "nonmonotonic_affected_session_rate": 0.0,
+        "nonmonotonic_affected_sessions": 0,
+        "nonmonotonic_pairs": 0,
+        "nonnumeric_values": 0,
+        "raw_samples": 10510227,
+        "retained_sample_rate": 0.99524758,
+        "sparse_minute_rate": 0.00709398,
+        "sparse_minutes_under_10_points": 4879,
+        "timestamp_parse_errors": 0,
+        "timestamp_value_length_mismatch_sessions": 0,
+        "usable_samples": 10460278
+      },
+      "pilotSignal": {
+        "boundary_positive_points": null,
+        "boundary_positive_session_rate": null,
+        "boundary_positive_sessions": null,
+        "boundary_unverifiable_sessions": null,
+        "conflicting_duplicate_session_rate": 0.00182371,
+        "conflicting_duplicate_sessions": 3,
+        "conflicting_duplicate_timestamps": 3,
+        "duplicate_affected_session_rate": 0.01458967,
+        "duplicate_affected_sessions": 24,
+        "duplicate_extra_timestamps": 59,
+        "expected_complete_active_minutes": 687766,
+        "field_coverage": {
+          "count": 1645,
+          "denominator": 1645,
+          "rate": 1.0
+        },
+        "invalid_container_count": 0,
+        "invalid_container_rate": 0.0,
+        "negative_values": null,
+        "non_utc_timestamp_encodings": 0,
+        "nonmonotonic_affected_session_rate": 0.0,
+        "nonmonotonic_affected_sessions": 0,
+        "nonmonotonic_pairs": 0,
+        "nonnumeric_values": 0,
+        "raw_samples": 10513238,
+        "retained_sample_rate": 0.99525103,
+        "sparse_minute_rate": 0.0067523,
+        "sparse_minutes_under_10_points": 4644,
+        "timestamp_parse_errors": 0,
+        "timestamp_value_length_mismatch_sessions": 0,
+        "usable_samples": 10463311
+      }
+    }
+  },
+  "schema_version": "acn-jpl-full-month-timeseries-qa/v1"
+}

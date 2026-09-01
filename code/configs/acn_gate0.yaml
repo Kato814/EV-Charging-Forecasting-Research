@@ -34,3 +34,21 @@ jpl_2019_05_preflight:
   invalid_pilot_signal_rate_limit: 0.10
   unmatched_metadata_rate_limit: 0.01
   full_month_timeseries_authorized: false
+
+# Full-month acquisition remains disabled in configuration. The dedicated CLI
+# additionally requires a literal runtime flag and never authorizes Gate 1 or a
+# cleaned/15-minute derivative.
+jpl_2019_05_full_month_timeseries:
+  timezone: America/Los_Angeles
+  analysis_start: "2019-05-01T00:00:00-07:00"
+  analysis_end_exclusive: "2019-06-01T00:00:00-07:00"
+  expected_local_sessions: 1644
+  expected_utc_sessions: 1645
+  expected_carry_in_sessions: 1
+  quality_denominator_sessions: 1645
+  invalid_charging_current_rate_limit: 0.10
+  invalid_pilot_signal_rate_limit: 0.10
+  full_month_timeseries_authorized: false
+  required_cli_flag: --authorize-full-month
+  gate1_authorized: false
+  generate_15_min_data: false

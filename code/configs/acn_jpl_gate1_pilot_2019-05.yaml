@@ -32,6 +32,7 @@ hgb:
   early_stopping: false
   loss: squared_error
   random_state: 20260901
+  categorical_features: null
 
 windows_minutes: [5, 15, 30, 60]
 bounded_hold_seconds: 12

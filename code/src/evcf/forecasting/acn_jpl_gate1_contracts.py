@@ -14,9 +14,6 @@ import yaml
 from yaml.constructor import ConstructorError
 from yaml.nodes import MappingNode
 
-DEFAULT_CONFIG_PATH = (
-    Path(__file__).resolve().parents[3] / "configs/acn_jpl_gate1_pilot_2019-05.yaml"
-)
 _TIMEZONE_NAME = "America/Los_Angeles"
 _PDT_OFFSET = timedelta(hours=-7)
 _TIME_INTERVAL_NAMES = ("initial_train", "validation", "rolling_test")
@@ -55,6 +52,7 @@ _FROZEN_CONFIG: dict[str, Any] = {
         "early_stopping": False,
         "loss": "squared_error",
         "random_state": 20260901,
+        "categorical_features": None,
     },
     "windows_minutes": [5, 15, 30, 60],
     "bounded_hold_seconds": 12,
@@ -169,7 +167,9 @@ def _parse_local_boundary(value: Any, *, path: str, zone: ZoneInfo) -> datetime:
     return localized
 
 
-def _parse_time_split(time_split: Any) -> dict[str, Any]:
+def parse_time_split_boundaries(time_split: Any) -> dict[str, Any]:
+    """Validate frozen split semantics and return runtime-only aware boundaries."""
+
     if type(time_split) is not dict:
         raise FrozenConfigError("frozen config.time_split must be a mapping")
     if time_split.get("timezone") != _TIMEZONE_NAME:
@@ -221,19 +221,18 @@ def expand_hgb_grid(hgb_config: Mapping[str, Any]) -> list[dict[str, Any]]:
     return candidates
 
 
-def config_sha256(path: str | Path = DEFAULT_CONFIG_PATH) -> str:
+def config_sha256(path: str | Path) -> str:
     """Return SHA-256 over the config's exact bytes, including whitespace."""
 
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def load_gate1_config(path: str | Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
+def load_gate1_config(path: str | Path) -> dict[str, Any]:
     """Load, strictly validate, and expand the frozen Gate 1 pilot config."""
 
     payload = _parse_yaml(Path(path).read_bytes())
-    time_split_boundaries = _parse_time_split(payload.get("time_split"))
+    parse_time_split_boundaries(payload.get("time_split"))
     _validate_frozen(payload, _FROZEN_CONFIG)
     config = dict(payload)
     config["hgb_grid"] = expand_hgb_grid(payload["hgb"])
-    config["time_split_boundaries"] = time_split_boundaries
     return config

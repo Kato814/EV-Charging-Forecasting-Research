@@ -3,6 +3,8 @@ from __future__ import annotations
 import copy
 import hashlib
 import importlib
+import inspect
+import json
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -12,11 +14,12 @@ from zoneinfo import ZoneInfo
 import pytest
 import tomllib
 import yaml
+from sklearn.ensemble import HistGradientBoostingRegressor
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / "code/configs/acn_jpl_gate1_pilot_2019-05.yaml"
 ENVIRONMENT_PATH = ROOT / "environment-gate1-pilot.yml"
-EXPECTED_CONFIG_SHA256 = "852949542474f931159284365e5f54cbe1e2ca2437b4bc8f7ca40599cbeeeab5"
+EXPECTED_CONFIG_SHA256 = "dad0bd2208e0d267d92d1c643547511807338a3e51240be83f90a3343fefe58f"
 EXPECTED_TIME_SPLIT = {
     "timezone": "America/Los_Angeles",
     "initial_train": {
@@ -43,7 +46,7 @@ def _contracts_module() -> ModuleType:
 
 def test_frozen_gate1_grid_and_seeds() -> None:
     contracts_module = _contracts_module()
-    config = contracts_module.load_gate1_config()
+    config = contracts_module.load_gate1_config(CONFIG_PATH)
 
     assert config["seeds"] == {"model": 20260901, "bootstrap": 20260902}
     assert config["bootstrap_repetitions"] == 10_000
@@ -61,6 +64,7 @@ def test_frozen_gate1_grid_and_seeds() -> None:
         "early_stopping",
         "loss",
         "random_state",
+        "categorical_features",
     )
     assert grid == [
         {
@@ -72,6 +76,7 @@ def test_frozen_gate1_grid_and_seeds() -> None:
             "early_stopping": False,
             "loss": "squared_error",
             "random_state": 20260901,
+            "categorical_features": None,
         }
         for learning_rate in (0.03, 0.08)
         for max_leaf_nodes in (15, 31)
@@ -79,6 +84,10 @@ def test_frozen_gate1_grid_and_seeds() -> None:
         for l2_regularization in (0, 1)
     ]
     assert {candidate["random_state"] for candidate in grid} == {config["seeds"]["model"]}
+    assert config["hgb"]["categorical_features"] is None
+    for candidate in grid:
+        model = HistGradientBoostingRegressor(**candidate)
+        assert model.get_params()["categorical_features"] is None
 
 
 def test_frozen_dates_horizons_windows_target_and_snapshot() -> None:
@@ -95,7 +104,7 @@ def test_frozen_dates_horizons_windows_target_and_snapshot() -> None:
     assert config["time_split"] == EXPECTED_TIME_SPLIT
 
     zone = ZoneInfo("America/Los_Angeles")
-    boundaries = config["time_split_boundaries"]
+    boundaries = contracts_module.parse_time_split_boundaries(config["time_split"])
     assert boundaries == {
         "timezone": zone,
         "initial_train": {
@@ -133,6 +142,27 @@ def test_config_sha256_covers_exact_file_bytes() -> None:
 
     assert hashlib.sha256(raw).hexdigest() == EXPECTED_CONFIG_SHA256
     assert contracts_module.config_sha256(CONFIG_PATH) == EXPECTED_CONFIG_SHA256
+
+
+def test_loaded_config_is_manifest_safe_json() -> None:
+    contracts_module = _contracts_module()
+    config = contracts_module.load_gate1_config(CONFIG_PATH)
+
+    encoded = json.dumps(config, sort_keys=True, allow_nan=False)
+
+    assert json.loads(encoded)["time_split"] == EXPECTED_TIME_SPLIT
+    assert "time_split_boundaries" not in config
+
+
+def test_config_paths_are_mandatory_and_checkout_independent() -> None:
+    contracts_module = _contracts_module()
+
+    assert not hasattr(contracts_module, "DEFAULT_CONFIG_PATH")
+    for name in ("load_gate1_config", "config_sha256"):
+        function = getattr(contracts_module, name)
+        assert inspect.signature(function).parameters["path"].default is inspect.Parameter.empty
+        with pytest.raises(TypeError, match="required positional argument"):
+            function()
 
 
 @pytest.mark.parametrize("mutation", ["missing", "extra", "changed"])

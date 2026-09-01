@@ -14,7 +14,7 @@ import gzip
 import hashlib
 import json
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from numbers import Integral, Real
@@ -26,6 +26,15 @@ import numpy as np
 
 EXPECTED_DATA_SNAPSHOT_SHA256 = (
     "7066ffc8ba42a98f73246acfbc62352fe55a1433a43cba80957c6034e3aeaa5d"
+)
+EXPECTED_SOURCE_INVENTORY_SHA256 = (
+    "63e3f88fcbd4c0d8b87392267cdbe5ad383d89468f10ac3de5e181837b18dcac"
+)
+EXPECTED_PROTOCOL_SHA256 = (
+    "2b95e9b09d31fdd30c559be80f9db64b22e33822b08a25de3715e168f3697bf3"
+)
+EXPECTED_PREPARED_SNAPSHOT_SHA256 = (
+    "d3ef2d6e5a4a1dee4f71c716714c29ed8e1624cdfcb070cd96c00155aca082c0"
 )
 EXPECTED_HORIZONS_MINUTES = (15, 30, 60, 120, 240)
 EXPECTED_ISSUE_COUNT = 2_853
@@ -179,9 +188,9 @@ _SHA256_LENGTH = 64
 
 
 def _readonly(array: np.ndarray) -> np.ndarray:
-    result = np.ascontiguousarray(array).copy()
-    result.setflags(write=False)
-    return result
+    contiguous = np.ascontiguousarray(array)
+    immutable_bytes = contiguous.tobytes(order="C")
+    return np.frombuffer(immutable_bytes, dtype=contiguous.dtype).reshape(contiguous.shape)
 
 
 def _bounded_causal_offsets(
@@ -217,7 +226,7 @@ class _FullSessionSeries:
     pilot_values_a: np.ndarray
 
 
-class CausalSessionStore:
+class _CausalSessionStore:
     """Opaque full-series store whose sole data-returning method applies a cutoff."""
 
     __slots__ = ("__canonical_issue_times", "__series")
@@ -234,10 +243,10 @@ class CausalSessionStore:
     def session_count(self) -> int:
         return len(self.__series)
 
-    def has_session(self, anonymous_session_index: int) -> bool:
+    def _has_session(self, anonymous_session_index: int) -> bool:
         return _as_int(anonymous_session_index, "anonymous session index") in self.__series
 
-    def prefix_at(
+    def _prefix_at(
         self,
         issue_time_utc_s: int,
         anonymous_session_index: int,
@@ -347,8 +356,10 @@ class Gate1Snapshot:
     station_times: np.ndarray
     station_current_mean_a: np.ndarray
     station_valid_90: np.ndarray
-    causal_sessions: CausalSessionStore
     feature_index_names: tuple[str, ...] = ("issue_time_utc_s",)
+
+
+CausalPrefixConsumer = Callable[[int, int, CausalSessionSeries], None]
 
 
 def _reject_json_constant(value: str) -> None:
@@ -458,6 +469,12 @@ def _validate_manifest(
     for field in ("source_inventory_sha256", "protocol_sha256", "snapshot_sha256"):
         if not _valid_sha256(manifest[field]):
             raise ValueError(f"data snapshot {field} is not a lowercase SHA-256")
+    if manifest["source_inventory_sha256"] != EXPECTED_SOURCE_INVENTORY_SHA256:
+        raise ValueError("data snapshot source inventory SHA-256 is not frozen")
+    if manifest["protocol_sha256"] != EXPECTED_PROTOCOL_SHA256:
+        raise ValueError("data snapshot protocol SHA-256 is not frozen")
+    if manifest["snapshot_sha256"] != EXPECTED_PREPARED_SNAPSHOT_SHA256:
+        raise ValueError("data snapshot prepared snapshot SHA-256 is not frozen")
 
     raw_entries = manifest["artifacts"]
     if not isinstance(raw_entries, list) or len(raw_entries) != len(ARTIFACT_ROOTS):
@@ -734,8 +751,9 @@ def _load_station(processed_root: Path) -> dict[str, np.ndarray]:
     }
 
 
-def _read_jsonl(path: Path, context: str) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
+def _iter_jsonl(path: Path, context: str) -> Iterator[dict[str, Any]]:
+    """Yield strict gzip JSONL objects without retaining the complete file."""
+
     try:
         with gzip.open(path, "rt", encoding="utf-8", newline="") as handle:
             for line_number, line in enumerate(handle, start=1):
@@ -744,10 +762,15 @@ def _read_jsonl(path: Path, context: str) -> list[dict[str, Any]]:
                 row = _decode_json(line, f"{context} line {line_number}")
                 if not isinstance(row, dict):
                     raise TypeError(f"{context} line {line_number} must be an object")
-                rows.append(row)
+                yield row
     except (OSError, UnicodeError, gzip.BadGzipFile) as exc:
         raise ValueError(f"cannot read {context}") from exc
-    return rows
+
+
+def _read_jsonl(path: Path, context: str) -> list[dict[str, Any]]:
+    """Materialize a small strict JSONL table (M3/M4 only)."""
+
+    return list(_iter_jsonl(path, context))
 
 
 def _validate_optional_ratio(value: Any, context: str) -> float | None:
@@ -912,7 +935,7 @@ def _load_cleaned_store(
     *,
     canonical_issue_times: np.ndarray,
     source_inventory_sha256: str,
-) -> CausalSessionStore:
+) -> _CausalSessionStore:
     manifest = _read_json_object(
         interim_root / "cleaned_sessions.jsonl.gz.manifest.json",
         "cleaned-session manifest",
@@ -937,11 +960,12 @@ def _load_cleaned_store(
     if manifest["sha256"] != _file_sha256(data_path):
         raise ValueError("cleaned-session data SHA-256 does not match its own manifest")
 
-    rows = _read_jsonl(data_path, "cleaned-session store")
-    if len(rows) != record_count:
-        raise ValueError("cleaned-session record_count does not match the data")
     parsed: dict[int, _FullSessionSeries] = {}
-    for expected_index, raw in enumerate(rows):
+    observed_count = 0
+    for expected_index, raw in enumerate(
+        _iter_jsonl(data_path, "cleaned-session store")
+    ):
+        observed_count = expected_index + 1
         _require_exact_keys(raw, _CLEAN_SESSION_KEYS, f"cleaned session {expected_index}")
         if raw["schema_version"] != "acn-jpl-clean-session/v1":
             raise ValueError(f"cleaned session {expected_index} schema_version is invalid")
@@ -994,14 +1018,16 @@ def _load_cleaned_store(
             pilot_timestamps_utc_s=pilot_times,
             pilot_values_a=pilot_values,
         )
-    return CausalSessionStore(parsed, canonical_issue_times)
+    if observed_count != record_count:
+        raise ValueError("cleaned-session record_count does not match the data")
+    return _CausalSessionStore(parsed, canonical_issue_times)
 
 
 def _audit_m4_references(
     rows: Sequence[Mapping[str, Any]],
     *,
     m3_pairs: set[tuple[int, int]],
-    store: CausalSessionStore,
+    store: _CausalSessionStore,
 ) -> None:
     for ordinal, row in enumerate(rows):
         issue = int(row["issue_time_utc_s"])
@@ -1014,11 +1040,15 @@ def _audit_m4_references(
 def verify_and_load_snapshot(
     processed_root: str | Path,
     interim_root: str | Path,
+    *,
+    causal_prefix_consumer: CausalPrefixConsumer | None = None,
 ) -> Gate1Snapshot:
     """Verify all nine frozen artifacts and return leakage-safe model inputs."""
 
     processed = Path(processed_root)
     interim = Path(interim_root)
+    if causal_prefix_consumer is not None and not callable(causal_prefix_consumer):
+        raise TypeError("causal_prefix_consumer must be callable")
     if not processed.is_dir() or not interim.is_dir():
         raise ValueError("processed_root and interim_root must be existing directories")
     manifest, artifact_sha256 = _validate_manifest(processed, interim)
@@ -1048,13 +1078,13 @@ def verify_and_load_snapshot(
     missing_m3_sessions = {
         int(row["anonymous_session_index"])
         for row in m3_rows
-        if not store.has_session(int(row["anonymous_session_index"]))
+        if not store._has_session(int(row["anonymous_session_index"]))
     }
     if missing_m3_sessions:
         raise ValueError("M3 references a cleaned session that does not exist")
     _audit_m4_references(m4_rows, m3_pairs=m3_pairs, store=store)
 
-    return Gate1Snapshot(
+    snapshot = Gate1Snapshot(
         data_snapshot_sha256=manifest["data_snapshot_sha256"],
         artifact_sha256=artifact_sha256,
         issue_times=_readonly(dense["issue_times"]),
@@ -1071,5 +1101,13 @@ def verify_and_load_snapshot(
         station_times=_readonly(station["station_times"]),
         station_current_mean_a=_readonly(station["station_current_mean_a"]),
         station_valid_90=_readonly(station["station_valid_90"]),
-        causal_sessions=store,
     )
+    if causal_prefix_consumer is not None:
+        for canonical_position, (issue_time, rows) in enumerate(
+            zip(snapshot.issue_times, snapshot.m3_by_issue_time, strict=True)
+        ):
+            issue = int(issue_time)
+            for row in rows:
+                series = store._prefix_at(issue, int(row["anonymous_session_index"]))
+                causal_prefix_consumer(canonical_position, issue, series)
+    return snapshot

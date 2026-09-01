@@ -49,6 +49,9 @@ class SnapshotFixture:
         self.station_times = self.issue_times[0] - 86_400 + np.arange(
             _STATION_COUNT, dtype=np.int64
         ) * 900
+        self.source_inventory_sha256 = _SOURCE_SHA256
+        self.protocol_sha256 = _PROTOCOL_SHA256
+        self.prepared_snapshot_sha256 = _SNAPSHOT_SHA256
         self._write_dense()
         self.write_m3([self.m3_row()])
         self.write_m4([self.m4_row()])
@@ -318,13 +321,34 @@ class SnapshotFixture:
         np.savez_compressed(self.processed / name, **arrays)
         self.refresh_manifest()
 
-    def load(self) -> gate1_data.Gate1Snapshot:
-        production_digest = gate1_data.EXPECTED_DATA_SNAPSHOT_SHA256
-        gate1_data.EXPECTED_DATA_SNAPSHOT_SHA256 = self.data_snapshot_sha256
+    def load(
+        self,
+        causal_prefix_consumer: Any | None = None,
+    ) -> gate1_data.Gate1Snapshot:
+        expected = {
+            "EXPECTED_DATA_SNAPSHOT_SHA256": self.data_snapshot_sha256,
+            "EXPECTED_SOURCE_INVENTORY_SHA256": self.source_inventory_sha256,
+            "EXPECTED_PROTOCOL_SHA256": self.protocol_sha256,
+            "EXPECTED_PREPARED_SNAPSHOT_SHA256": self.prepared_snapshot_sha256,
+        }
+        missing = object()
+        production = {name: getattr(gate1_data, name, missing) for name in expected}
+        for name, value in expected.items():
+            setattr(gate1_data, name, value)
         try:
-            return verify_and_load_snapshot(self.processed, self.interim)
+            if causal_prefix_consumer is None:
+                return verify_and_load_snapshot(self.processed, self.interim)
+            return verify_and_load_snapshot(
+                self.processed,
+                self.interim,
+                causal_prefix_consumer=causal_prefix_consumer,
+            )
         finally:
-            gate1_data.EXPECTED_DATA_SNAPSHOT_SHA256 = production_digest
+            for name, value in production.items():
+                if value is missing:
+                    delattr(gate1_data, name)
+                else:
+                    setattr(gate1_data, name, value)
 
 
 @pytest.fixture
@@ -344,6 +368,44 @@ def test_snapshot_gate_requires_exact_hashes_and_common_issue_times(
     assert snapshot.feature_index_names == ("issue_time_utc_s",)
     assert len(snapshot.m3_by_issue_time) == 2_853
     assert snapshot.m3_by_issue_time[1] == ()
+    assert not hasattr(snapshot, "causal_sessions")
+    assert "causal_sessions" not in {field.name for field in fields(snapshot)}
+    assert not hasattr(gate1_data, "CausalSessionStore")
+
+
+def test_frozen_preparation_hash_constants_are_exact() -> None:
+    assert gate1_data.EXPECTED_DATA_SNAPSHOT_SHA256 == (
+        "7066ffc8ba42a98f73246acfbc62352fe55a1433a43cba80957c6034e3aeaa5d"
+    )
+    assert gate1_data.EXPECTED_SOURCE_INVENTORY_SHA256 == (
+        "63e3f88fcbd4c0d8b87392267cdbe5ad383d89468f10ac3de5e181837b18dcac"
+    )
+    assert gate1_data.EXPECTED_PROTOCOL_SHA256 == (
+        "2b95e9b09d31fdd30c559be80f9db64b22e33822b08a25de3715e168f3697bf3"
+    )
+    assert gate1_data.EXPECTED_PREPARED_SNAPSHOT_SHA256 == (
+        "d3ef2d6e5a4a1dee4f71c716714c29ed8e1624cdfcb070cd96c00155aca082c0"
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "match"),
+    [
+        ("source_inventory_sha256", "source inventory"),
+        ("protocol_sha256", "protocol"),
+        ("snapshot_sha256", "prepared snapshot"),
+    ],
+)
+def test_snapshot_gate_rejects_frozen_preparation_hash_drift(
+    snapshot_fixture: SnapshotFixture, field: str, match: str
+) -> None:
+    path = snapshot_fixture.processed / "data_snapshot_manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest[field] = "0" * 64
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=match):
+        snapshot_fixture.load()
 
 
 @pytest.mark.parametrize("mode", ["sha", "size"])
@@ -485,7 +547,7 @@ def test_snapshot_gate_rejects_invalid_cleaned_session_store(
         snapshot_fixture.load()
 
 
-def test_causal_reader_never_returns_future_or_retrospective_fields(tmp_path: Path) -> None:
+def test_causal_consumer_never_returns_future_or_retrospective_fields(tmp_path: Path) -> None:
     first_fixture = SnapshotFixture(tmp_path / "first", future_value=999.0)
     second_fixture = SnapshotFixture(tmp_path / "second", future_value=123_456.0)
     poisoned = second_fixture.cleaned_row(future_value=123_456.0)
@@ -495,12 +557,20 @@ def test_causal_reader_never_returns_future_or_retrospective_fields(tmp_path: Pa
         poisoned[name]["raw_ordinals"].append(2)
     second_fixture.write_cleaned([poisoned])
     second_fixture.refresh_manifest()
-    first = first_fixture.load()
-    second = second_fixture.load()
+    first_seen: list[tuple[int, int, CausalSessionSeries]] = []
+    second_seen: list[tuple[int, int, CausalSessionSeries]] = []
+    first = first_fixture.load(lambda position, issue, series: first_seen.append((position, issue, series)))
+    second = second_fixture.load(
+        lambda position, issue, series: second_seen.append((position, issue, series))
+    )
     issue = int(first.issue_times[0])
 
-    first_series = first.causal_sessions.prefix_at(issue, 0)
-    second_series = second.causal_sessions.prefix_at(issue, 0)
+    assert not hasattr(first, "causal_sessions")
+    assert not hasattr(second, "causal_sessions")
+    assert len(first_seen) == len(second_seen) == 1
+    assert first_seen[0][:2] == second_seen[0][:2] == (0, issue)
+    first_series = first_seen[0][2]
+    second_series = second_seen[0][2]
 
     assert isinstance(first_series, CausalSessionSeries)
     assert {field.name for field in fields(first_series)} == {
@@ -528,6 +598,51 @@ def test_causal_reader_never_returns_future_or_retrospective_fields(tmp_path: Pa
     assert forbidden.isdisjoint(dir(first_series))
 
 
+def test_snapshot_and_causal_arrays_are_bytes_backed_immutable(
+    snapshot_fixture: SnapshotFixture,
+) -> None:
+    causal: list[CausalSessionSeries] = []
+    snapshot = snapshot_fixture.load(
+        lambda _position, _issue, series: causal.append(series)
+    )
+
+    arrays = [
+        snapshot.issue_times,
+        snapshot.horizons,
+        snapshot.labels,
+        snapshot.m1_history,
+        snapshot.m1_history_mask,
+        snapshot.m1_calendar,
+        snapshot.m2_current_state,
+        snapshot.station_times,
+        snapshot.station_current_mean_a,
+        snapshot.station_valid_90,
+        causal[0].current_timestamps_utc_s,
+        causal[0].current_values_a,
+        causal[0].pilot_timestamps_utc_s,
+        causal[0].pilot_values_a,
+    ]
+    for array in arrays:
+        assert array.flags.writeable is False
+        with pytest.raises(ValueError):
+            array.setflags(write=True)
+
+
+def test_cleaned_store_uses_streaming_iterator_not_list_reader(
+    snapshot_fixture: SnapshotFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = gate1_data._read_jsonl
+
+    def guarded(path: Path, context: str) -> list[dict[str, Any]]:
+        if Path(path).name == "cleaned_sessions.jsonl.gz":
+            raise AssertionError("cleaned store must not use the list JSONL reader")
+        return original(path, context)
+
+    monkeypatch.setattr(gate1_data, "_read_jsonl", guarded)
+
+    snapshot_fixture.load()
+
+
 def test_grouping_keeps_canonical_empty_groups_and_rejects_duplicate_pair() -> None:
     canonical = np.asarray([900, 1800, 2700], dtype=np.int64)
     rows = [
@@ -548,10 +663,29 @@ def test_real_jpl_snapshot_passes_read_only_when_present() -> None:
     if not (processed / "data_snapshot_manifest.json").is_file():
         pytest.skip("local ignored JPL snapshot is absent")
 
-    snapshot = verify_and_load_snapshot(processed, interim)
+    calls = 0
+    previous_position = -1
+
+    def consume(position: int, issue: int, series: CausalSessionSeries) -> None:
+        nonlocal calls, previous_position
+        assert position >= previous_position
+        previous_position = position
+        for timestamps in (
+            series.current_timestamps_utc_s,
+            series.pilot_timestamps_utc_s,
+        ):
+            if len(timestamps):
+                assert int(timestamps[-1]) <= issue
+        calls += 1
+
+    snapshot = verify_and_load_snapshot(
+        processed, interim, causal_prefix_consumer=consume
+    )
 
     assert snapshot.issue_times.shape == (2_853,)
     assert len(snapshot.m3_rows) == 43_506
     assert len(snapshot.m4_rows) == 22_427
     assert sum(not group for group in snapshot.m3_by_issue_time) == 699
     assert sum(not group for group in snapshot.m4_by_issue_time) == 1_060
+    assert calls == 43_506
+    assert not hasattr(snapshot, "causal_sessions")

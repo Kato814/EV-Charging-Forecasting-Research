@@ -48,9 +48,10 @@ _EXPECTED_PERSISTENCE_COVERAGE = MappingProxyType(
     {"last_value": 1_329, "previous_day": 1_329, "previous_week": 1_326}
 )
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
-_WINDOWS_ABSOLUTE_PATH = re.compile(r"(?i)(?<![a-z0-9])[a-z]:[\\/]")
-_UNC_ABSOLUTE_PATH = re.compile(r"(?<![a-z0-9:/\\])\\\\[^\\/\s]+[\\/][^\\/\s]+")
-_POSIX_ABSOLUTE_PATH = re.compile(r"(?i)(?<![a-z0-9:/])/(?!/)(?:[^/\s]+/)*[^/\s]+")
+_FILE_URI = re.compile(r"(?i)\bfile:/+")
+_WINDOWS_ABSOLUTE_PATH = re.compile(r"(?i)[a-z]:(?:\\|/(?!/))")
+_UNC_ABSOLUTE_PATH = re.compile(r"\\\\[^\\/\s]+[\\/][^\\/\s]+")
+_POSIX_ABSOLUTE_PATH = re.compile(r"(?i)(?<![a-z0-9/])/(?!/)(?:[^/\s]+/)*[^/\s]+")
 _PRIVATE_ID_TOKEN = re.compile(r"(?i)(?:^|[^a-z0-9])_id(?:$|[^a-z0-9])")
 _PUBLIC_FORBIDDEN_COMPACT_TOKENS = (
     "sessionid",
@@ -1566,6 +1567,8 @@ def _assert_public_string(value: str, *, path: str) -> None:
         fragment in compact for fragment in _PUBLIC_FORBIDDEN_COMPACT_TOKENS
     ):
         raise ValueError(f"{path} contains a forbidden private identifier")
+    if _FILE_URI.search(value):
+        raise ValueError(f"{path} contains a forbidden local file URI")
     if _WINDOWS_ABSOLUTE_PATH.search(value):
         raise ValueError(f"{path} contains a Windows absolute path")
     if _UNC_ABSOLUTE_PATH.search(value):

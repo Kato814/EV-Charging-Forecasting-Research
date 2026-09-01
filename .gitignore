@@ -52,6 +52,23 @@ artifacts/**
 !outputs/acn_gate0/jpl_2019-05-full-ts/cleaning_rule_manifest.json
 !outputs/acn_gate0/jpl_2019-05-full-ts/SHA256SUMS
 
+# Deidentified, aggregate-only JPL Gate 1 preparation QA.
+!outputs/acn_gate1_prep/
+!outputs/acn_gate1_prep/jpl_2019-05/
+!outputs/acn_gate1_prep/jpl_2019-05/cleaning_qa.json
+!outputs/acn_gate1_prep/jpl_2019-05/cleaning_sensitivity.json
+!outputs/acn_gate1_prep/jpl_2019-05/boundary_current_audit.json
+!outputs/acn_gate1_prep/jpl_2019-05/power_semantics_audit.json
+!outputs/acn_gate1_prep/jpl_2019-05/power_semantics_decision.md
+!outputs/acn_gate1_prep/jpl_2019-05/station_15min_qa.json
+!outputs/acn_gate1_prep/jpl_2019-05/issue_snapshot_qa.json
+!outputs/acn_gate1_prep/jpl_2019-05/leakage_audit.json
+!outputs/acn_gate1_prep/jpl_2019-05/feature_whitelist.yaml
+!outputs/acn_gate1_prep/jpl_2019-05/feature_blacklist.yaml
+!outputs/acn_gate1_prep/jpl_2019-05/data_snapshot_manifest.json
+!outputs/acn_gate1_prep/jpl_2019-05/run_manifest.json
+!outputs/acn_gate1_prep/jpl_2019-05/SHA256SUMS
+
 # Public compute-environment record; all other output files remain ignored.
 !outputs/environment/
 !outputs/environment/local_rtx5080.json

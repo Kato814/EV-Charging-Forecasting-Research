@@ -258,12 +258,4 @@ def test_gitignore_allowlists_only_the_seven_public_files_and_environment_record
 
 def test_ci_lints_full_month_controller_qa_cli_and_tests() -> None:
     workflow = Path(".github/workflows/library-check.yml").read_text(encoding="utf-8")
-    for lint_path in (
-        "code/src/evcf/data/acn_jpl_full_month_ts.py",
-        "code/src/evcf/data/acn_jpl_full_month_qa.py",
-        "scripts/acn_jpl_full_month_ts.py",
-        "code/tests/test_acn_jpl_full_month_ts.py",
-        "code/tests/test_acn_jpl_full_month_qa.py",
-        "code/tests/test_acn_jpl_full_month_cli.py",
-    ):
-        assert lint_path in workflow
+    assert "python -m ruff check code/src scripts code/tests" in workflow

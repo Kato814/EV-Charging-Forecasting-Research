@@ -26,6 +26,7 @@ data/processed/**
 models/**
 outputs/**
 artifacts/**
+outputs/runs/**
 !data/raw/.gitkeep
 !data/interim/.gitkeep
 !data/processed/.gitkeep
@@ -68,6 +69,24 @@ artifacts/**
 !outputs/acn_gate1_prep/jpl_2019-05/data_snapshot_manifest.json
 !outputs/acn_gate1_prep/jpl_2019-05/run_manifest.json
 !outputs/acn_gate1_prep/jpl_2019-05/SHA256SUMS
+
+# Deidentified, aggregate-only JPL Gate 1 pilot release. Local matrices,
+# predictions, checkpoints, and model artifacts remain ignored.
+!outputs/gate1_pilot/
+!outputs/gate1_pilot/jpl_2019-05/
+!outputs/gate1_pilot/jpl_2019-05/gate1_summary.json
+!outputs/gate1_pilot/jpl_2019-05/gate1_decision.md
+!outputs/gate1_pilot/jpl_2019-05/metrics_by_horizon.csv
+!outputs/gate1_pilot/jpl_2019-05/tier_comparison.csv
+!outputs/gate1_pilot/jpl_2019-05/daily_paired_errors.csv
+!outputs/gate1_pilot/jpl_2019-05/bootstrap_intervals.json
+!outputs/gate1_pilot/jpl_2019-05/peak_ramp_metrics.json
+!outputs/gate1_pilot/jpl_2019-05/model_selection_manifest.json
+!outputs/gate1_pilot/jpl_2019-05/feature_encoding_manifest.json
+!outputs/gate1_pilot/jpl_2019-05/environment_manifest.json
+!outputs/gate1_pilot/jpl_2019-05/run_manifest.json
+!outputs/gate1_pilot/jpl_2019-05/data_snapshot_manifest.json
+!outputs/gate1_pilot/jpl_2019-05/SHA256SUMS
 
 # Public compute-environment record; all other output files remain ignored.
 !outputs/environment/

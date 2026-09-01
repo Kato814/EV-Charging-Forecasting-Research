@@ -225,11 +225,11 @@ Commit: `feat: orchestrate the JPL Gate 1 pilot`
 E:\Anaconda\envs\evcf-gate1-pilot\python.exe scripts/run_jpl_gate1_pilot.py --authorize-run --config code/configs/acn_jpl_gate1_pilot_2019-05.yaml --processed-root data/processed/acn/jpl/2019-05 --interim-root data/interim/acn/jpl/2019-05 --local-run-root outputs/runs/jpl-2019-05-gate1-pilot-seed20260901 --public-root outputs/gate1_pilot/jpl_2019-05
 ```
 
-- [ ] **Step 1: Commit all code/config/tests before running and record that commit as the execution commit**
-- [ ] **Step 2: Re-run the data gate and record config/data/environment hashes**
-- [ ] **Step 3: Run the full fixed grid and rolling test without test-time retuning**
-- [ ] **Step 4: Independently recompute key MAEs, comparisons, bootstrap direction, day wins, and Gate classification from ignored local predictions**
-- [ ] **Step 5: Run the identical command a second time and require identical aggregate/public hashes**
+- [x] **Step 1: Commit all code/config/tests before running and record that commit as the execution commit**
+- [x] **Step 2: Re-run the data gate and record config/data/environment hashes**
+- [x] **Step 3: Run the full fixed grid and rolling test without test-time retuning**
+- [x] **Step 4: Independently recompute key MAEs, comparisons, bootstrap direction, day wins, and Gate classification from ignored local predictions**
+- [x] **Step 5: Run the identical command a second time and require identical aggregate/public hashes**
 - [ ] **Step 6: Commit the 13 aggregate result files**
 
 Commit: `data: add deidentified Gate 1 pilot results`

@@ -1,0 +1,38 @@
+{
+  "config_file_sha256": "dad0bd2208e0d267d92d1c643547511807338a3e51240be83f90a3343fefe58f",
+  "config_sha256": "86347905cf281363a1f4cf795f696ef91b62215935ee4be8ebf9be518080539e",
+  "data_snapshot_sha256": "7066ffc8ba42a98f73246acfbc62352fe55a1433a43cba80957c6034e3aeaa5d",
+  "dependencies": {
+    "joblib": "1.6.0",
+    "numpy": "2.4.6",
+    "pandas": "3.0.5",
+    "pyarrow": "25.0.1",
+    "pytest": "9.1.1",
+    "pyyaml": "6.0.3",
+    "requests": "2.34.2",
+    "ruff": "0.16.5",
+    "scikit-learn": "1.9.0",
+    "scipy": "1.17.1"
+  },
+  "environment_name": "evcf-gate1-pilot",
+  "execution_commit_sha": "43b397887744220ffb4d6e520b518f5c05592844",
+  "execution_device": "CPU",
+  "gpu_used": false,
+  "network_access": false,
+  "operating_system": "Windows",
+  "parallelism": {
+    "backend": "loky",
+    "inner_max_num_threads": 1,
+    "n_jobs": 4
+  },
+  "python_version": "3.11.16",
+  "schema_version": "acn-jpl-gate1-environment/v1",
+  "thread_caps": {
+    "BLIS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "VECLIB_MAXIMUM_THREADS": "1"
+  }
+}

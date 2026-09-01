@@ -11,8 +11,9 @@ import json
 import math
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
-from datetime import datetime, time, timezone
+from dataclasses import dataclass, field
+from datetime import datetime, time, timedelta, timezone
+from enum import Enum
 from numbers import Integral
 from types import MappingProxyType
 from typing import Any
@@ -42,20 +43,47 @@ SCIENTIFIC_CLASSIFICATIONS = (
 EXECUTION_FAIL = "EXECUTION_FAIL"
 
 _ZONE = ZoneInfo(TIMEZONE_NAME)
-_FAILURE_CODE = re.compile(r"^[A-Z][A-Z0-9_]*$")
-_WINDOWS_ABSOLUTE_PATH = re.compile(r"(?i)(?:^|[\s\"'])[a-z]:[\\/]")
-_PUBLIC_FORBIDDEN_FRAGMENTS = (
+_EXPECTED_TEST_DAY_COUNTS = (96,) * 13 + (81,)
+_EXPECTED_PERSISTENCE_COVERAGE = MappingProxyType(
+    {"last_value": 1_329, "previous_day": 1_329, "previous_week": 1_326}
+)
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_WINDOWS_ABSOLUTE_PATH = re.compile(r"(?i)(?<![a-z0-9])[a-z]:[\\/]")
+_UNC_ABSOLUTE_PATH = re.compile(r"(?<![a-z0-9:/\\])\\\\[^\\/\s]+[\\/][^\\/\s]+")
+_POSIX_ABSOLUTE_PATH = re.compile(r"(?i)(?<![a-z0-9:/])/(?!/)(?:[^/\s]+/)*[^/\s]+")
+_PRIVATE_ID_TOKEN = re.compile(r"(?i)(?:^|[^a-z0-9])_id(?:$|[^a-z0-9])")
+_PUBLIC_FORBIDDEN_COMPACT_TOKENS = (
     "sessionid",
     "userid",
-    "anonymous_session",
-    "reference_times",
-    "issue_times",
+    "anonymoussession",
+    "trajectoryref",
+    "referencetimes",
+    "issuetimes",
+    "issuetimeutcs",
+    "ytrue",
+    "ypred",
     "predictions",
-    "block_index_matrix",
-    "replicate_means",
-    "/home/",
-    "/users/",
+    "parameterhashes",
+    "blockindexmatrix",
+    "replicatemeans",
 )
+_GATE_EVIDENCE_SEAL = object()
+_GATE_RESULT_SEAL = object()
+
+
+class ExecutionFailureCode(str, Enum):
+    """Fixed, identifier-free execution failures safe for public manifests."""
+
+    DATA_CONTRACT = "DATA_CONTRACT"
+    EVALUATION_CONTRACT = "EVALUATION_CONTRACT"
+    MODEL_OUTPUT = "MODEL_OUTPUT"
+    METRIC_CONTRACT = "METRIC_CONTRACT"
+    BOOTSTRAP_CONTRACT = "BOOTSTRAP_CONTRACT"
+    REPRODUCIBILITY = "REPRODUCIBILITY"
+    PRIVACY = "PRIVACY"
+    INCOMPLETE_GATE_EVIDENCE = "INCOMPLETE_GATE_EVIDENCE"
+    INVALID_GATE_EVIDENCE = "INVALID_GATE_EVIDENCE"
+    NONFINITE_GATE_IMPROVEMENT = "NONFINITE_GATE_IMPROVEMENT"
 
 
 def _immutable(array: Any, *, dtype: np.dtype[Any] | str | None = None) -> np.ndarray:
@@ -63,6 +91,41 @@ def _immutable(array: Any, *, dtype: np.dtype[Any] | str | None = None) -> np.nd
     return np.frombuffer(contiguous.tobytes(order="C"), dtype=contiguous.dtype).reshape(
         contiguous.shape
     )
+
+
+def _canonical_test_index() -> tuple[np.ndarray, np.ndarray]:
+    issue_times: list[int] = []
+    day_starts: list[int] = []
+    first_day = datetime(2019, 5, 18, tzinfo=_ZONE)
+    for offset, row_count in enumerate(_EXPECTED_TEST_DAY_COUNTS):
+        day = first_day + timedelta(days=offset)
+        day_epoch = int(day.timestamp())
+        for position in range(row_count):
+            issue_times.append(day_epoch + position * 900)
+            day_starts.append(day_epoch)
+    return (
+        _immutable(issue_times, dtype=np.int64),
+        _immutable(day_starts, dtype=np.int64),
+    )
+
+
+_CANONICAL_TEST_ISSUE_TIMES, _CANONICAL_TEST_DAY_STARTS = _canonical_test_index()
+
+
+def _array_sha256(*arrays: np.ndarray) -> str:
+    digest = hashlib.sha256()
+    for array in arrays:
+        value = np.ascontiguousarray(array)
+        digest.update(value.dtype.str.encode("ascii"))
+        digest.update(np.asarray(value.shape, dtype="<i8").tobytes(order="C"))
+        digest.update(value.tobytes(order="C"))
+    return digest.hexdigest()
+
+
+_CANONICAL_TEST_ROW_SHA256 = _array_sha256(
+    _CANONICAL_TEST_ISSUE_TIMES,
+    _CANONICAL_TEST_DAY_STARTS,
+)
 
 
 def _strict_horizon(value: Any) -> int:
@@ -786,6 +849,31 @@ class BootstrapInterval:
     block_count: int
     matrix_sha256: str
 
+    def __post_init__(self) -> None:
+        if self.learner not in LEARNER_ORDER:
+            raise ValueError("bootstrap interval requires a frozen learner")
+        if (self.parent_tier, self.child_tier) not in ADJACENT_TIER_PAIRS:
+            raise ValueError("bootstrap interval requires one adjacent tier pair")
+        object.__setattr__(self, "horizon_minutes", _strict_horizon(self.horizon_minutes))
+        numeric = (self.point_delta_a, self.ci_lower_a, self.ci_upper_a)
+        if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in numeric):
+            raise TypeError("bootstrap interval endpoints must be numeric")
+        if not all(math.isfinite(float(value)) for value in numeric):
+            raise ValueError("bootstrap interval endpoints must be finite")
+        if float(self.ci_lower_a) > float(self.ci_upper_a):
+            raise ValueError("bootstrap interval lower endpoint exceeds upper endpoint")
+        if self.seed != BOOTSTRAP_SEED:
+            raise ValueError(f"bootstrap interval seed must be {BOOTSTRAP_SEED}")
+        if self.repetitions != BOOTSTRAP_REPETITIONS:
+            raise ValueError("bootstrap interval repetitions must be exactly 10,000")
+        if self.block_count != BOOTSTRAP_BLOCK_COUNT:
+            raise ValueError("bootstrap interval must use exactly 14 day blocks")
+        if not isinstance(self.matrix_sha256, str) or not _SHA256.fullmatch(self.matrix_sha256):
+            raise ValueError("bootstrap interval matrix hash must be lowercase SHA-256")
+        object.__setattr__(self, "point_delta_a", float(self.point_delta_a))
+        object.__setattr__(self, "ci_lower_a", float(self.ci_lower_a))
+        object.__setattr__(self, "ci_upper_a", float(self.ci_upper_a))
+
     @property
     def key(self) -> tuple[str, str, str, int]:
         return (self.learner, self.parent_tier, self.child_tier, self.horizon_minutes)
@@ -862,67 +950,103 @@ def bootstrap_tier_comparison(
     )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class GateEvidence:
-    """Only the unrounded HGB near-horizon evidence consumed by the Gate."""
+    """Sealed unrounded HGB evidence derived only from canonical formal records."""
 
     horizons_minutes: tuple[int, int, int]
     hgb_mae_by_tier: Mapping[str, np.ndarray]
     m3_vs_m2_ci_lower: np.ndarray
     m3_daily_absolute_error_delta: np.ndarray
+    local_dates: tuple[str, ...]
+    hgb_row_identity_sha256: str
+    comparison_suite_sha256: str
+    matrix_sha256: str
+    _seal: object = field(repr=False, compare=False)
 
-    def __post_init__(self) -> None:
-        parsed_horizons = tuple(_strict_horizon(value) for value in self.horizons_minutes)
-        if parsed_horizons != NEAR_HORIZONS_MINUTES:
-            raise ValueError("Gate evidence horizons must be exactly 15/30/60 minutes")
-        if tuple(self.hgb_mae_by_tier) != TIER_ORDER:
-            raise ValueError("Gate evidence must contain HGB M1-M4 MAE in canonical order")
-        values: dict[str, np.ndarray] = {}
-        for tier in TIER_ORDER:
-            array = np.asarray(self.hgb_mae_by_tier[tier])
-            if array.shape != (3,) or not np.issubdtype(array.dtype, np.number):
-                raise ValueError(f"{tier} Gate MAE must be a three-value numeric vector")
-            array = array.astype(np.float64, copy=False)
-            if not np.isfinite(array).all() or np.any(array < 0):
-                raise ValueError(f"{tier} Gate MAE must be finite and nonnegative")
-            values[tier] = _immutable(array, dtype=np.float64)
-        for tier in ("M1", "M2", "M3"):
-            if np.any(values[tier] <= 0):
-                raise ValueError("every Gate parent MAE must be finite and positive")
-        ci = np.asarray(self.m3_vs_m2_ci_lower)
-        daily = np.asarray(self.m3_daily_absolute_error_delta)
-        if ci.shape != (3,) or not np.issubdtype(ci.dtype, np.number):
-            raise ValueError("M3 directional CI evidence must contain three lower endpoints")
-        if daily.shape != (14, 3) or not np.issubdtype(daily.dtype, np.number):
-            raise ValueError("M3 daily evidence must contain 14 days by three near horizons")
-        ci = ci.astype(np.float64, copy=False)
-        daily = daily.astype(np.float64, copy=False)
-        if not np.isfinite(ci).all() or not np.isfinite(daily).all():
-            raise ValueError("Gate CI and daily evidence must be finite")
-        object.__setattr__(self, "horizons_minutes", NEAR_HORIZONS_MINUTES)
-        object.__setattr__(self, "hgb_mae_by_tier", MappingProxyType(values))
-        object.__setattr__(self, "m3_vs_m2_ci_lower", _immutable(ci, dtype=np.float64))
-        object.__setattr__(
-            self,
-            "m3_daily_absolute_error_delta",
-            _immutable(daily, dtype=np.float64),
-        )
+    def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+        raise TypeError("GateEvidence is derived only by evaluate_gate1 from canonical evidence")
 
-    @classmethod
-    def create(
-        cls,
-        *,
-        horizons_minutes: Sequence[int],
-        hgb_mae_by_tier: Mapping[str, Any],
-        m3_vs_m2_ci_lower: Any,
-        m3_daily_absolute_error_delta: Any,
-    ) -> GateEvidence:
-        return cls(
-            horizons_minutes=tuple(horizons_minutes),  # type: ignore[arg-type]
-            hgb_mae_by_tier=hgb_mae_by_tier,
-            m3_vs_m2_ci_lower=np.asarray(m3_vs_m2_ci_lower),
-            m3_daily_absolute_error_delta=np.asarray(m3_daily_absolute_error_delta),
-        )
+
+def _validate_gate_evidence(evidence: GateEvidence) -> None:
+    if not isinstance(evidence, GateEvidence) or getattr(evidence, "_seal", None) is not (
+        _GATE_EVIDENCE_SEAL
+    ):
+        raise ValueError("Gate evidence is not sealed canonical evidence")
+    if evidence.horizons_minutes != NEAR_HORIZONS_MINUTES:
+        raise ValueError("Gate evidence horizons must be exactly 15/30/60 minutes")
+    if tuple(evidence.hgb_mae_by_tier) != TIER_ORDER:
+        raise ValueError("Gate evidence must contain HGB M1-M4 MAE in canonical order")
+    for tier in TIER_ORDER:
+        values = np.asarray(evidence.hgb_mae_by_tier[tier])
+        if values.dtype != np.dtype(np.float64) or values.shape != (3,):
+            raise ValueError("Gate evidence MAE arrays differ from the sealed schema")
+        if not np.isfinite(values).all() or np.any(values < 0.0):
+            raise ValueError("Gate evidence MAE arrays must be finite and nonnegative")
+    for tier in ("M1", "M2", "M3"):
+        if np.any(evidence.hgb_mae_by_tier[tier] <= 0.0):
+            raise ValueError("every Gate parent MAE must be finite and positive")
+    if (
+        evidence.m3_vs_m2_ci_lower.shape != (3,)
+        or not np.isfinite(evidence.m3_vs_m2_ci_lower).all()
+    ):
+        raise ValueError("Gate CI evidence is incomplete or non-finite")
+    if (
+        evidence.m3_daily_absolute_error_delta.shape != (14, 3)
+        or not np.isfinite(evidence.m3_daily_absolute_error_delta).all()
+    ):
+        raise ValueError("Gate daily evidence must contain 14 complete local dates")
+    expected_dates = tuple(f"2019-05-{day:02d}" for day in range(18, 32))
+    if evidence.local_dates != expected_dates:
+        raise ValueError("Gate evidence local-date identity differs from the frozen test period")
+    if evidence.hgb_row_identity_sha256 != _CANONICAL_TEST_ROW_SHA256:
+        raise ValueError("Gate evidence row identity differs from the canonical test cohort")
+    for digest in (
+        evidence.comparison_suite_sha256,
+        evidence.matrix_sha256,
+    ):
+        if not isinstance(digest, str) or not _SHA256.fullmatch(digest):
+            raise ValueError("Gate evidence provenance must use lowercase SHA-256")
+
+
+def _seal_gate_evidence(
+    *,
+    hgb_mae_by_tier: Mapping[str, np.ndarray],
+    m3_vs_m2_ci_lower: np.ndarray,
+    m3_daily_absolute_error_delta: np.ndarray,
+    comparison_suite_sha256: str,
+    matrix_sha256: str,
+) -> GateEvidence:
+    evidence = object.__new__(GateEvidence)
+    object.__setattr__(evidence, "horizons_minutes", NEAR_HORIZONS_MINUTES)
+    object.__setattr__(
+        evidence,
+        "hgb_mae_by_tier",
+        MappingProxyType(
+            {tier: _immutable(hgb_mae_by_tier[tier], dtype=np.float64) for tier in TIER_ORDER}
+        ),
+    )
+    object.__setattr__(
+        evidence,
+        "m3_vs_m2_ci_lower",
+        _immutable(m3_vs_m2_ci_lower, dtype=np.float64),
+    )
+    object.__setattr__(
+        evidence,
+        "m3_daily_absolute_error_delta",
+        _immutable(m3_daily_absolute_error_delta, dtype=np.float64),
+    )
+    object.__setattr__(
+        evidence,
+        "local_dates",
+        tuple(f"2019-05-{day:02d}" for day in range(18, 32)),
+    )
+    object.__setattr__(evidence, "hgb_row_identity_sha256", _CANONICAL_TEST_ROW_SHA256)
+    object.__setattr__(evidence, "comparison_suite_sha256", comparison_suite_sha256)
+    object.__setattr__(evidence, "matrix_sha256", matrix_sha256)
+    object.__setattr__(evidence, "_seal", _GATE_EVIDENCE_SEAL)
+    _validate_gate_evidence(evidence)
+    return evidence
 
 
 @dataclass(frozen=True, slots=True)
@@ -994,17 +1118,26 @@ class GateDecision:
         }
 
 
-def _execution_failure(codes: Sequence[str]) -> GateDecision:
-    normalized: list[str] = []
+def _normalize_failure_codes(
+    codes: Sequence[ExecutionFailureCode],
+) -> tuple[ExecutionFailureCode, ...]:
+    if isinstance(codes, (str, bytes)):
+        raise TypeError("execution failures must be fixed ExecutionFailureCode values")
+    normalized: list[ExecutionFailureCode] = []
     for code in codes:
-        if not isinstance(code, str) or not _FAILURE_CODE.fullmatch(code):
-            raise ValueError("execution failure codes must be uppercase safe identifiers")
+        if not isinstance(code, ExecutionFailureCode):
+            raise TypeError("execution failures must be fixed ExecutionFailureCode values")
         if code not in normalized:
             normalized.append(code)
+    return tuple(normalized)
+
+
+def _execution_failure(codes: Sequence[ExecutionFailureCode]) -> GateDecision:
+    normalized = _normalize_failure_codes(codes)
     return GateDecision(
         classification=EXECUTION_FAIL,
         execution_ok=False,
-        blocking_issues=tuple(normalized),
+        blocking_issues=tuple(code.value for code in normalized),
         m2_diagnostic_mean_delta_a=None,
         m2_diagnostic_improves=None,
         m3_improvement_percent=None,
@@ -1023,16 +1156,18 @@ def _execution_failure(codes: Sequence[str]) -> GateDecision:
 def classify_gate(
     evidence: GateEvidence | None,
     *,
-    execution_failures: Sequence[str] = (),
+    execution_failures: Sequence[ExecutionFailureCode] = (),
 ) -> GateDecision:
     """Apply the frozen Gate with execution failure taking unconditional precedence."""
 
     if execution_failures:
         return _execution_failure(execution_failures)
     if evidence is None:
-        return _execution_failure(("INCOMPLETE_GATE_EVIDENCE",))
-    if not isinstance(evidence, GateEvidence):
-        return _execution_failure(("INVALID_GATE_EVIDENCE",))
+        return _execution_failure((ExecutionFailureCode.INCOMPLETE_GATE_EVIDENCE,))
+    try:
+        _validate_gate_evidence(evidence)
+    except (TypeError, ValueError, AttributeError):
+        return _execution_failure((ExecutionFailureCode.INVALID_GATE_EVIDENCE,))
 
     mae = evidence.hgb_mae_by_tier
     m2_diagnostic = float(np.mean(mae["M1"]) - np.mean(mae["M2"]))
@@ -1040,7 +1175,7 @@ def classify_gate(
     m3_improvement = 100.0 * (mae["M2"] - mae["M3"]) / mae["M2"]
     m4_improvement = 100.0 * (mae["M3"] - mae["M4"]) / mae["M3"]
     if not np.isfinite(m3_improvement).all() or not np.isfinite(m4_improvement).all():
-        return _execution_failure(("NONFINITE_GATE_IMPROVEMENT",))
+        return _execution_failure((ExecutionFailureCode.NONFINITE_GATE_IMPROVEMENT,))
     m3_gain_count = int(np.sum(m3_improvement >= 3.0))
     m3_no_degradation = bool(np.all(m3_improvement >= -2.0))
     m3_directional_ci = bool(np.any(evidence.m3_vs_m2_ci_lower > 0.0))
@@ -1075,6 +1210,326 @@ def classify_gate(
     )
 
 
+ModelKey = tuple[str, str | None, str | None, str | None, int]
+
+
+def _series_key(series: EvaluationSeries) -> ModelKey:
+    return (
+        series.model_kind,
+        series.learner,
+        series.tier,
+        series.baseline,
+        series.horizon_minutes,
+    )
+
+
+def _expected_series_keys() -> tuple[ModelKey, ...]:
+    learned = tuple(
+        ("learned", learner, tier, None, horizon)
+        for learner in LEARNER_ORDER
+        for tier in TIER_ORDER
+        for horizon in HORIZONS_MINUTES
+    )
+    persistence = tuple(
+        ("persistence", None, None, baseline, horizon)
+        for baseline in PERSISTENCE_ORDER
+        for horizon in HORIZONS_MINUTES
+    )
+    return learned + persistence
+
+
+_EXPECTED_SERIES_KEYS = _expected_series_keys()
+_EXPECTED_COMPARISON_KEYS = tuple(
+    (learner, parent_tier, child_tier, horizon)
+    for learner in LEARNER_ORDER
+    for parent_tier, child_tier in ADJACENT_TIER_PAIRS
+    for horizon in HORIZONS_MINUTES
+)
+
+
+def _normalize_evaluation_series(
+    records: Sequence[EvaluationSeries | PredictionBundle]
+    | Mapping[Any, EvaluationSeries | PredictionBundle],
+) -> tuple[EvaluationSeries, ...]:
+    if isinstance(records, Mapping):
+        raw_records = tuple(records.values())
+    elif isinstance(records, Sequence) and not isinstance(records, (str, bytes)):
+        raw_records = tuple(records)
+    else:
+        raise TypeError("formal evaluation input must be a sequence or mapping of model records")
+    normalized: list[EvaluationSeries] = []
+    for record in raw_records:
+        if isinstance(record, EvaluationSeries):
+            normalized.append(record)
+        elif isinstance(record, PredictionBundle):
+            normalized.append(EvaluationSeries.from_prediction_bundle(record))
+        else:
+            raise TypeError(
+                "formal evaluation records must be EvaluationSeries or PredictionBundle objects"
+            )
+    return tuple(normalized)
+
+
+def _canonical_series_map(
+    records: Sequence[EvaluationSeries | PredictionBundle]
+    | Mapping[Any, EvaluationSeries | PredictionBundle],
+) -> tuple[tuple[EvaluationSeries, ...], Mapping[ModelKey, EvaluationSeries]]:
+    normalized = _normalize_evaluation_series(records)
+    by_key: dict[ModelKey, EvaluationSeries] = {}
+    for series in normalized:
+        key = _series_key(series)
+        if key in by_key:
+            raise ValueError("formal evaluation contains a duplicate model-horizon record")
+        by_key[key] = series
+    if set(by_key) != set(_EXPECTED_SERIES_KEYS):
+        raise ValueError(
+            "formal evaluation requires the complete canonical 55 model-horizon records"
+        )
+    ordered = tuple(by_key[key] for key in _EXPECTED_SERIES_KEYS)
+    for series in ordered:
+        if not np.array_equal(
+            series.issue_times, _CANONICAL_TEST_ISSUE_TIMES
+        ) or not np.array_equal(series.day_start_utc_s, _CANONICAL_TEST_DAY_STARTS):
+            raise ValueError(
+                "formal evaluation series must use the exact canonical 1,329 test-row identity"
+            )
+        if series.model_kind == "persistence":
+            expected_coverage = _EXPECTED_PERSISTENCE_COVERAGE[str(series.baseline)]
+            if int(np.sum(series.availability)) != expected_coverage:
+                raise ValueError("persistence coverage differs from the frozen formal baseline")
+    for horizon in HORIZONS_MINUTES:
+        reference = by_key[("learned", "ridge", "M1", None, horizon)].y_true
+        for key in _EXPECTED_SERIES_KEYS:
+            if key[-1] == horizon and not np.array_equal(by_key[key].y_true, reference):
+                raise ValueError("formal evaluation truth differs within one horizon")
+    return ordered, MappingProxyType(by_key)
+
+
+def _comparison_suite_sha256(comparisons: Sequence[TierComparison]) -> str:
+    digest = hashlib.sha256()
+    for comparison in comparisons:
+        digest.update(
+            json.dumps(
+                comparison.key,
+                separators=(",", ":"),
+                ensure_ascii=True,
+            ).encode("ascii")
+        )
+        for array in (
+            comparison.issue_times,
+            comparison.day_start_utc_s,
+            comparison.absolute_error_delta_a,
+        ):
+            value = np.ascontiguousarray(array)
+            digest.update(value.dtype.str.encode("ascii"))
+            digest.update(np.asarray(value.shape, dtype="<i8").tobytes(order="C"))
+            digest.update(value.tobytes(order="C"))
+        digest.update(
+            np.asarray(
+                (
+                    comparison.parent_mae_a,
+                    comparison.child_mae_a,
+                    comparison.mean_absolute_error_delta_a,
+                    comparison.relative_improvement_percent,
+                ),
+                dtype="<f8",
+            ).tobytes(order="C")
+        )
+    return digest.hexdigest()
+
+
+def _same_bootstrap_interval(left: BootstrapInterval, right: BootstrapInterval) -> bool:
+    return left.to_public_dict() == right.to_public_dict()
+
+
+def _derive_gate_evidence(
+    comparisons: tuple[TierComparison, ...],
+    intervals: tuple[BootstrapInterval, ...],
+    plan: BootstrapPlan,
+) -> GateEvidence:
+    comparison_map = {value.key: value for value in comparisons}
+    interval_map = {value.key: value for value in intervals}
+    if (
+        len(comparison_map) != 30
+        or len(interval_map) != 30
+        or tuple(value.key for value in comparisons) != _EXPECTED_COMPARISON_KEYS
+        or tuple(value.key for value in intervals) != _EXPECTED_COMPARISON_KEYS
+    ):
+        raise ValueError("Gate evidence requires all 30 canonical comparisons and intervals")
+    expected_dates = tuple(f"2019-05-{day:02d}" for day in range(18, 32))
+    for key in _EXPECTED_COMPARISON_KEYS:
+        comparison = comparison_map[key]
+        interval = interval_map[key]
+        if not np.array_equal(comparison.issue_times, _CANONICAL_TEST_ISSUE_TIMES):
+            raise ValueError("tier comparison row identity differs from the canonical cohort")
+        if not np.array_equal(comparison.day_start_utc_s, _CANONICAL_TEST_DAY_STARTS):
+            raise ValueError("tier comparison day identity differs from the canonical cohort")
+        if tuple(value.local_date for value in comparison.daily) != expected_dates:
+            raise ValueError("tier comparison does not contain the exact 14 local dates")
+        if tuple(value.n_rows for value in comparison.daily) != _EXPECTED_TEST_DAY_COUNTS:
+            raise ValueError("tier comparison daily row counts differ from the canonical cohort")
+        expected_interval = bootstrap_tier_comparison(comparison, plan)
+        if not _same_bootstrap_interval(interval, expected_interval):
+            raise ValueError("bootstrap interval differs from its same-source tier comparison")
+
+    hgb_mae: dict[str, list[float]] = {tier: [] for tier in TIER_ORDER}
+    ci_lower: list[float] = []
+    daily_columns: list[np.ndarray] = []
+    for horizon in NEAR_HORIZONS_MINUTES:
+        m1_m2 = comparison_map[("hgb", "M1", "M2", horizon)]
+        m2_m3 = comparison_map[("hgb", "M2", "M3", horizon)]
+        m3_m4 = comparison_map[("hgb", "M3", "M4", horizon)]
+        if m1_m2.child_mae_a != m2_m3.parent_mae_a:
+            raise ValueError("HGB M2 MAE differs across adjacent same-source comparisons")
+        if m2_m3.child_mae_a != m3_m4.parent_mae_a:
+            raise ValueError("HGB M3 MAE differs across adjacent same-source comparisons")
+        hgb_mae["M1"].append(m1_m2.parent_mae_a)
+        hgb_mae["M2"].append(m1_m2.child_mae_a)
+        hgb_mae["M3"].append(m2_m3.child_mae_a)
+        hgb_mae["M4"].append(m3_m4.child_mae_a)
+        interval = interval_map[("hgb", "M2", "M3", horizon)]
+        ci_lower.append(interval.ci_lower_a)
+        daily_columns.append(
+            np.asarray(
+                [value.absolute_error_delta_a for value in m2_m3.daily],
+                dtype=np.float64,
+            )
+        )
+    return _seal_gate_evidence(
+        hgb_mae_by_tier={
+            tier: np.asarray(values, dtype=np.float64) for tier, values in hgb_mae.items()
+        },
+        m3_vs_m2_ci_lower=np.asarray(ci_lower, dtype=np.float64),
+        m3_daily_absolute_error_delta=np.column_stack(daily_columns),
+        comparison_suite_sha256=_comparison_suite_sha256(comparisons),
+        matrix_sha256=plan.matrix_sha256,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class Gate1EvaluationResult:
+    """Local formal result; publication must pass the same-source rebuild gate."""
+
+    evaluation_series: tuple[EvaluationSeries, ...]
+    scoped_metrics: tuple[ScopedMetrics, ...]
+    peak_ramp_metrics: tuple[PeakRampMetrics, ...]
+    comparisons: tuple[TierComparison, ...]
+    bootstrap_plan: BootstrapPlan
+    bootstrap_intervals: tuple[BootstrapInterval, ...]
+    gate_evidence: GateEvidence
+    gate_decision: GateDecision
+    execution_failures: tuple[ExecutionFailureCode, ...]
+    _seal: object = field(repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if self._seal is not _GATE_RESULT_SEAL:
+            raise TypeError("Gate1EvaluationResult must be created by evaluate_gate1")
+
+
+def evaluate_gate1(
+    evaluation_records: Sequence[EvaluationSeries | PredictionBundle]
+    | Mapping[Any, EvaluationSeries | PredictionBundle],
+    *,
+    bootstrap_plan: BootstrapPlan | None = None,
+    execution_failures: Sequence[ExecutionFailureCode] = (),
+) -> Gate1EvaluationResult:
+    """Evaluate the sole complete frozen Gate 1 cohort from canonical local records."""
+
+    failures = _normalize_failure_codes(execution_failures)
+    ordered_series, series_map = _canonical_series_map(evaluation_records)
+    if bootstrap_plan is None:
+        plan = BootstrapPlan.create(_CANONICAL_TEST_DAY_STARTS)
+    elif isinstance(bootstrap_plan, BootstrapPlan):
+        plan = bootstrap_plan
+    else:
+        raise TypeError("formal evaluation bootstrap plan must be a BootstrapPlan")
+    if not np.array_equal(plan.day_start_utc_s, np.unique(_CANONICAL_TEST_DAY_STARTS)):
+        raise ValueError("formal evaluation bootstrap plan differs from the canonical 14 days")
+
+    scoped_metrics = tuple(evaluate_scopes(series) for series in ordered_series)
+    peak_ramp_metrics = tuple(compute_peak_ramp_metrics(series) for series in ordered_series)
+    comparisons = tuple(
+        compare_adjacent_tiers(
+            series_map[("learned", learner, parent_tier, None, horizon)],
+            series_map[("learned", learner, child_tier, None, horizon)],
+        )
+        for learner in LEARNER_ORDER
+        for parent_tier, child_tier in ADJACENT_TIER_PAIRS
+        for horizon in HORIZONS_MINUTES
+    )
+    intervals = tuple(bootstrap_tier_comparison(comparison, plan) for comparison in comparisons)
+    evidence = _derive_gate_evidence(comparisons, intervals, plan)
+    decision = classify_gate(evidence, execution_failures=failures)
+    return Gate1EvaluationResult(
+        evaluation_series=ordered_series,
+        scoped_metrics=scoped_metrics,
+        peak_ramp_metrics=peak_ramp_metrics,
+        comparisons=comparisons,
+        bootstrap_plan=plan,
+        bootstrap_intervals=intervals,
+        gate_evidence=evidence,
+        gate_decision=decision,
+        execution_failures=failures,
+        _seal=_GATE_RESULT_SEAL,
+    )
+
+
+def _gate_evidence_validation_payload(evidence: GateEvidence) -> dict[str, Any]:
+    _validate_gate_evidence(evidence)
+    return {
+        "horizons_minutes": list(evidence.horizons_minutes),
+        "hgb_mae_by_tier": {tier: evidence.hgb_mae_by_tier[tier].tolist() for tier in TIER_ORDER},
+        "m3_vs_m2_ci_lower": evidence.m3_vs_m2_ci_lower.tolist(),
+        "m3_daily_absolute_error_delta": evidence.m3_daily_absolute_error_delta.tolist(),
+        "local_dates": list(evidence.local_dates),
+        "hgb_row_identity_sha256": evidence.hgb_row_identity_sha256,
+        "comparison_suite_sha256": evidence.comparison_suite_sha256,
+        "matrix_sha256": evidence.matrix_sha256,
+    }
+
+
+def _result_validation_payload(result: Gate1EvaluationResult) -> dict[str, Any]:
+    if not isinstance(result, Gate1EvaluationResult) or result._seal is not _GATE_RESULT_SEAL:
+        raise TypeError("public metrics require a formal Gate1EvaluationResult")
+    return {
+        "series_keys": [list(_series_key(value)) for value in result.evaluation_series],
+        "scoped": [value.to_public_dict() for value in result.scoped_metrics],
+        "peak_ramp": [value.to_public_dict() for value in result.peak_ramp_metrics],
+        "comparisons": [
+            {
+                "summary": value.to_public_dict(),
+                "daily": value.daily_public_rows(),
+            }
+            for value in result.comparisons
+        ],
+        "bootstrap_plan": result.bootstrap_plan.to_public_dict(),
+        "bootstrap_intervals": [value.to_public_dict() for value in result.bootstrap_intervals],
+        "gate_evidence": _gate_evidence_validation_payload(result.gate_evidence),
+        "gate_decision": result.gate_decision.to_public_dict(),
+        "execution_failures": [value.value for value in result.execution_failures],
+    }
+
+
+def _verified_same_source_result(result: Gate1EvaluationResult) -> Gate1EvaluationResult:
+    try:
+        submitted = _result_validation_payload(result)
+        regenerated = evaluate_gate1(
+            result.evaluation_series,
+            bootstrap_plan=result.bootstrap_plan,
+            execution_failures=result.execution_failures,
+        )
+        expected = _result_validation_payload(regenerated)
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            "public result is incomplete or differs from the same-source canonical evaluation"
+        ) from exc
+    if submitted != expected:
+        raise ValueError(
+            "public result is incomplete or differs from the same-source canonical evaluation"
+        )
+    return regenerated
+
+
 def _scoped_sort_key(value: ScopedMetrics) -> tuple[Any, ...]:
     learner_position = LEARNER_ORDER.index(value.learner) if value.learner else 99
     tier_position = TIER_ORDER.index(value.tier) if value.tier else 99
@@ -1096,14 +1551,33 @@ def _comparison_sort_key(value: TierComparison | BootstrapInterval) -> tuple[int
     )
 
 
+def _assert_public_key(key: str, *, path: str) -> None:
+    lowered = key.casefold()
+    compact = re.sub(r"[^a-z0-9]", "", lowered)
+    if lowered == "_id" or any(
+        fragment in compact for fragment in _PUBLIC_FORBIDDEN_COMPACT_TOKENS
+    ):
+        raise ValueError(f"{path} contains a forbidden private identifier key")
+
+
+def _assert_public_string(value: str, *, path: str) -> None:
+    compact = re.sub(r"[^a-z0-9]", "", value.casefold())
+    if _PRIVATE_ID_TOKEN.search(value) or any(
+        fragment in compact for fragment in _PUBLIC_FORBIDDEN_COMPACT_TOKENS
+    ):
+        raise ValueError(f"{path} contains a forbidden private identifier")
+    if _WINDOWS_ABSOLUTE_PATH.search(value):
+        raise ValueError(f"{path} contains a Windows absolute path")
+    if _UNC_ABSOLUTE_PATH.search(value):
+        raise ValueError(f"{path} contains a UNC absolute path")
+    if _POSIX_ABSOLUTE_PATH.search(value):
+        raise ValueError(f"{path} contains a POSIX absolute path")
+
+
 def _assert_public_plain(value: Any, *, path: str = "payload") -> None:
     if value is None or isinstance(value, (bool, int, str)):
         if isinstance(value, str):
-            lowered = value.casefold()
-            if any(fragment in lowered for fragment in _PUBLIC_FORBIDDEN_FRAGMENTS):
-                raise ValueError(f"{path} contains a forbidden public fragment")
-            if _WINDOWS_ABSOLUTE_PATH.search(value):
-                raise ValueError(f"{path} contains a local absolute path")
+            _assert_public_string(value, path=path)
         return
     if isinstance(value, float):
         if not math.isfinite(value):
@@ -1117,56 +1591,25 @@ def _assert_public_plain(value: Any, *, path: str = "payload") -> None:
         for key, item in value.items():
             if not isinstance(key, str):
                 raise TypeError(f"{path} contains a non-string public key")
-            _assert_public_plain(key, path=f"{path}.key")
+            _assert_public_key(key, path=f"{path}.key")
             _assert_public_plain(item, path=f"{path}.{key}")
         return
     raise TypeError(f"{path} contains a non-JSON public value of type {type(value).__name__}")
 
 
-def build_public_aggregate_payload(
-    *,
-    scoped_metrics: Sequence[ScopedMetrics],
-    peak_ramp_metrics: Sequence[PeakRampMetrics],
-    comparisons: Sequence[TierComparison],
-    bootstrap_plan: BootstrapPlan,
-    bootstrap_intervals: Sequence[BootstrapInterval],
-    gate_decision: GateDecision,
-) -> dict[str, Any]:
-    """Build one deterministic aggregate-only object for Task 6 publication writers."""
+def assert_public_payload_safe(payload: Any) -> None:
+    """Reject local arrays, private identifiers, and local absolute paths."""
 
-    if not isinstance(bootstrap_plan, BootstrapPlan):
-        raise TypeError("public aggregate payload requires the shared BootstrapPlan")
-    if not isinstance(gate_decision, GateDecision):
-        raise TypeError("public aggregate payload requires a GateDecision")
-    for value in scoped_metrics:
-        if not isinstance(value, ScopedMetrics):
-            raise TypeError("public scoped metrics contain an invalid record")
-    for value in peak_ramp_metrics:
-        if not isinstance(value, PeakRampMetrics):
-            raise TypeError("public peak/ramp metrics contain an invalid record")
-    comparison_map: dict[tuple[str, str, str, int], TierComparison] = {}
-    for value in comparisons:
-        if not isinstance(value, TierComparison) or value.key in comparison_map:
-            raise ValueError("public tier comparisons are invalid or duplicated")
-        comparison_map[value.key] = value
-    interval_map: dict[tuple[str, str, str, int], BootstrapInterval] = {}
-    for value in bootstrap_intervals:
-        if not isinstance(value, BootstrapInterval) or value.key in interval_map:
-            raise ValueError("public bootstrap intervals are invalid or duplicated")
-        if (
-            value.seed != bootstrap_plan.seed
-            or value.repetitions != bootstrap_plan.repetitions
-            or value.block_count != BOOTSTRAP_BLOCK_COUNT
-            or value.matrix_sha256 != bootstrap_plan.matrix_sha256
-        ):
-            raise ValueError("public bootstrap interval differs from the shared plan")
-        interval_map[value.key] = value
-    if set(comparison_map) != set(interval_map):
-        raise ValueError("public comparisons and bootstrap intervals must have identical keys")
+    _assert_public_plain(payload)
 
-    ordered_comparisons = sorted(comparison_map.values(), key=_comparison_sort_key)
-    ordered_intervals = sorted(interval_map.values(), key=_comparison_sort_key)
-    ordered_scoped = sorted(scoped_metrics, key=_scoped_sort_key)
+
+def build_public_aggregate_payload(result: Gate1EvaluationResult) -> dict[str, Any]:
+    """Build aggregates only after a complete same-source formal rebuild."""
+
+    verified = _verified_same_source_result(result)
+    ordered_comparisons = sorted(verified.comparisons, key=_comparison_sort_key)
+    ordered_intervals = sorted(verified.bootstrap_intervals, key=_comparison_sort_key)
+    ordered_scoped = sorted(verified.scoped_metrics, key=_scoped_sort_key)
     peak_lookup = {
         (
             value.model_kind,
@@ -1175,10 +1618,8 @@ def build_public_aggregate_payload(
             value.baseline,
             value.horizon_minutes,
         ): value
-        for value in peak_ramp_metrics
+        for value in verified.peak_ramp_metrics
     }
-    if len(peak_lookup) != len(peak_ramp_metrics):
-        raise ValueError("public peak/ramp metrics contain duplicate model-horizon records")
     ordered_peak = [
         peak_lookup[key]
         for key in sorted(
@@ -1205,11 +1646,11 @@ def build_public_aggregate_payload(
             row for value in ordered_comparisons for row in value.daily_public_rows()
         ],
         "bootstrap": {
-            "plan": bootstrap_plan.to_public_dict(),
+            "plan": verified.bootstrap_plan.to_public_dict(),
             "intervals": [value.to_public_dict() for value in ordered_intervals],
         },
         "peak_ramp_metrics": [value.to_public_dict() for value in ordered_peak],
-        "gate": gate_decision.to_public_dict(),
+        "gate": verified.gate_decision.to_public_dict(),
         "privacy": {
             "aggregate_only": True,
             "full_test_values_published": False,
@@ -1218,7 +1659,7 @@ def build_public_aggregate_payload(
             "private_identifiers_published": False,
         },
     }
-    _assert_public_plain(payload)
+    assert_public_payload_safe(payload)
     encoded = json.dumps(
         payload,
         sort_keys=True,
@@ -1239,16 +1680,20 @@ __all__ = [
     "DailyPeakMetric",
     "ErrorMetrics",
     "EvaluationSeries",
+    "ExecutionFailureCode",
+    "Gate1EvaluationResult",
     "GateDecision",
     "GateEvidence",
     "PeakRampMetrics",
     "ScopedMetrics",
     "TierComparison",
+    "assert_public_payload_safe",
     "bootstrap_tier_comparison",
     "build_public_aggregate_payload",
     "classify_gate",
     "compare_adjacent_tiers",
     "compute_error_metrics",
     "compute_peak_ramp_metrics",
+    "evaluate_gate1",
     "evaluate_scopes",
 ]

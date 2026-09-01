@@ -230,13 +230,13 @@ E:\Anaconda\envs\evcf-gate1-pilot\python.exe scripts/run_jpl_gate1_pilot.py --au
 - [x] **Step 3: Run the full fixed grid and rolling test without test-time retuning**
 - [x] **Step 4: Independently recompute key MAEs, comparisons, bootstrap direction, day wins, and Gate classification from ignored local predictions**
 - [x] **Step 5: Run the identical command a second time and require identical aggregate/public hashes**
-- [ ] **Step 6: Commit the 13 aggregate result files**
+- [x] **Step 6: Commit the 13 aggregate result files**
 
 Commit: `data: add deidentified Gate 1 pilot results`
 
 ## Task 8: Verification, PR, and stop
 
-- [ ] **Step 1: Run all required checks in the formal environment**
+- [x] **Step 1: Run all required checks in the formal environment**
 
 ```powershell
 E:\Anaconda\envs\evcf-gate1-pilot\python.exe scripts/validate_library.py
@@ -246,7 +246,7 @@ E:\Anaconda\envs\evcf-gate1-pilot\python.exe -m ruff check code/src scripts code
 git diff --check
 ```
 
-- [ ] **Step 2: Audit tracked paths, public privacy, file sizes, SHA256SUMS, ignored predictions/data/models, original worktree state, and branch**
+- [x] **Step 2: Audit tracked paths, public privacy, file sizes, SHA256SUMS, ignored predictions/data/models, original worktree state, and branch**
 - [ ] **Step 3: Push only `experiments/gate1-active-session-pilot` and create the requested PR against `main`**
 - [ ] **Step 4: Wait for Python 3.11 CI; do not merge**
 - [ ] **Step 5: Report the exact frozen final classification and stop without seasonal acquisition, probability models, GPU work, or scheduling**

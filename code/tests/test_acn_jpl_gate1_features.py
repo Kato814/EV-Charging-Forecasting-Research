@@ -319,7 +319,7 @@ def test_m4_weighted_hold_slope_joint_gap_and_issue_poison() -> None:
     assert stats[2] == pytest.approx(0.0)
     assert stats[3] == pytest.approx(0.09034877590740624)
     assert stats[4] == pytest.approx(-0.05 * 60 / 295)
-    assert stats[5] == pytest.approx(12 / 29)
+    assert stats[5] == pytest.approx(19 / 29)
     assert stats[6] == pytest.approx(29 / 300)
     assert stats[7] == pytest.approx(2.75 / 24)
     assert stats[8] == pytest.approx(0.4)
@@ -369,19 +369,19 @@ def test_m4_all_frozen_window_boundaries(window_position: int, window_minutes: i
     assert before_start[6] == pytest.approx(1 / (window_minutes * 60))
 
 
-def test_m4_nonzero_threshold_is_strict_and_gap_requires_joint_coverage() -> None:
+def test_m4_nonzero_is_not_the_active_threshold_and_gap_requires_joint_coverage() -> None:
     issue = 1_000
     stats = causal_session_trajectory_statistics(
         _series(
             1,
-            current_times=[700, 712, 724],
-            current_values=[0.0, 0.1, 0.100001],
+            current_times=[700, 712, 724, 736],
+            current_values=[0.0, 0.05, 0.1, -0.25],
             pilot_times=[900],
             pilot_values=[8.0],
         ),
         issue,
     )[0]
-    assert stats[5] == pytest.approx(1 / 3)
+    assert stats[5] == pytest.approx(3 / 4)
     assert np.isnan(stats[7:9]).all()
 
 
@@ -514,9 +514,104 @@ def test_manifest_is_json_safe_path_free_and_records_all_dimensions() -> None:
     assert ":/" not in encoded
     for tier in manifest["tiers"].values():
         assert len(tier["features"]) == tier["raw_dimension"]
+        assert [item["position"] for item in tier["features"]] == list(range(tier["raw_dimension"]))
         assert all(
-            set(item) == {"name", "formula", "unit", "nullable"} for item in tier["features"]
+            set(item) == {"position", "name", "formula", "unit", "nullable"}
+            for item in tier["features"]
         )
+        indicators = tier["missing_indicators"]
+        assert [item["position"] for item in indicators] == list(
+            range(tier["raw_dimension"], tier["encoded_dimension"])
+        )
+        assert all(
+            set(item) == {"position", "name", "source_feature", "formula", "unit"}
+            for item in indicators
+        )
+        assert all(item["formula"] == "1 if source is missing else 0" for item in indicators)
+        assert all(item["unit"] == "1" for item in indicators)
+
+
+def test_manifest_freezes_pooling_trajectory_ordering_and_privacy_semantics() -> None:
+    snapshot = _snapshot()
+    accumulator = M4FeatureAccumulator(issue_count=3)
+    _consume_snapshot(accumulator, snapshot)
+    manifest = feature_encoding_manifest(build_feature_blocks(snapshot, accumulator))
+
+    pooling = manifest["pooling_contract"]
+    assert pooling["statistic_order"] == list(features.FIXED_POOL_STAT_NAMES)
+    assert pooling["count"]["formula"] == "number of finite values"
+    assert pooling["sum"]["empty_value"] == 0.0
+    assert pooling["standard_deviation"]["ddof"] == 0
+    assert pooling["quantiles"] == {
+        "probabilities": [0.25, 0.5, 0.75],
+        "method": "linear",
+    }
+    assert pooling["missing_count"]["formula"] == "total count minus finite count"
+    assert pooling["empty_or_all_missing"] == {
+        "count": 0,
+        "sum": 0.0,
+        "mean_std_minimum_maximum_quantiles": None,
+        "missing_count": "total count",
+    }
+
+    trajectory = manifest["trajectory_contract"]
+    assert trajectory["windows_minutes"] == [5, 15, 30, 60]
+    assert trajectory["window_interval"] == "[origin - window, origin)"
+    assert trajectory["hold"] == {
+        "method": "left-continuous",
+        "cap_seconds": 12,
+        "next_sample_also_ends_hold": True,
+    }
+    assert trajectory["sample_at_origin"] == "excluded"
+    assert trajectory["current_mean"]["denominator"] == "covered current seconds"
+    assert trajectory["current_standard_deviation"] == {
+        "formula": "time-weighted population standard deviation of held current",
+        "denominator": "covered current seconds",
+        "ddof": 0,
+    }
+    assert trajectory["current_nonzero_fraction"] == {
+        "formula": "covered seconds with nonzero held current divided by coverage",
+        "condition": "held current != 0.0 A",
+        "denominator": "covered current seconds",
+    }
+    assert trajectory["current_maximum"]["formula"].startswith("maximum held current")
+    assert trajectory["current_minimum"]["formula"].startswith("minimum held current")
+    assert trajectory["current_observed_ratio"]["denominator"] == "full window seconds"
+    assert trajectory["slope"] == {
+        "formula": "(last current - first current) * 60 / (last timestamp - first timestamp)",
+        "minimum_distinct_timestamps": 2,
+        "unit": "A/min",
+    }
+    assert trajectory["gap"] == {
+        "definition": "pilot - current",
+        "coverage": "joint held coverage",
+        "weighted_mean_denominator": "joint-covered seconds",
+        "maximum": "maximum over joint-covered seconds",
+        "negative_values_clipped": False,
+    }
+
+    assert manifest["ordering_contract"] == {
+        "M1": "history oldest-to-newest, masks oldest-to-newest, calendar",
+        "M2": "M1 then aggregate state",
+        "M3": "M2 then field then pool statistic",
+        "M4": "M3 then window then session statistic then pool statistic",
+    }
+    assert manifest["privacy_audit"] == {
+        "status": "PASS",
+        "row_index_used_as_model_feature": False,
+        "structural_join_keys_used_as_model_features": False,
+        "single_session_values_published": False,
+        "local_paths_published": False,
+    }
+    assert manifest["legacy_active_reference_audit"] == {
+        "role": "audit only",
+        "threshold_a": 0.1,
+        "comparison": "finite current strictly greater than threshold",
+        "model_cohort": "all connected sessions",
+        "identifiers_published": False,
+    }
+    assert "current_nonzero_fraction" in manifest["m4_session_statistic_order"]
+    assert not any("gt_0_1a" in item["name"] for item in manifest["tiers"]["M4"]["features"])
 
 
 def test_real_jpl_feature_encoding_is_complete_when_present() -> None:

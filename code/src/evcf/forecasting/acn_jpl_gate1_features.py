@@ -64,7 +64,7 @@ M4_SESSION_STAT_NAMES = (
     "current_minimum_a",
     "current_std_a",
     "current_slope_a_per_min",
-    "current_nonzero_fraction_gt_0_1a",
+    "current_nonzero_fraction",
     "current_observed_ratio",
     "pilot_minus_current_mean_a",
     "pilot_minus_current_maximum_a",
@@ -520,7 +520,7 @@ def _causal_session_multiwindow_statistics(
                 float(np.min(values)),
                 math.sqrt(variance),
                 slope,
-                float(np.sum(durations[values > _ACTIVE_THRESHOLD_A]) / covered),
+                float(np.sum(durations[values != 0.0]) / covered),
                 covered / window_seconds,
             )
         else:
@@ -784,7 +784,7 @@ _M4_UNITS = {
     "current_minimum_a": "A",
     "current_std_a": "A",
     "current_slope_a_per_min": "A/min",
-    "current_nonzero_fraction_gt_0_1a": "1",
+    "current_nonzero_fraction": "1",
     "current_observed_ratio": "1",
     "pilot_minus_current_mean_a": "A",
     "pilot_minus_current_maximum_a": "A",
@@ -859,23 +859,35 @@ def feature_encoding_manifest(
             formula, unit = _feature_description(name)
             features.append(
                 {
+                    "position": position,
                     "name": name,
                     "formula": formula,
                     "unit": unit,
                     "nullable": bool(block.nullable_mask[position]),
                 }
             )
-        indicators = [
-            f"{name}__missing"
+        indicator_names = [
+            name
             for name, nullable in zip(block.feature_names, block.nullable_mask, strict=True)
             if nullable
+        ]
+        indicators = [
+            {
+                "position": block.values.shape[1] + offset,
+                "name": f"{source}__missing",
+                "source_feature": source,
+                "formula": "1 if source is missing else 0",
+                "unit": "1",
+            }
+            for offset, source in enumerate(indicator_names)
         ]
         tiers[tier] = {
             "raw_dimension": block.values.shape[1],
             "missing_indicator_dimension": len(indicators),
             "encoded_dimension": block.values.shape[1] + len(indicators),
             "features": features,
-            "missing_indicator_names": indicators,
+            "missing_indicators": indicators,
+            "missing_indicator_names": [item["name"] for item in indicators],
         }
     return {
         "schema_version": "acn-jpl-gate1-feature-encoding/v1",
@@ -888,5 +900,99 @@ def feature_encoding_manifest(
             "history values use their existing 96 observation masks without duplicate indicators"
         ),
         "nullable_mask_policy": "fixed columns that receive appended missing indicators",
+        "pooling_contract": {
+            "statistic_order": list(FIXED_POOL_STAT_NAMES),
+            "finite_values": "real finite values; null and NaN are missing; infinity is rejected",
+            "count": {"formula": "number of finite values", "unit": "count"},
+            "sum": {"formula": "sum of finite values", "empty_value": 0.0},
+            "mean": {
+                "formula": "sum of finite values divided by finite count",
+                "empty_value": None,
+            },
+            "standard_deviation": {
+                "formula": "population standard deviation of finite values",
+                "ddof": 0,
+                "empty_value": None,
+            },
+            "minimum_and_maximum": {
+                "formula": "finite-value extrema",
+                "empty_value": None,
+            },
+            "quantiles": {"probabilities": [0.25, 0.5, 0.75], "method": "linear"},
+            "missing_count": {
+                "formula": "total count minus finite count",
+                "unit": "count",
+            },
+            "empty_or_all_missing": {
+                "count": 0,
+                "sum": 0.0,
+                "mean_std_minimum_maximum_quantiles": None,
+                "missing_count": "total count",
+            },
+        },
+        "trajectory_contract": {
+            "windows_minutes": list(M4_WINDOWS_MINUTES),
+            "window_interval": "[origin - window, origin)",
+            "hold": {
+                "method": "left-continuous",
+                "cap_seconds": 12,
+                "next_sample_also_ends_hold": True,
+            },
+            "sample_at_origin": "excluded",
+            "current_mean": {
+                "formula": "time-weighted mean of held current",
+                "denominator": "covered current seconds",
+            },
+            "current_maximum": {"formula": "maximum held current over covered current seconds"},
+            "current_minimum": {"formula": "minimum held current over covered current seconds"},
+            "current_standard_deviation": {
+                "formula": "time-weighted population standard deviation of held current",
+                "denominator": "covered current seconds",
+                "ddof": 0,
+            },
+            "current_nonzero_fraction": {
+                "formula": "covered seconds with nonzero held current divided by coverage",
+                "condition": "held current != 0.0 A",
+                "denominator": "covered current seconds",
+            },
+            "current_observed_ratio": {
+                "formula": "covered current seconds divided by full window seconds",
+                "denominator": "full window seconds",
+            },
+            "slope": {
+                "formula": (
+                    "(last current - first current) * 60 / (last timestamp - first timestamp)"
+                ),
+                "minimum_distinct_timestamps": 2,
+                "unit": "A/min",
+            },
+            "gap": {
+                "definition": "pilot - current",
+                "coverage": "joint held coverage",
+                "weighted_mean_denominator": "joint-covered seconds",
+                "maximum": "maximum over joint-covered seconds",
+                "negative_values_clipped": False,
+            },
+        },
+        "ordering_contract": {
+            "M1": "history oldest-to-newest, masks oldest-to-newest, calendar",
+            "M2": "M1 then aggregate state",
+            "M3": "M2 then field then pool statistic",
+            "M4": "M3 then window then session statistic then pool statistic",
+        },
+        "privacy_audit": {
+            "status": "PASS",
+            "row_index_used_as_model_feature": False,
+            "structural_join_keys_used_as_model_features": False,
+            "single_session_values_published": False,
+            "local_paths_published": False,
+        },
+        "legacy_active_reference_audit": {
+            "role": "audit only",
+            "threshold_a": 0.1,
+            "comparison": "finite current strictly greater than threshold",
+            "model_cohort": "all connected sessions",
+            "identifiers_published": False,
+        },
         "tiers": tiers,
     }

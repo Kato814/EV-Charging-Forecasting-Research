@@ -1,0 +1,105 @@
+{
+  "M4_prefix_length_distribution": {
+    "current": {
+      "count": 22427,
+      "maximum": 12458,
+      "median": 1811.0,
+      "minimum": 1,
+      "p95": 5559.4000000000015,
+      "zero_count": 0
+    },
+    "pilot": {
+      "count": 22427,
+      "maximum": 12457,
+      "median": 1812.0,
+      "minimum": 1,
+      "p95": 5560.700000000001,
+      "zero_count": 0
+    }
+  },
+  "expected_scheduled_issue_times": 2865,
+  "feature_whitelist_enforcement": {
+    "status": "PASS",
+    "unexpected_key_count": 0
+  },
+  "formal_issue_times": 2853,
+  "future_fields_found": [],
+  "horizons_minutes": [
+    15,
+    30,
+    60,
+    120,
+    240
+  ],
+  "incomplete_label_issue_times": 12,
+  "issue_times": 2865,
+  "leakage_audit": "PASS",
+  "lookback_minutes": 1440,
+  "missing_rates": {
+    "M1_history": 0.00222719,
+    "M2_pilot_mean": 0.02769015,
+    "M2_pilot_sum": 0.02769015,
+    "M2_station_current": 0.02769015,
+    "M3_current_current": 0.00213764,
+    "M3_current_pilot": 0.00213764,
+    "M3_known_requested_departure": 0.03176573,
+    "M3_known_requested_energy": 0.03176573,
+    "M3_recent_current_mean": 6.896e-05,
+    "M3_recent_current_peak": 6.896e-05
+  },
+  "occupancy_rate": {
+    "reason": "Issue #17 supplies no frozen JPL capacity denominator",
+    "status": "NOT_CONSTRUCTED"
+  },
+  "ragged_rows": {
+    "M3": 43506,
+    "M4": 22427
+  },
+  "samples": {
+    "M1": 2853,
+    "M2": 2853,
+    "M3": 2853,
+    "M4": 2853
+  },
+  "schema_version": "acn-jpl-issue-snapshot-qa/v1",
+  "shapes": {
+    "M1_history": [
+      2853,
+      96
+    ],
+    "M2_dense": [
+      2853,
+      6
+    ],
+    "M3_ragged_rows": 43506,
+    "M3_session_feature_width": 11,
+    "M4_ragged_rows": 22427,
+    "M4_reference_width": 2,
+    "labels": [
+      2853,
+      5
+    ]
+  },
+  "status": "CONDITIONAL_PASS",
+  "target_type": "station_current_mean_a",
+  "temporal_violations": {
+    "future_trajectory_rows": 0,
+    "late_user_input_rows": 0,
+    "overlong_trajectory_rows": 0,
+    "total": 0
+  },
+  "unexpected_feature_keys": [],
+  "user_inputs_issue_time_truncation": {
+    "connected_session_rows": 43506,
+    "rows_with_known_input": 42124,
+    "rule": "last modifiedAt at or before issue time",
+    "status": "PASS"
+  },
+  "valid_labels_by_horizon": {
+    "120": 2862,
+    "15": 2862,
+    "240": 2862,
+    "30": 2862,
+    "60": 2862
+  }
+}

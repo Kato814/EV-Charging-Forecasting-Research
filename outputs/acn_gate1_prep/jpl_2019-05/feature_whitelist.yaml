@@ -1,0 +1,77 @@
+notes:
+  anonymous_indexes: local storage references only; never model features or Git data
+  issue_time_rule: all observations and user-input modifications are at or before
+    issue time
+  trajectory_window: M4 references at most the frozen 24-hour lookback
+schema_version: acn-jpl-feature-whitelist/v1
+tiers:
+  M1:
+  - issue_time_utc_s
+  - quarter_hour_index
+  - day_of_week
+  - is_weekend
+  - history_station_current_mean_a
+  - history_observed_mask
+  M2:
+  - issue_time_utc_s
+  - quarter_hour_index
+  - day_of_week
+  - is_weekend
+  - history_station_current_mean_a
+  - history_observed_mask
+  - connected_session_count
+  - active_charging_session_count
+  - station_current_a
+  - station_current_observed_ratio
+  - pilot_sum_a
+  - pilot_mean_a
+  M3:
+  - issue_time_utc_s
+  - quarter_hour_index
+  - day_of_week
+  - is_weekend
+  - history_station_current_mean_a
+  - history_observed_mask
+  - connected_session_count
+  - active_charging_session_count
+  - station_current_a
+  - station_current_observed_ratio
+  - pilot_sum_a
+  - pilot_mean_a
+  - elapsed_connection_s
+  - elapsed_charging_time_proxy_s
+  - current_current_a
+  - recent_current_mean_a
+  - recent_current_peak_a
+  - recent_current_observed_ratio
+  - cumulative_current_ah
+  - cumulative_current_observed_ratio
+  - current_pilot_a
+  - requested_departure_minutes_from_issue
+  - known_kwh_requested
+  M4:
+  - issue_time_utc_s
+  - quarter_hour_index
+  - day_of_week
+  - is_weekend
+  - history_station_current_mean_a
+  - history_observed_mask
+  - connected_session_count
+  - active_charging_session_count
+  - station_current_a
+  - station_current_observed_ratio
+  - pilot_sum_a
+  - pilot_mean_a
+  - elapsed_connection_s
+  - elapsed_charging_time_proxy_s
+  - current_current_a
+  - recent_current_mean_a
+  - recent_current_peak_a
+  - recent_current_observed_ratio
+  - cumulative_current_ah
+  - cumulative_current_observed_ratio
+  - current_pilot_a
+  - requested_departure_minutes_from_issue
+  - known_kwh_requested
+  - partial_current_trajectory_ref
+  - partial_pilot_trajectory_ref

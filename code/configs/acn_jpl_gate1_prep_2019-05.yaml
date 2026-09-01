@@ -1,0 +1,46 @@
+schema_version: acn-jpl-gate1-protocol/v1
+
+analysis:
+  timezone: America/Los_Angeles
+  local_start_inclusive: "2019-05-01T00:00:00-07:00"
+  local_end_exclusive: "2019-06-01T00:00:00-07:00"
+  expected_raw_objects: 1645
+  expected_station_bins: 2976
+  expected_scheduled_issue_times: 2865
+
+cleaning:
+  expected_sampling_mode_seconds: 4
+  locf_mode_multiplier: 3
+  locf_cap_seconds: 60
+  boundary_sensitivity_seconds: 60
+
+aggregation:
+  coverage_thresholds: [0.80, 0.90, 0.95]
+  main_active_threshold_a: 0.1
+  comparison_active_threshold_a: 1.0
+
+snapshots:
+  lookback_minutes: 1440
+  horizons_minutes: [15, 30, 60, 120, 240]
+  issue_step_minutes: 15
+
+continuity_gate:
+  minimum_valid_bin_rate: 0.80
+  maximum_missing_run_bins: 96
+  interpretation: predeclared_data_preparation_gate_not_scientific_validation
+
+power_audit:
+  primary_minimum_kwh: 0.5
+  primary_minimum_current_coverage: 0.90
+  sensitivity_minimum_kwh: [0.1, 0.5, 1.0]
+  sensitivity_minimum_current_coverage: [0.80, 0.90, 0.95]
+  candidate_mapping_rate: 1.0
+  severe_mapping_rate_below: 0.95
+  candidate_audit_coverage_minimum: 0.90
+  candidate_retained_rate_minimum: 0.90
+  candidate_mdape_maximum: 0.20
+  candidate_p90_ape_maximum: 0.40
+  candidate_monthly_absolute_relative_error_maximum: 0.10
+  severe_monthly_absolute_relative_error_above: 0.50
+  decision_thresholds_are_operational: true
+  reconstructed_power_requires_main_control_authorization: true

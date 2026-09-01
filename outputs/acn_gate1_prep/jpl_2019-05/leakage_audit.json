@@ -1,0 +1,11 @@
+{
+  "feature_whitelist_status": "PASS",
+  "future_field_count": 0,
+  "future_outcome_fields_emitted": false,
+  "identifiers_emitted": false,
+  "issue_time_user_input_status": "PASS",
+  "schema_version": "acn-jpl-leakage-audit/v1",
+  "status": "PASS",
+  "temporal_violation_count": 0,
+  "unexpected_feature_key_count": 0
+}

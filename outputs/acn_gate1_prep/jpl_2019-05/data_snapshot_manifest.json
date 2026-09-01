@@ -1,0 +1,61 @@
+{
+  "anonymous_local_indexes_published": false,
+  "data_snapshot_sha256": "7066ffc8ba42a98f73246acfbc62352fe55a1433a43cba80957c6034e3aeaa5d",
+  "large_arrays_published": false,
+  "local_artifact_count": 9,
+  "local_artifacts": [
+    {
+      "artifact_name": "cleaned_sessions.jsonl.gz",
+      "sha256": "caf24efc6dbe5b36fd404c9b0693857a5264c923d5acc394f8583212314b1e7a",
+      "size_bytes": 107614607
+    },
+    {
+      "artifact_name": "cleaned_sessions.jsonl.gz.manifest.json",
+      "sha256": "d85cb088269602eb17bd788653a7baa256f1c275f60ed97b33e0726b9614dd37",
+      "size_bytes": 462
+    },
+    {
+      "artifact_name": "station_15min.csv.gz",
+      "sha256": "76a1f0fbf7a9490b84375aa7d6f6a3626a7c9149822fa12eae4734106ef26756",
+      "size_bytes": 75380
+    },
+    {
+      "artifact_name": "station_15min.npz",
+      "sha256": "efd89061c349787e772d2ada5bd852fcaf918d952044d5e9a3ad20e112969368",
+      "size_bytes": 59741
+    },
+    {
+      "artifact_name": "m1.npz",
+      "sha256": "cf8c06ca6d842f0840d8b243bd8d7e9db95f7ac84126d9ecae82df297eeb6a0e",
+      "size_bytes": 26407
+    },
+    {
+      "artifact_name": "m2.npz",
+      "sha256": "d01f0162761614608e351913dc61aff4d326a2bd6e1257cb807d7a839128755a",
+      "size_bytes": 41479
+    },
+    {
+      "artifact_name": "labels.npz",
+      "sha256": "1a7714665dd15d873a6ceece09d0cebc3dd9074222662089863d7176db0026a9",
+      "size_bytes": 24776
+    },
+    {
+      "artifact_name": "m3.jsonl.gz",
+      "sha256": "a27a69fd5050fb33a74fa71d79508e04c3fa5700ad5a7899761d35f3701e5b9f",
+      "size_bytes": 1650585
+    },
+    {
+      "artifact_name": "m4.jsonl.gz",
+      "sha256": "a8ec9ff64f266e9b1e665f50c8c68d617ea444907200268eb82c93f0f390616c",
+      "size_bytes": 311750
+    }
+  ],
+  "protocol_sha256": "2b95e9b09d31fdd30c559be80f9db64b22e33822b08a25de3715e168f3697bf3",
+  "reproducible": true,
+  "schema_version": "acn-jpl-public-data-snapshot/v1",
+  "source_file_count": 67,
+  "source_inventory_sha256": "63e3f88fcbd4c0d8b87392267cdbe5ad383d89468f10ac3de5e181837b18dcac",
+  "source_object_count": 1645,
+  "source_total_bytes": 61625542,
+  "status": "PASS"
+}

@@ -1,0 +1,21 @@
+{
+  "at_or_after_disconnect_count": 778,
+  "before_connection_count": 619,
+  "current_integral_share": 0.00015101391288183135,
+  "excluded_positive_ampere_seconds": 61070.90000000002,
+  "main_result_excludes_boundary_points": true,
+  "positive_points_excluded": 1397,
+  "raw_total_ampere_seconds": 404405785.1000001,
+  "schema_version": "acn-jpl-boundary-current-audit/v1",
+  "sensitivity_window_seconds": 60,
+  "sessions_affected": 516,
+  "signed_distance_seconds": {
+    "count": 1397,
+    "maximum": 60.0,
+    "median": 6.0,
+    "minimum": -60.0,
+    "p05": -33.0,
+    "p95": 41.0
+  },
+  "status": "PASS"
+}

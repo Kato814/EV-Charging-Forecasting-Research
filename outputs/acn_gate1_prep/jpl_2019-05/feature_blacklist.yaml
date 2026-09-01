@@ -1,0 +1,13 @@
+enforced_private_field_count: 9
+forbidden_field_categories:
+- final_delivered_energy
+- real_future_disconnect_time
+- real_future_done_charging_time
+- post_issue_current_observations
+- post_issue_pilot_observations
+- post_issue_user_input_revisions
+- user_identity_fields
+- session_identity_fields
+- database_identity_fields
+literal_private_schema_names_published: false
+schema_version: acn-jpl-feature-blacklist/v1

@@ -217,12 +217,11 @@ def expand_hgb_grid(hgb_config: Mapping[str, Any]) -> list[dict[str, Any]]:
 def _copy_in_frozen_order(actual: Any, expected: Any, *, path: str) -> Any:
     """Return a plain copy ordered like the frozen schema after exact validation."""
 
-    if type(actual) is not type(expected):
-        raise FrozenConfigError(
-            f"{path} changed frozen type: expected {type(expected).__name__}, "
-            f"found {type(actual).__name__}"
-        )
     if isinstance(expected, dict):
+        if not isinstance(actual, Mapping):
+            raise FrozenConfigError(
+                f"{path} changed frozen type: expected mapping, found {type(actual).__name__}"
+            )
         if set(actual) != set(expected) or len(actual) != len(expected):
             raise FrozenConfigError(
                 f"{path} changed frozen keys: expected {tuple(expected)!r}, found {tuple(actual)!r}"
@@ -231,6 +230,11 @@ def _copy_in_frozen_order(actual: Any, expected: Any, *, path: str) -> Any:
             key: _copy_in_frozen_order(actual[key], value, path=f"{path}.{key}")
             for key, value in expected.items()
         }
+    if type(actual) is not type(expected):
+        raise FrozenConfigError(
+            f"{path} changed frozen type: expected {type(expected).__name__}, "
+            f"found {type(actual).__name__}"
+        )
     if isinstance(expected, list):
         if len(actual) != len(expected):
             raise FrozenConfigError(
@@ -256,8 +260,8 @@ def validate_gate1_config(config: Mapping[str, Any]) -> dict[str, Any]:
     restoring the one authoritative declaration order.
     """
 
-    if type(config) is not dict:
-        raise FrozenConfigError("config must be a plain mapping with exact frozen keys")
+    if not isinstance(config, Mapping):
+        raise FrozenConfigError("config must be a mapping with exact frozen keys")
     allowed_keys = (tuple(_FROZEN_CONFIG), tuple(_FROZEN_CONFIG) + ("hgb_grid",))
     if tuple(config) not in allowed_keys and set(config) not in (
         set(_FROZEN_CONFIG),

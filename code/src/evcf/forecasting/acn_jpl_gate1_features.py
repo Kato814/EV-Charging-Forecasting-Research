@@ -9,11 +9,14 @@ session summaries are retained until their issue group is pooled.
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from itertools import pairwise
 from numbers import Integral, Real
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
@@ -23,6 +26,9 @@ from evcf.forecasting.acn_jpl_gate1_data import (
     EXPECTED_ISSUE_COUNT,
     CausalSessionSeries,
     Gate1Snapshot,
+    _update_causal_prefix_digest,
+    verified_causal_prefix_provenance,
+    verified_snapshot_provenance,
 )
 
 FIXED_POOL_STAT_NAMES = (
@@ -59,6 +65,7 @@ M3_SESSION_FIELDS = (
     "known_kwh_requested",
 )
 M4_WINDOWS_MINUTES = (5, 15, 30, 60)
+_FEATURE_ENCODING_SCHEMA = "acn-jpl-gate1-verified-feature-block/v1"
 M4_SESSION_STAT_NAMES = (
     "current_mean_a",
     "current_maximum_a",
@@ -70,6 +77,17 @@ M4_SESSION_STAT_NAMES = (
     "pilot_minus_current_mean_a",
     "pilot_minus_current_maximum_a",
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _FeatureEncodingVerification:
+    schema_version: str
+    tier: str
+    snapshot_provenance_sha256: str
+    encoder_implementation_sha256: str
+    feature_content_sha256: str
+    seal_sha256: str
+
 
 _POOL_NULLABLE = np.asarray(
     [False, False, True, True, True, True, True, True, True, False], dtype=np.bool_
@@ -181,6 +199,12 @@ class FeatureBlock:
     values: np.ndarray
     feature_names: tuple[str, ...]
     nullable_mask: np.ndarray
+    _encoding_verification: _FeatureEncodingVerification | None = dataclass_field(
+        default=None,
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         issue_times = _validate_issue_times(self.issue_times, "feature block")
@@ -205,6 +229,21 @@ class FeatureBlock:
         object.__setattr__(self, "values", _immutable(values, dtype=np.dtype(np.float64)))
         object.__setattr__(self, "feature_names", names)
         object.__setattr__(self, "nullable_mask", _immutable(nullable))
+
+    def __getstate__(self) -> tuple[Any, ...]:
+        return tuple(getattr(self, name) for name in self.__slots__)
+
+    def __setstate__(self, state: tuple[Any, ...]) -> None:
+        if len(state) != len(self.__slots__):
+            raise ValueError("feature block checkpoint field count is invalid")
+        issue_times, values, feature_names, nullable_mask, verification = state
+        object.__setattr__(self, "issue_times", issue_times)
+        object.__setattr__(self, "values", values)
+        object.__setattr__(self, "feature_names", feature_names)
+        object.__setattr__(self, "nullable_mask", nullable_mask)
+        object.__setattr__(self, "_encoding_verification", None)
+        self.__post_init__()
+        object.__setattr__(self, "_encoding_verification", verification)
 
 
 def validate_feature_block_schema(
@@ -241,6 +280,134 @@ def canonical_feature_schema(tier: str) -> tuple[tuple[str, ...], np.ndarray]:
         _EXPECTED_FEATURE_NAMES[tier],
         _immutable(np.asarray(_EXPECTED_NULLABLE_MASKS[tier], dtype=np.bool_)),
     )
+
+
+def _feature_encoder_implementation_sha256() -> str:
+    return hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+
+
+def feature_block_content_sha256(block: FeatureBlock) -> str:
+    """Hash the exact canonical schema, row index, and raw feature matrix."""
+
+    tier = validate_feature_block_schema(block)
+    digest = hashlib.sha256()
+    schema = {
+        "tier": tier,
+        "feature_names": list(block.feature_names),
+        "nullable_mask": [bool(value) for value in block.nullable_mask],
+    }
+    digest.update(
+        json.dumps(
+            schema,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        ).encode("ascii")
+    )
+    for array in (block.issue_times, block.values):
+        value = np.ascontiguousarray(array)
+        digest.update(value.dtype.str.encode("ascii"))
+        digest.update(np.asarray(value.shape, dtype=np.int64).tobytes())
+        digest.update(value.tobytes(order="C"))
+    return digest.hexdigest()
+
+
+def _feature_verification_payload(
+    *,
+    tier: str,
+    snapshot_provenance_sha256: str,
+    encoder_implementation_sha256: str,
+    feature_content_sha256: str,
+) -> bytes:
+    return json.dumps(
+        {
+            "schema_version": _FEATURE_ENCODING_SCHEMA,
+            "tier": tier,
+            "snapshot_provenance_sha256": snapshot_provenance_sha256,
+            "encoder_implementation_sha256": encoder_implementation_sha256,
+            "feature_content_sha256": feature_content_sha256,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("ascii")
+
+
+def _seal_feature_block(
+    block: FeatureBlock,
+    snapshot: Gate1Snapshot,
+    *,
+    tier: str,
+) -> FeatureBlock:
+    try:
+        snapshot_provenance = verified_snapshot_provenance(snapshot)
+    except ValueError:
+        if snapshot._verification is None:
+            return block
+        raise
+    validate_feature_block_schema(block, tier=tier)
+    implementation = _feature_encoder_implementation_sha256()
+    content = feature_block_content_sha256(block)
+    payload = _feature_verification_payload(
+        tier=tier,
+        snapshot_provenance_sha256=snapshot_provenance,
+        encoder_implementation_sha256=implementation,
+        feature_content_sha256=content,
+    )
+    object.__setattr__(
+        block,
+        "_encoding_verification",
+        _FeatureEncodingVerification(
+            schema_version=_FEATURE_ENCODING_SCHEMA,
+            tier=tier,
+            snapshot_provenance_sha256=snapshot_provenance,
+            encoder_implementation_sha256=implementation,
+            feature_content_sha256=content,
+            seal_sha256=hashlib.sha256(payload).hexdigest(),
+        ),
+    )
+    return block
+
+
+def verified_feature_block_provenance(
+    block: FeatureBlock,
+    snapshot: Gate1Snapshot,
+    *,
+    tier: str,
+) -> str:
+    """Return canonical-encoder provenance for one loader-sealed snapshot block."""
+
+    validate_feature_block_schema(block, tier=tier)
+    snapshot_provenance = verified_snapshot_provenance(snapshot)
+    verification = block._encoding_verification
+    if not isinstance(verification, _FeatureEncodingVerification):
+        raise ValueError("feature block has no verified canonical encoder seal")  # noqa: TRY004
+    if verification.schema_version != _FEATURE_ENCODING_SCHEMA or verification.tier != tier:
+        raise ValueError("feature block encoder seal identity is invalid")
+    if verification.snapshot_provenance_sha256 != snapshot_provenance:
+        raise ValueError("feature block encoder seal belongs to a different verified snapshot")
+    implementation = _feature_encoder_implementation_sha256()
+    if verification.encoder_implementation_sha256 != implementation:
+        raise ValueError("feature encoder implementation provenance has changed")
+    content = feature_block_content_sha256(block)
+    if verification.feature_content_sha256 != content:
+        raise ValueError("feature block content differs from its canonical encoder seal")
+    if any(
+        array.flags.writeable for array in (block.issue_times, block.values, block.nullable_mask)
+    ):
+        raise ValueError("verified feature block arrays must remain immutable")
+    payload = _feature_verification_payload(
+        tier=tier,
+        snapshot_provenance_sha256=snapshot_provenance,
+        encoder_implementation_sha256=implementation,
+        feature_content_sha256=content,
+    )
+    expected_seal = hashlib.sha256(payload).hexdigest()
+    if verification.seal_sha256 != expected_seal:
+        raise ValueError("feature block canonical encoder seal is inconsistent")
+    return expected_seal
 
 
 def fixed_pool(
@@ -345,11 +512,15 @@ def encode_m1(snapshot: Gate1Snapshot) -> FeatureBlock:
     )
     if values.shape[1] != _M1_RAW_DIMENSION:
         raise AssertionError("internal M1 dimension drift")
-    return FeatureBlock(
-        times,
-        values,
-        _M1_FEATURE_NAMES,
-        np.asarray(_M1_NULLABLE_MASK, dtype=np.bool_),
+    return _seal_feature_block(
+        FeatureBlock(
+            times,
+            values,
+            _M1_FEATURE_NAMES,
+            np.asarray(_M1_NULLABLE_MASK, dtype=np.bool_),
+        ),
+        snapshot,
+        tier="M1",
     )
 
 
@@ -432,11 +603,15 @@ def encode_m2(
     if validate_against_m3:
         _validate_m2_against_m3(snapshot, state.astype(np.float64))
     values = np.concatenate((base.values, state.astype(np.float64)), axis=1)
-    return FeatureBlock(
-        times,
-        values,
-        _M2_FEATURE_NAMES,
-        np.asarray(_M2_NULLABLE_MASK, dtype=np.bool_),
+    return _seal_feature_block(
+        FeatureBlock(
+            times,
+            values,
+            _M2_FEATURE_NAMES,
+            np.asarray(_M2_NULLABLE_MASK, dtype=np.bool_),
+        ),
+        snapshot,
+        tier="M2",
     )
 
 
@@ -474,11 +649,15 @@ def encode_m3(
     values = np.concatenate((base.values, extension), axis=1)
     if values.shape[1] != _M3_RAW_DIMENSION:
         raise AssertionError("internal M3 dimension drift")
-    return FeatureBlock(
-        times,
-        values,
-        _M3_FEATURE_NAMES,
-        np.asarray(_M3_NULLABLE_MASK, dtype=np.bool_),
+    return _seal_feature_block(
+        FeatureBlock(
+            times,
+            values,
+            _M3_FEATURE_NAMES,
+            np.asarray(_M3_NULLABLE_MASK, dtype=np.bool_),
+        ),
+        snapshot,
+        tier="M3",
     )
 
 
@@ -673,6 +852,7 @@ class M4FeatureAccumulator:
         self._current_statistics: list[np.ndarray] = []
         self._computed_pair_count = 0
         self._peak_temporary_session_count = 0
+        self._causal_prefix_digest = hashlib.sha256()
         self._sealed = False
         self._encoded: np.ndarray | None = None
         self._snapshot_provenance: tuple[str, tuple[tuple[str, str], ...]] | None = None
@@ -745,6 +925,7 @@ class M4FeatureAccumulator:
         if session in self._current_ids:
             raise ValueError("consumer supplied a duplicate connected-session pair")
         statistics = _causal_session_multiwindow_statistics(series, issue)
+        _update_causal_prefix_digest(self._causal_prefix_digest, position, issue, series)
         self._current_ids.add(session)
         self._current_statistics.append(statistics.reshape(36))
         self._computed_pair_count += 1
@@ -827,6 +1008,15 @@ class M4FeatureAccumulator:
         if self._computed_pair_count != expected_pairs:
             raise ValueError("M4 consumer pair count does not match M3")
         self._validate_legacy_active_refs(snapshot)
+        try:
+            verified_snapshot_provenance(snapshot)
+        except ValueError:
+            if snapshot._verification is not None:
+                raise
+        else:
+            expected_delivery = verified_causal_prefix_provenance(snapshot)
+            if self._causal_prefix_digest.hexdigest() != expected_delivery:
+                raise ValueError("M4 causal prefix differs from the verified loader delivery")
         if self._snapshot_provenance is None:
             self._snapshot_provenance = provenance
 
@@ -850,25 +1040,29 @@ def encode_m4(
 ) -> FeatureBlock:
     """Append 360 pooled causal trajectory columns to M3."""
 
-    if not isinstance(accumulator, M4FeatureAccumulator):
-        raise TypeError("M4 encoding requires an M4FeatureAccumulator")
+    if type(accumulator) is not M4FeatureAccumulator:
+        raise TypeError("M4 encoding requires an exact M4FeatureAccumulator")
     canonical_m3 = encode_m3(snapshot)
     if m3 is not None:
         _require_exact_block(m3, canonical_m3, "M3")
     base = canonical_m3 if m3 is None else m3
     times = _validate_issue_times(snapshot.issue_times, "M4")
     _require_prefix(base, times, _M3_RAW_DIMENSION)
-    extension = accumulator.encode(snapshot)
+    extension = M4FeatureAccumulator.encode(accumulator, snapshot)
     if extension.shape != (len(times), 360):
         raise ValueError("M4 accumulator extension must have width 360")
     values = np.concatenate((base.values, extension), axis=1)
     if values.shape[1] != _M4_RAW_DIMENSION:
         raise AssertionError("internal M4 dimension drift")
-    return FeatureBlock(
-        times,
-        values,
-        _M4_FEATURE_NAMES,
-        np.asarray(_M4_NULLABLE_MASK, dtype=np.bool_),
+    return _seal_feature_block(
+        FeatureBlock(
+            times,
+            values,
+            _M4_FEATURE_NAMES,
+            np.asarray(_M4_NULLABLE_MASK, dtype=np.bool_),
+        ),
+        snapshot,
+        tier="M4",
     )
 
 

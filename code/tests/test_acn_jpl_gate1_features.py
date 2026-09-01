@@ -25,6 +25,7 @@ from evcf.forecasting.acn_jpl_gate1_features import (
     encode_m4,
     feature_encoding_manifest,
     fixed_pool,
+    verified_feature_block_provenance,
 )
 
 
@@ -759,6 +760,15 @@ def test_real_jpl_feature_encoding_is_complete_when_present() -> None:
     snapshot = verify_and_load_snapshot(processed, interim, causal_prefix_consumer=accumulator)
     blocks = build_feature_blocks(snapshot, accumulator)
 
+    provenance = {
+        tier: verified_feature_block_provenance(block, snapshot, tier=tier)
+        for tier, block in blocks.items()
+    }
+    assert len(set(provenance.values())) == 4
+    changed = replace(blocks["M1"], values=blocks["M1"].values.copy())
+    with pytest.raises(ValueError, match="verified|seal|encoder"):
+        verified_feature_block_provenance(changed, snapshot, tier="M1")
+
     assert len(snapshot.m3_rows) == accumulator.computed_pair_count == 43_506
     assert len(snapshot.m4_rows) == 22_427
     assert accumulator.peak_temporary_session_count <= 52
@@ -773,3 +783,25 @@ def test_real_jpl_feature_encoding_is_complete_when_present() -> None:
     for block in blocks.values():
         nullable = block.values[train][:, block.nullable_mask]
         assert np.all(np.isfinite(nullable).any(axis=0))
+
+
+def test_synthetic_feature_blocks_cannot_claim_verified_encoder_provenance() -> None:
+    snapshot = _snapshot()
+    accumulator = M4FeatureAccumulator(issue_count=3)
+    _consume_snapshot(accumulator, snapshot)
+    blocks = build_feature_blocks(snapshot, accumulator)
+    for tier, block in blocks.items():
+        with pytest.raises(ValueError, match="verified|seal|loader"):
+            verified_feature_block_provenance(block, snapshot, tier=tier)
+
+
+def test_m4_encoder_rejects_polymorphic_accumulator_override() -> None:
+    class ForgedAccumulator(M4FeatureAccumulator):
+        def encode(self, snapshot: Gate1Snapshot) -> np.ndarray:
+            return np.zeros((len(snapshot.issue_times), 360), dtype=np.float64)
+
+    snapshot = _snapshot()
+    accumulator = ForgedAccumulator(issue_count=3)
+    _consume_snapshot(accumulator, snapshot)
+    with pytest.raises(TypeError, match="exact|M4FeatureAccumulator"):
+        encode_m4(snapshot, accumulator)

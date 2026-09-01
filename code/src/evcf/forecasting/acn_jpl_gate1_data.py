@@ -16,6 +16,7 @@ import json
 import math
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from datetime import datetime, timezone
 from numbers import Integral, Real
 from pathlib import Path
@@ -24,15 +25,11 @@ from typing import Any
 
 import numpy as np
 
-EXPECTED_DATA_SNAPSHOT_SHA256 = (
-    "7066ffc8ba42a98f73246acfbc62352fe55a1433a43cba80957c6034e3aeaa5d"
-)
+EXPECTED_DATA_SNAPSHOT_SHA256 = "7066ffc8ba42a98f73246acfbc62352fe55a1433a43cba80957c6034e3aeaa5d"
 EXPECTED_SOURCE_INVENTORY_SHA256 = (
     "63e3f88fcbd4c0d8b87392267cdbe5ad383d89468f10ac3de5e181837b18dcac"
 )
-EXPECTED_PROTOCOL_SHA256 = (
-    "2b95e9b09d31fdd30c559be80f9db64b22e33822b08a25de3715e168f3697bf3"
-)
+EXPECTED_PROTOCOL_SHA256 = "2b95e9b09d31fdd30c559be80f9db64b22e33822b08a25de3715e168f3697bf3"
 EXPECTED_PREPARED_SNAPSHOT_SHA256 = (
     "d3ef2d6e5a4a1dee4f71c716714c29ed8e1624cdfcb070cd96c00155aca082c0"
 )
@@ -41,6 +38,7 @@ EXPECTED_ISSUE_COUNT = 2_853
 EXPECTED_STATION_BIN_COUNT = 2_976
 CAUSAL_MAX_WINDOW_SECONDS = 60 * 60
 CAUSAL_HOLD_CAP_SECONDS = 12
+_SNAPSHOT_VERIFICATION_SCHEMA = "acn-jpl-gate1-verified-snapshot/v1"
 
 ARTIFACT_ROOTS: Mapping[str, str] = MappingProxyType(
     {
@@ -55,6 +53,40 @@ ARTIFACT_ROOTS: Mapping[str, str] = MappingProxyType(
         "cleaned_sessions.jsonl.gz.manifest.json": "interim",
     }
 )
+
+
+class _FrozenMapping(Mapping[str, Any]):
+    """Small picklable read-only mapping used by cross-process snapshots."""
+
+    __slots__ = ("__data",)
+
+    def __init__(self, value: Mapping[str, Any]) -> None:
+        self.__data = dict(value)
+
+    def __getitem__(self, key: str) -> Any:
+        return self.__data[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.__data)
+
+    def __len__(self) -> int:
+        return len(self.__data)
+
+    def __reduce__(self) -> tuple[Any, tuple[dict[str, Any]]]:
+        return type(self), (dict(self.__data),)
+
+
+@dataclass(frozen=True, slots=True)
+class _SnapshotVerification:
+    schema_version: str
+    data_snapshot_sha256: str
+    artifact_sha256: tuple[tuple[str, str], ...]
+    loader_implementation_sha256: str
+    target_source_sha256: str
+    feature_source_sha256: str
+    causal_prefix_source_sha256: str | None
+    seal_sha256: str
+
 
 _MANIFEST_KEYS = {
     "schema_version",
@@ -218,6 +250,33 @@ class CausalSessionSeries:
     pilot_values_a: np.ndarray
 
 
+def _update_causal_prefix_digest(
+    digest: Any,
+    canonical_position: int,
+    issue_time_utc_s: int,
+    series: CausalSessionSeries,
+) -> None:
+    """Bind one ordered loader delivery to a shared streaming digest."""
+
+    digest.update(b"acn-jpl-gate1-causal-prefix/v1")
+    digest.update(
+        np.asarray(
+            [canonical_position, issue_time_utc_s, series.anonymous_session_index],
+            dtype=np.int64,
+        ).tobytes()
+    )
+    for array in (
+        series.current_timestamps_utc_s,
+        series.current_values_a,
+        series.pilot_timestamps_utc_s,
+        series.pilot_values_a,
+    ):
+        value = np.ascontiguousarray(array)
+        digest.update(value.dtype.str.encode("ascii"))
+        digest.update(np.asarray(value.shape, dtype=np.int64).tobytes())
+        digest.update(value.tobytes(order="C"))
+
+
 @dataclass(frozen=True, slots=True)
 class _FullSessionSeries:
     current_timestamps_utc_s: np.ndarray
@@ -262,9 +321,7 @@ class _CausalSessionStore:
         issue = _as_int(issue_time_utc_s, "issue_time_utc_s")
         if issue not in self.__canonical_issue_times:
             raise ValueError("causal cutoff must be a canonical issue_time_utc_s")
-        session_index = _as_nonnegative_int(
-            anonymous_session_index, "anonymous session index"
-        )
+        session_index = _as_nonnegative_int(anonymous_session_index, "anonymous session index")
         try:
             full = self.__series[session_index]
         except KeyError as exc:
@@ -286,9 +343,7 @@ class _CausalSessionStore:
                 full.current_timestamps_utc_s[current_start:current_end]
             ),
             current_values_a=_readonly(full.current_values_a[current_start:current_end]),
-            pilot_timestamps_utc_s=_readonly(
-                full.pilot_timestamps_utc_s[pilot_start:pilot_end]
-            ),
+            pilot_timestamps_utc_s=_readonly(full.pilot_timestamps_utc_s[pilot_start:pilot_end]),
             pilot_values_a=_readonly(full.pilot_values_a[pilot_start:pilot_end]),
         )
 
@@ -357,6 +412,24 @@ class Gate1Snapshot:
     station_current_mean_a: np.ndarray
     station_valid_90: np.ndarray
     feature_index_names: tuple[str, ...] = ("issue_time_utc_s",)
+    _verification: _SnapshotVerification | None = dataclass_field(
+        default=None,
+        init=False,
+        repr=False,
+        compare=False,
+    )
+
+    def __getstate__(self) -> tuple[Any, ...]:
+        return tuple(getattr(self, name) for name in self.__slots__)
+
+    def __setstate__(self, state: tuple[Any, ...]) -> None:
+        if len(state) != len(self.__slots__):
+            raise ValueError("snapshot checkpoint field count is invalid")
+        for name, value in zip(self.__slots__, state, strict=True):
+            restored = _readonly(np.asarray(value)) if isinstance(value, np.ndarray) else value
+            object.__setattr__(self, name, restored)
+        if self._verification is not None:
+            verified_snapshot_provenance(self)
 
 
 CausalPrefixConsumer = Callable[[int, int, CausalSessionSeries], None]
@@ -450,6 +523,208 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _array_content_sha256(arrays: Sequence[np.ndarray]) -> str:
+    digest = hashlib.sha256()
+    for array in arrays:
+        value = np.ascontiguousarray(array)
+        digest.update(value.dtype.str.encode("ascii"))
+        digest.update(np.asarray(value.shape, dtype=np.int64).tobytes())
+        digest.update(value.tobytes(order="C"))
+    return digest.hexdigest()
+
+
+def _snapshot_target_source_sha256(snapshot: Gate1Snapshot) -> str:
+    return _array_content_sha256(
+        (
+            np.asarray(snapshot.issue_times),
+            np.asarray(snapshot.horizons),
+            np.asarray(snapshot.labels),
+        )
+    )
+
+
+def _snapshot_feature_source_sha256(snapshot: Gate1Snapshot) -> str:
+    digest = hashlib.sha256()
+    digest.update(
+        _array_content_sha256(
+            (
+                np.asarray(snapshot.m1_history),
+                np.asarray(snapshot.m1_history_mask),
+                np.asarray(snapshot.m1_calendar),
+                np.asarray(snapshot.m2_current_state),
+                np.asarray(snapshot.station_times),
+                np.asarray(snapshot.station_current_mean_a),
+                np.asarray(snapshot.station_valid_90),
+            )
+        ).encode("ascii")
+    )
+    digest.update(
+        json.dumps(
+            list(snapshot.feature_index_names),
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        ).encode("ascii")
+    )
+    for name, groups in (
+        ("m3_rows", (snapshot.m3_rows,)),
+        ("m4_rows", (snapshot.m4_rows,)),
+        ("m3_by_issue_time", snapshot.m3_by_issue_time),
+        ("m4_by_issue_time", snapshot.m4_by_issue_time),
+    ):
+        digest.update(name.encode("ascii"))
+        digest.update(np.asarray([len(groups)], dtype=np.int64).tobytes())
+        for group in groups:
+            digest.update(np.asarray([len(group)], dtype=np.int64).tobytes())
+            for row in group:
+                payload = json.dumps(
+                    dict(row),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=True,
+                    allow_nan=False,
+                ).encode("ascii")
+                digest.update(np.asarray([len(payload)], dtype=np.int64).tobytes())
+                digest.update(payload)
+    return digest.hexdigest()
+
+
+def _snapshot_verification_payload(
+    *,
+    data_snapshot_sha256: str,
+    artifact_sha256: tuple[tuple[str, str], ...],
+    loader_implementation_sha256: str,
+    target_source_sha256: str,
+    feature_source_sha256: str,
+    causal_prefix_source_sha256: str | None,
+) -> bytes:
+    value = {
+        "schema_version": _SNAPSHOT_VERIFICATION_SCHEMA,
+        "data_snapshot_sha256": data_snapshot_sha256,
+        "artifact_sha256": [
+            {"artifact_name": name, "sha256": digest} for name, digest in artifact_sha256
+        ],
+        "loader_implementation_sha256": loader_implementation_sha256,
+        "target_source_sha256": target_source_sha256,
+        "feature_source_sha256": feature_source_sha256,
+        "causal_prefix_source_sha256": causal_prefix_source_sha256,
+    }
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("ascii")
+
+
+def _issue_snapshot_verification(
+    snapshot: Gate1Snapshot,
+    *,
+    causal_prefix_source_sha256: str | None,
+) -> None:
+    artifacts = tuple((name, str(snapshot.artifact_sha256[name])) for name in ARTIFACT_ROOTS)
+    loader_sha256 = _file_sha256(Path(__file__))
+    target_source_sha256 = _snapshot_target_source_sha256(snapshot)
+    feature_source_sha256 = _snapshot_feature_source_sha256(snapshot)
+    if causal_prefix_source_sha256 is not None and not _valid_sha256(causal_prefix_source_sha256):
+        raise ValueError("causal prefix source digest is invalid")
+    payload = _snapshot_verification_payload(
+        data_snapshot_sha256=snapshot.data_snapshot_sha256,
+        artifact_sha256=artifacts,
+        loader_implementation_sha256=loader_sha256,
+        target_source_sha256=target_source_sha256,
+        feature_source_sha256=feature_source_sha256,
+        causal_prefix_source_sha256=causal_prefix_source_sha256,
+    )
+    object.__setattr__(
+        snapshot,
+        "_verification",
+        _SnapshotVerification(
+            schema_version=_SNAPSHOT_VERIFICATION_SCHEMA,
+            data_snapshot_sha256=snapshot.data_snapshot_sha256,
+            artifact_sha256=artifacts,
+            loader_implementation_sha256=loader_sha256,
+            target_source_sha256=target_source_sha256,
+            feature_source_sha256=feature_source_sha256,
+            causal_prefix_source_sha256=causal_prefix_source_sha256,
+            seal_sha256=hashlib.sha256(payload).hexdigest(),
+        ),
+    )
+
+
+def verified_snapshot_provenance(snapshot: Gate1Snapshot) -> str:
+    """Return loader-issued provenance, rejecting synthetic or replaced snapshots."""
+
+    if not isinstance(snapshot, Gate1Snapshot):
+        raise TypeError("verified snapshot provenance requires a Gate1Snapshot")
+    verification = snapshot._verification
+    if not isinstance(verification, _SnapshotVerification):
+        raise ValueError("snapshot has no verified loader seal")  # noqa: TRY004
+    if verification.schema_version != _SNAPSHOT_VERIFICATION_SCHEMA:
+        raise ValueError("snapshot loader seal schema is invalid")
+    if not _valid_sha256(snapshot.data_snapshot_sha256) or (
+        verification.data_snapshot_sha256 != snapshot.data_snapshot_sha256
+    ):
+        raise ValueError("snapshot loader seal does not bind the frozen data snapshot")
+    if set(snapshot.artifact_sha256) != set(ARTIFACT_ROOTS):
+        raise ValueError("snapshot loader seal requires all nine artifact hashes")
+    artifacts = tuple((name, str(snapshot.artifact_sha256[name])) for name in ARTIFACT_ROOTS)
+    if artifacts != verification.artifact_sha256 or any(
+        not _valid_sha256(digest) for _name, digest in artifacts
+    ):
+        raise ValueError("snapshot artifact hashes differ from the verified loader seal")
+    loader_sha256 = _file_sha256(Path(__file__))
+    if verification.loader_implementation_sha256 != loader_sha256:
+        raise ValueError("snapshot loader implementation provenance has changed")
+    target_source_sha256 = _snapshot_target_source_sha256(snapshot)
+    if target_source_sha256 != verification.target_source_sha256:
+        raise ValueError("snapshot target arrays differ from the verified loader seal")
+    feature_source_sha256 = _snapshot_feature_source_sha256(snapshot)
+    if feature_source_sha256 != verification.feature_source_sha256:
+        raise ValueError("snapshot feature source content differs from the verified loader seal")
+    causal_prefix_source_sha256 = verification.causal_prefix_source_sha256
+    if causal_prefix_source_sha256 is not None and not _valid_sha256(causal_prefix_source_sha256):
+        raise ValueError("snapshot causal prefix source provenance is invalid")
+    array_fields = (
+        "issue_times",
+        "horizons",
+        "labels",
+        "m1_history",
+        "m1_history_mask",
+        "m1_calendar",
+        "m2_current_state",
+        "station_times",
+        "station_current_mean_a",
+        "station_valid_90",
+    )
+    if any(np.asarray(getattr(snapshot, name)).flags.writeable for name in array_fields):
+        raise ValueError("verified snapshot arrays must remain immutable")
+    payload = _snapshot_verification_payload(
+        data_snapshot_sha256=snapshot.data_snapshot_sha256,
+        artifact_sha256=artifacts,
+        loader_implementation_sha256=loader_sha256,
+        target_source_sha256=target_source_sha256,
+        feature_source_sha256=feature_source_sha256,
+        causal_prefix_source_sha256=causal_prefix_source_sha256,
+    )
+    expected_seal = hashlib.sha256(payload).hexdigest()
+    if verification.seal_sha256 != expected_seal:
+        raise ValueError("snapshot loader seal is inconsistent")
+    return expected_seal
+
+
+def verified_causal_prefix_provenance(snapshot: Gate1Snapshot) -> str:
+    """Return the exact loader-delivered causal-stream digest for M4 encoding."""
+
+    verified_snapshot_provenance(snapshot)
+    assert snapshot._verification is not None
+    value = snapshot._verification.causal_prefix_source_sha256
+    if value is None:
+        raise ValueError("verified snapshot has no causal prefix loader delivery")
+    return value
+
+
 def _validate_manifest(
     processed_root: Path,
     interim_root: Path,
@@ -483,9 +758,7 @@ def _validate_manifest(
     for ordinal, raw_entry in enumerate(raw_entries):
         if not isinstance(raw_entry, dict):
             raise TypeError(f"artifact entry {ordinal} must be an object")
-        _require_exact_keys(
-            raw_entry, {"artifact_name", "size_bytes", "sha256"}, "artifact entry"
-        )
+        _require_exact_keys(raw_entry, {"artifact_name", "size_bytes", "sha256"}, "artifact entry")
         name = raw_entry["artifact_name"]
         if not isinstance(name, str) or name not in ARTIFACT_ROOTS:
             raise ValueError(f"unexpected snapshot artifact: {name!r}")
@@ -721,10 +994,16 @@ def _load_station(processed_root: Path) -> dict[str, np.ndarray]:
                 ]
                 csv_calendar.append(calendar)
                 csv_numeric.append(
-                    [_csv_float(row[name], f"station CSV {name}") for name in _STATION_NUMERIC_COLUMNS]
+                    [
+                        _csv_float(row[name], f"station CSV {name}")
+                        for name in _STATION_NUMERIC_COLUMNS
+                    ]
                 )
                 csv_validity.append(
-                    [_csv_bool(row[name], f"station CSV {name}") for name in _STATION_VALIDITY_COLUMNS]
+                    [
+                        _csv_bool(row[name], f"station CSV {name}")
+                        for name in _STATION_VALIDITY_COLUMNS
+                    ]
                 )
     except (OSError, UnicodeError, gzip.BadGzipFile) as exc:
         raise ValueError("station CSV cannot be read") from exc
@@ -785,9 +1064,7 @@ def _validate_m3_row(raw: dict[str, Any], ordinal: int) -> dict[str, Any]:
     _require_exact_keys(raw, _M3_KEYS, context)
     row = dict(raw)
     row["issue_index"] = _as_nonnegative_int(row["issue_index"], f"{context} issue_index")
-    row["issue_time_utc_s"] = _as_int(
-        row["issue_time_utc_s"], f"{context} issue_time"
-    )
+    row["issue_time_utc_s"] = _as_int(row["issue_time_utc_s"], f"{context} issue_time")
     row["anonymous_session_index"] = _as_nonnegative_int(
         row["anonymous_session_index"], f"{context} anonymous session"
     )
@@ -807,9 +1084,7 @@ def _validate_m3_row(raw: dict[str, Any], ordinal: int) -> dict[str, Any]:
     )
     for name in ("recent_current_observed_ratio", "cumulative_current_observed_ratio"):
         row[name] = _validate_optional_ratio(row[name], f"{context} {name}")
-    modified = _as_optional_int(
-        row["user_input_modified_utc_s"], f"{context} user input cutoff"
-    )
+    modified = _as_optional_int(row["user_input_modified_utc_s"], f"{context} user input cutoff")
     if modified is not None and modified > row["issue_time_utc_s"]:
         raise ValueError(f"{context} user input is later than the issue time")
     row["user_input_modified_utc_s"] = modified
@@ -822,9 +1097,7 @@ def _validate_m4_row(raw: dict[str, Any], ordinal: int) -> dict[str, Any]:
     row = dict(raw)
     for name in ("issue_index", "anonymous_session_index"):
         row[name] = _as_nonnegative_int(row[name], f"{context} {name}")
-    row["issue_time_utc_s"] = _as_int(
-        row["issue_time_utc_s"], f"{context} issue_time"
-    )
+    row["issue_time_utc_s"] = _as_int(row["issue_time_utc_s"], f"{context} issue_time")
     for prefix in ("current", "pilot"):
         start_name = f"{prefix}_start_offset_inclusive"
         end_name = f"{prefix}_end_offset_exclusive"
@@ -881,7 +1154,7 @@ def group_by_canonical_issue_time(
         if pair in seen:
             raise ValueError("duplicate (issue_time, anonymous_session_index) ragged row")
         seen.add(pair)
-        grouped[position].append(MappingProxyType(dict(source)))
+        grouped[position].append(_FrozenMapping(source))
     return tuple(tuple(group) for group in grouped)
 
 
@@ -953,18 +1226,14 @@ def _load_cleaned_store(
         raise ValueError("cleaned-session manifest cleaning policy has drifted")
     if manifest["source_inventory_sha256"] != source_inventory_sha256:
         raise ValueError("cleaned-session source inventory does not match snapshot")
-    record_count = _as_nonnegative_int(
-        manifest["record_count"], "cleaned-session record_count"
-    )
+    record_count = _as_nonnegative_int(manifest["record_count"], "cleaned-session record_count")
     data_path = interim_root / "cleaned_sessions.jsonl.gz"
     if manifest["sha256"] != _file_sha256(data_path):
         raise ValueError("cleaned-session data SHA-256 does not match its own manifest")
 
     parsed: dict[int, _FullSessionSeries] = {}
     observed_count = 0
-    for expected_index, raw in enumerate(
-        _iter_jsonl(data_path, "cleaned-session store")
-    ):
+    for expected_index, raw in enumerate(_iter_jsonl(data_path, "cleaned-session store")):
         observed_count = expected_index + 1
         _require_exact_keys(raw, _CLEAN_SESSION_KEYS, f"cleaned session {expected_index}")
         if raw["schema_version"] != "acn-jpl-clean-session/v1":
@@ -976,12 +1245,8 @@ def _load_cleaned_store(
             raise ValueError("cleaned session indexes must be unique contiguous ordinals")
         if raw["timezone"] != "America/Los_Angeles":
             raise ValueError(f"cleaned session {session_index} timezone schema is invalid")
-        connection = _as_int(
-            raw["connection_utc_s"], f"cleaned session {session_index} connection"
-        )
-        disconnect = _as_int(
-            raw["disconnect_utc_s"], f"cleaned session {session_index} disconnect"
-        )
+        connection = _as_int(raw["connection_utc_s"], f"cleaned session {session_index} connection")
+        disconnect = _as_int(raw["disconnect_utc_s"], f"cleaned session {session_index} disconnect")
         if disconnect <= connection:
             raise ValueError(f"cleaned session {session_index} bounds are invalid")
         for name in ("site_id", "station_id", "space_id", "cluster_id"):
@@ -1062,18 +1327,17 @@ def verify_and_load_snapshot(
     )
 
     m3_rows = tuple(
-        MappingProxyType(_validate_m3_row(raw, ordinal))
+        _FrozenMapping(_validate_m3_row(raw, ordinal))
         for ordinal, raw in enumerate(_read_jsonl(processed / "m3.jsonl.gz", "M3"))
     )
     m4_rows = tuple(
-        MappingProxyType(_validate_m4_row(raw, ordinal))
+        _FrozenMapping(_validate_m4_row(raw, ordinal))
         for ordinal, raw in enumerate(_read_jsonl(processed / "m4.jsonl.gz", "M4"))
     )
     m3_by_issue = group_by_canonical_issue_time(canonical, m3_rows)
     m4_by_issue = group_by_canonical_issue_time(canonical, m4_rows)
     m3_pairs = {
-        (int(row["issue_time_utc_s"]), int(row["anonymous_session_index"]))
-        for row in m3_rows
+        (int(row["issue_time_utc_s"]), int(row["anonymous_session_index"])) for row in m3_rows
     }
     missing_m3_sessions = {
         int(row["anonymous_session_index"])
@@ -1086,7 +1350,7 @@ def verify_and_load_snapshot(
 
     snapshot = Gate1Snapshot(
         data_snapshot_sha256=manifest["data_snapshot_sha256"],
-        artifact_sha256=artifact_sha256,
+        artifact_sha256=_FrozenMapping(artifact_sha256),
         issue_times=_readonly(dense["issue_times"]),
         horizons=_readonly(dense["horizons"]),
         labels=_readonly(dense["labels"]),
@@ -1102,12 +1366,26 @@ def verify_and_load_snapshot(
         station_current_mean_a=_readonly(station["station_current_mean_a"]),
         station_valid_90=_readonly(station["station_valid_90"]),
     )
+    causal_prefix_digest = hashlib.sha256() if causal_prefix_consumer is not None else None
     if causal_prefix_consumer is not None:
+        assert causal_prefix_digest is not None
         for canonical_position, (issue_time, rows) in enumerate(
             zip(snapshot.issue_times, snapshot.m3_by_issue_time, strict=True)
         ):
             issue = int(issue_time)
             for row in rows:
                 series = store._prefix_at(issue, int(row["anonymous_session_index"]))
+                _update_causal_prefix_digest(
+                    causal_prefix_digest,
+                    canonical_position,
+                    issue,
+                    series,
+                )
                 causal_prefix_consumer(canonical_position, issue, series)
+    _issue_snapshot_verification(
+        snapshot,
+        causal_prefix_source_sha256=(
+            causal_prefix_digest.hexdigest() if causal_prefix_digest is not None else None
+        ),
+    )
     return snapshot

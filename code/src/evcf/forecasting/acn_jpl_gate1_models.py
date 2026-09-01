@@ -15,6 +15,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
 from numbers import Integral
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
@@ -28,11 +29,16 @@ from evcf.forecasting.acn_jpl_gate1_contracts import (
     parse_time_split_boundaries,
     validate_gate1_config,
 )
-from evcf.forecasting.acn_jpl_gate1_data import Gate1Snapshot
+from evcf.forecasting.acn_jpl_gate1_data import (
+    Gate1Snapshot,
+    verified_snapshot_provenance,
+)
 from evcf.forecasting.acn_jpl_gate1_features import (
     FeatureBlock,
     canonical_feature_schema,
+    feature_block_content_sha256,
     validate_feature_block_schema,
+    verified_feature_block_provenance,
 )
 
 MODEL_SEED = 20260901
@@ -44,6 +50,7 @@ PERSISTENCE_ORDER = ("last_value", "previous_day", "previous_week")
 TIMEZONE_NAME = "America/Los_Angeles"
 _ZONE = ZoneInfo(TIMEZONE_NAME)
 _SHA256_HEX_LENGTH = 64
+_FORMAL_EXECUTION_SCHEMA = "acn-jpl-gate1-formal-model-task/v1"
 _CANONICAL_FEATURE_SCHEMAS = MappingProxyType(
     {tier: canonical_feature_schema(tier) for tier in TIER_ORDER}
 )
@@ -170,8 +177,8 @@ def _validate_sha256(value: Any, context: str) -> str:
 def _require_model_config(config: Mapping[str, Any]) -> dict[str, Any]:
     """Delegate the complete runtime contract to the authoritative config module."""
 
-    if type(config) is not dict:
-        raise TypeError("config must be a plain frozen Gate 1 mapping")
+    if not isinstance(config, Mapping):
+        raise TypeError("config must be a frozen Gate 1 mapping")
     return validate_gate1_config(config)
 
 
@@ -730,16 +737,7 @@ def _feature_schema_sha256(block: FeatureBlock) -> str:
 
 
 def _feature_block_sha256(block: FeatureBlock) -> str:
-    """Bind a selection result to the exact row-indexed feature matrix."""
-
-    digest = hashlib.sha256()
-    digest.update(_feature_schema_sha256(block).encode("ascii"))
-    for array in (block.issue_times, block.values):
-        value = np.ascontiguousarray(array)
-        digest.update(value.dtype.str.encode("ascii"))
-        digest.update(np.asarray(value.shape, dtype=np.int64).tobytes())
-        digest.update(value.tobytes(order="C"))
-    return digest.hexdigest()
+    return feature_block_content_sha256(block)
 
 
 def _snapshot_target(
@@ -1031,6 +1029,296 @@ class PersistencePrediction:
         object.__setattr__(self, "reference_times", _immutable(references, dtype=np.int64))
 
 
+def _formal_implementation_sha256() -> str:
+    digest = hashlib.sha256()
+    source_root = Path(__file__).resolve().parent
+    for name in (
+        "acn_jpl_gate1_contracts.py",
+        "acn_jpl_gate1_data.py",
+        "acn_jpl_gate1_features.py",
+        "acn_jpl_gate1_models.py",
+    ):
+        payload = (source_root / name).read_bytes()
+        digest.update(name.encode("ascii"))
+        digest.update(np.asarray([len(payload)], dtype=np.int64).tobytes())
+        digest.update(payload)
+    return digest.hexdigest()
+
+
+def _selection_result_sha256(record: SelectionRecord) -> str:
+    digest = hashlib.sha256()
+    identity = {
+        "learner": record.learner,
+        "tier": record.tier,
+        "horizon_minutes": record.horizon_minutes,
+        "selected_candidate_index": record.selected_candidate_index,
+        "selection_fit_count": record.selection_fit_count,
+        "validation_score_count": record.validation_score_count,
+        "data_snapshot_sha256": record.data_snapshot_sha256,
+        "split_provenance_sha256": record.split_provenance_sha256,
+        "target_sha256": record.target_sha256,
+        "feature_schema_sha256": record.feature_schema_sha256,
+        "feature_block_sha256": record.feature_block_sha256,
+    }
+    digest.update(_canonical_json_bytes(identity))
+    for candidate in record.candidate_parameter_json:
+        digest.update(np.asarray([len(candidate)], dtype=np.int64).tobytes())
+        digest.update(candidate)
+    scores = np.ascontiguousarray(record.candidate_validation_mae, dtype=np.float64)
+    digest.update(scores.tobytes(order="C"))
+    return digest.hexdigest()
+
+
+def _prediction_result_sha256(bundle: PredictionBundle) -> str:
+    digest = hashlib.sha256()
+    digest.update(
+        _canonical_json_bytes(
+            {
+                "learner": bundle.learner,
+                "tier": bundle.tier,
+                "horizon_minutes": bundle.horizon_minutes,
+            }
+        )
+    )
+    for array in (
+        bundle.issue_times,
+        bundle.y_true,
+        bundle.predictions,
+        bundle.day_start_utc_s,
+        bundle.parameter_hashes,
+    ):
+        value = np.ascontiguousarray(array)
+        digest.update(value.dtype.str.encode("ascii"))
+        digest.update(np.asarray(value.shape, dtype=np.int64).tobytes())
+        digest.update(value.tobytes(order="C"))
+    return digest.hexdigest()
+
+
+def _formal_execution_contract(
+    selection: SelectionRecord,
+    prediction: PredictionBundle,
+) -> dict[str, Any]:
+    if (
+        prediction.learner,
+        prediction.tier,
+        prediction.horizon_minutes,
+    ) != (selection.learner, selection.tier, selection.horizon_minutes):
+        raise ValueError("formal selection and prediction task identities differ")
+    hashes = {value.decode("ascii") for value in prediction.parameter_hashes}
+    if hashes != {selection.selected_param_sha256}:
+        raise ValueError("formal prediction does not use one fixed selected parameter hash")
+    emitted = np.ascontiguousarray(prediction.predictions, dtype=np.float64)
+    emitted_sha256 = hashlib.sha256()
+    emitted_sha256.update(emitted.dtype.str.encode("ascii"))
+    emitted_sha256.update(np.asarray(emitted.shape, dtype=np.int64).tobytes())
+    emitted_sha256.update(emitted.tobytes(order="C"))
+    return {
+        "schema_version": _FORMAL_EXECUTION_SCHEMA,
+        "task": {
+            "learner": selection.learner,
+            "tier": selection.tier,
+            "horizon_minutes": selection.horizon_minutes,
+        },
+        "selection_policy": "unrounded_validation_mae_first_declared_tie",
+        "test_parameter_policy": "fixed_selected_sha256",
+        "test_refit_policy": "one_refit_per_local_midnight",
+        "test_refit_count": len(np.unique(prediction.day_start_utc_s)),
+        "prediction_emission": {
+            "source": "direct_estimator_predict_output",
+            "values_sha256": emitted_sha256.hexdigest(),
+            "postprocessing_operations": [],
+        },
+    }
+
+
+def _formal_result_seal_payload(
+    *,
+    implementation_sha256: str,
+    config_sha256: str,
+    snapshot_provenance_sha256: str,
+    split_provenance_sha256: str,
+    feature_encoding_sha256: str,
+    target_sha256: str,
+    selection_sha256: str,
+    prediction_sha256: str,
+    execution_contract_json: bytes,
+) -> bytes:
+    return _canonical_json_bytes(
+        {
+            "schema_version": _FORMAL_EXECUTION_SCHEMA,
+            "implementation_sha256": implementation_sha256,
+            "config_sha256": config_sha256,
+            "snapshot_provenance_sha256": snapshot_provenance_sha256,
+            "split_provenance_sha256": split_provenance_sha256,
+            "feature_encoding_sha256": feature_encoding_sha256,
+            "target_sha256": target_sha256,
+            "selection_sha256": selection_sha256,
+            "prediction_sha256": prediction_sha256,
+            "execution_contract": json.loads(execution_contract_json.decode("ascii")),
+        }
+    )
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class FormalModelTaskResult:
+    """Cross-process formal result issued only by :func:`run_model_task`."""
+
+    selection_record: SelectionRecord
+    prediction_bundle: PredictionBundle
+    implementation_sha256: str
+    config_sha256: str
+    snapshot_provenance_sha256: str
+    split_provenance_sha256: str
+    feature_encoding_sha256: str
+    target_sha256: str
+    selection_sha256: str
+    prediction_sha256: str
+    execution_contract_json: bytes
+    execution_sha256: str
+
+    def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+        raise TypeError("FormalModelTaskResult can only be issued by run_model_task")
+
+    def __reduce_ex__(self, _protocol: int) -> tuple[Any, tuple[tuple[Any, ...]]]:
+        _validate_formal_model_task_result(self)
+        state = tuple(getattr(self, name) for name in self.__slots__)
+        return _restore_formal_model_task_result, (state,)
+
+    def __setstate__(self, _state: Any) -> None:
+        raise TypeError("formal task state can only be restored by the checkpoint verifier")
+
+    @property
+    def execution_contract(self) -> Mapping[str, Any]:
+        return MappingProxyType(json.loads(self.execution_contract_json.decode("ascii")))
+
+
+def _validate_formal_model_task_result(result: FormalModelTaskResult) -> None:
+    if type(result) is not FormalModelTaskResult:
+        raise TypeError("formal model validation requires an exact FormalModelTaskResult")
+    if not isinstance(result.selection_record, SelectionRecord) or not isinstance(
+        result.prediction_bundle, PredictionBundle
+    ):
+        raise TypeError("formal task result must contain immutable model result objects")
+    immutable_arrays = (
+        result.selection_record.candidate_validation_mae,
+        result.prediction_bundle.issue_times,
+        result.prediction_bundle.y_true,
+        result.prediction_bundle.predictions,
+        result.prediction_bundle.day_start_utc_s,
+        result.prediction_bundle.parameter_hashes,
+    )
+    if any(value.flags.writeable for value in immutable_arrays):
+        raise ValueError("formal task result arrays must remain immutable")
+    for context, value in (
+        ("formal implementation", result.implementation_sha256),
+        ("formal config", result.config_sha256),
+        ("formal snapshot", result.snapshot_provenance_sha256),
+        ("formal split", result.split_provenance_sha256),
+        ("formal feature encoding", result.feature_encoding_sha256),
+        ("formal target", result.target_sha256),
+        ("formal selection", result.selection_sha256),
+        ("formal prediction", result.prediction_sha256),
+        ("formal execution", result.execution_sha256),
+    ):
+        _validate_sha256(value, context)
+    if result.implementation_sha256 != _formal_implementation_sha256():
+        raise ValueError("formal task implementation provenance has changed")
+    if result.split_provenance_sha256 != result.selection_record.split_provenance_sha256:
+        raise ValueError("formal task split differs from its selection record")
+    if result.target_sha256 != result.selection_record.target_sha256:
+        raise ValueError("formal task target differs from its selection record")
+    if result.selection_sha256 != _selection_result_sha256(result.selection_record):
+        raise ValueError("formal task selection content differs from its seal")
+    if result.prediction_sha256 != _prediction_result_sha256(result.prediction_bundle):
+        raise ValueError("formal task prediction content differs from its seal")
+    expected_contract = _formal_execution_contract(
+        result.selection_record, result.prediction_bundle
+    )
+    if result.execution_contract_json != _canonical_json_bytes(expected_contract):
+        raise ValueError("formal task execution contract differs from its sealed result")
+    payload = _formal_result_seal_payload(
+        implementation_sha256=result.implementation_sha256,
+        config_sha256=result.config_sha256,
+        snapshot_provenance_sha256=result.snapshot_provenance_sha256,
+        split_provenance_sha256=result.split_provenance_sha256,
+        feature_encoding_sha256=result.feature_encoding_sha256,
+        target_sha256=result.target_sha256,
+        selection_sha256=result.selection_sha256,
+        prediction_sha256=result.prediction_sha256,
+        execution_contract_json=result.execution_contract_json,
+    )
+    if result.execution_sha256 != hashlib.sha256(payload).hexdigest():
+        raise ValueError("formal task execution seal is inconsistent")
+
+
+def verified_formal_model_task_provenance(result: FormalModelTaskResult) -> str:
+    """Revalidate a formal task after checkpoint/process transport."""
+
+    if not isinstance(result, FormalModelTaskResult):
+        raise TypeError("formal model provenance requires a FormalModelTaskResult")
+    _validate_formal_model_task_result(result)
+    return result.execution_sha256
+
+
+def _freeze_formal_task_results(
+    value: Sequence[FormalModelTaskResult],
+) -> tuple[FormalModelTaskResult, ...]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise TypeError("manifest task_results must be a sequence of formal results")
+    results = tuple(value)
+    if any(type(result) is not FormalModelTaskResult for result in results):
+        raise TypeError("manifest accepts only exact FormalModelTaskResult objects")
+    return results
+
+
+def _restore_formal_model_task_result(
+    state: tuple[Any, ...],
+) -> FormalModelTaskResult:
+    """Private pickle/joblib reconstruction with full content revalidation."""
+
+    if not isinstance(state, tuple) or len(state) != len(FormalModelTaskResult.__slots__):
+        raise ValueError("formal task checkpoint field count is invalid")
+    checkpoint_selection, checkpoint_prediction = state[:2]
+    if not isinstance(checkpoint_selection, SelectionRecord) or not isinstance(
+        checkpoint_prediction, PredictionBundle
+    ):
+        raise TypeError("formal task checkpoint contains invalid result objects")
+    selection = SelectionRecord(
+        learner=checkpoint_selection.learner,
+        tier=checkpoint_selection.tier,
+        horizon_minutes=checkpoint_selection.horizon_minutes,
+        candidate_parameter_json=checkpoint_selection.candidate_parameter_json,
+        candidate_validation_mae=checkpoint_selection.candidate_validation_mae,
+        selected_candidate_index=checkpoint_selection.selected_candidate_index,
+        selection_fit_count=checkpoint_selection.selection_fit_count,
+        validation_score_count=checkpoint_selection.validation_score_count,
+        data_snapshot_sha256=checkpoint_selection.data_snapshot_sha256,
+        split_provenance_sha256=checkpoint_selection.split_provenance_sha256,
+        target_sha256=checkpoint_selection.target_sha256,
+        feature_schema_sha256=checkpoint_selection.feature_schema_sha256,
+        feature_block_sha256=checkpoint_selection.feature_block_sha256,
+    )
+    prediction = PredictionBundle(
+        learner=checkpoint_prediction.learner,
+        tier=checkpoint_prediction.tier,
+        horizon_minutes=checkpoint_prediction.horizon_minutes,
+        issue_times=checkpoint_prediction.issue_times,
+        y_true=checkpoint_prediction.y_true,
+        predictions=checkpoint_prediction.predictions,
+        day_start_utc_s=checkpoint_prediction.day_start_utc_s,
+        parameter_hashes=checkpoint_prediction.parameter_hashes,
+    )
+    result = object.__new__(FormalModelTaskResult)
+    for name, value in zip(
+        FormalModelTaskResult.__slots__,
+        (selection, prediction, *state[2:]),
+        strict=True,
+    ):
+        object.__setattr__(result, name, value)
+    _validate_formal_model_task_result(result)
+    return result
+
+
 def _calendar_shift_epoch(epoch_seconds: int, days: int) -> int:
     local = datetime.fromtimestamp(epoch_seconds, timezone.utc).astimezone(_ZONE)
     shifted_date = local.date() - timedelta(days=days)
@@ -1319,34 +1607,108 @@ def rolling_origin_predict(
     )
 
 
-def run_model_task(
-    *,
-    learner: str,
-    tier: str,
-    horizon_minutes: int,
-    feature_block: FeatureBlock,
-    snapshot: Gate1Snapshot,
-    split: Gate1TimeSplit,
-    config: Mapping[str, Any],
-) -> tuple[SelectionRecord, PredictionBundle]:
-    """Run one formal canonical task with no estimator/preprocessor injection surface."""
+def _make_formal_model_task_runner() -> Callable[..., FormalModelTaskResult]:
+    """Close formal execution over the fixed implementations, outside test seams."""
 
-    selection = select_model_params(
-        learner=learner,
-        tier=tier,
-        horizon_minutes=horizon_minutes,
-        feature_block=feature_block,
-        snapshot=snapshot,
-        split=split,
-        config=config,
-    )
-    bundle = rolling_origin_predict(
-        feature_block=feature_block,
-        snapshot=snapshot,
-        split=split,
-        selection=selection,
-    )
-    return selection, bundle
+    select_implementation = _select_model_params_with_factories
+    rolling_implementation = _rolling_origin_predict_with_factories
+    estimator_implementation = make_frozen_estimator
+    preprocessor_implementation = _default_preprocessor_factory
+    config_validator = _require_model_config
+    snapshot_verifier = verified_snapshot_provenance
+    feature_verifier = verified_feature_block_provenance
+
+    def run_model_task(
+        *,
+        learner: str,
+        tier: str,
+        horizon_minutes: int,
+        feature_block: FeatureBlock,
+        snapshot: Gate1Snapshot,
+        split: Gate1TimeSplit,
+        config: Mapping[str, Any],
+    ) -> FormalModelTaskResult:
+        """Run one formal canonical task with no injectable implementation surface."""
+
+        canonical_config = config_validator(config)
+        learner_name = _strict_learner(learner)
+        tier_name = _strict_tier(tier)
+        horizon = _strict_horizon(horizon_minutes)
+        if not isinstance(split, Gate1TimeSplit):
+            raise TypeError("formal model task split must be a Gate1TimeSplit")
+        split.__post_init__()
+        if _canonical_json_bytes(canonical_config) != _canonical_json_bytes(split.config):
+            raise ValueError("formal model task config differs from the frozen split")
+        snapshot_provenance_sha256 = snapshot_verifier(snapshot)
+        feature_encoding_sha256 = feature_verifier(
+            feature_block,
+            snapshot,
+            tier=tier_name,
+        )
+
+        selection = select_implementation(
+            learner=learner_name,
+            tier=tier_name,
+            horizon_minutes=horizon,
+            feature_block=feature_block,
+            snapshot=snapshot,
+            split=split,
+            config=canonical_config,
+            estimator_factory=estimator_implementation,
+            preprocessor_factory=preprocessor_implementation,
+        )
+        prediction = rolling_implementation(
+            feature_block=feature_block,
+            snapshot=snapshot,
+            split=split,
+            selection=selection,
+            estimator_factory=estimator_implementation,
+            preprocessor_factory=preprocessor_implementation,
+        )
+        implementation_sha256 = _formal_implementation_sha256()
+        config_sha256 = hashlib.sha256(_canonical_json_bytes(canonical_config)).hexdigest()
+        selection_sha256 = _selection_result_sha256(selection)
+        prediction_sha256 = _prediction_result_sha256(prediction)
+        execution_contract_json = _canonical_json_bytes(
+            _formal_execution_contract(selection, prediction)
+        )
+        payload = _formal_result_seal_payload(
+            implementation_sha256=implementation_sha256,
+            config_sha256=config_sha256,
+            snapshot_provenance_sha256=snapshot_provenance_sha256,
+            split_provenance_sha256=split.frozen_provenance_sha256,
+            feature_encoding_sha256=feature_encoding_sha256,
+            target_sha256=selection.target_sha256,
+            selection_sha256=selection_sha256,
+            prediction_sha256=prediction_sha256,
+            execution_contract_json=execution_contract_json,
+        )
+        result = object.__new__(FormalModelTaskResult)
+        state = (
+            selection,
+            prediction,
+            implementation_sha256,
+            config_sha256,
+            snapshot_provenance_sha256,
+            split.frozen_provenance_sha256,
+            feature_encoding_sha256,
+            selection.target_sha256,
+            selection_sha256,
+            prediction_sha256,
+            execution_contract_json,
+            hashlib.sha256(payload).hexdigest(),
+        )
+        for name, value in zip(FormalModelTaskResult.__slots__, state, strict=True):
+            object.__setattr__(result, name, value)
+        _validate_formal_model_task_result(result)
+        return result
+
+    return run_model_task
+
+
+run_model_task = _make_formal_model_task_runner()
+run_model_task.__qualname__ = "run_model_task"
+del _make_formal_model_task_runner
 
 
 def _feature_dimensions_from_blocks(
@@ -1418,11 +1780,12 @@ def build_model_selection_manifest(
     snapshot: Gate1Snapshot,
     split: Gate1TimeSplit,
     feature_blocks: Mapping[str, FeatureBlock],
-    selections: Sequence[SelectionRecord],
-    predictions: Sequence[PredictionBundle],
+    task_results: Sequence[FormalModelTaskResult],
     persistence_by_horizon: Mapping[int, Mapping[str, PersistencePrediction]],
 ) -> dict[str, Any]:
-    """Build the complete aggregate-only model-selection manifest."""
+    """Certify aggregate-only output from all 40 formal model-task results."""
+
+    frozen_task_results = _freeze_formal_task_results(task_results)
 
     canonical_config = _require_model_config(config)
     if not isinstance(split, Gate1TimeSplit):
@@ -1430,6 +1793,11 @@ def build_model_selection_manifest(
     split.__post_init__()
     if _canonical_json_bytes(canonical_config) != _canonical_json_bytes(split.config):
         raise ValueError("manifest config differs from the split's frozen provenance")
+    config_sha256 = hashlib.sha256(_canonical_json_bytes(canonical_config)).hexdigest()
+    snapshot_provenance_sha256 = verified_snapshot_provenance(snapshot)
+    implementation_sha256 = _formal_implementation_sha256()
+    if snapshot.data_snapshot_sha256 != canonical_config["data_snapshot_sha256"]:
+        raise ValueError("manifest snapshot differs from the frozen config")
     target_provenance = {
         str(horizon): _snapshot_target(snapshot, split, horizon)[1] for horizon in HORIZONS_MINUTES
     }
@@ -1439,6 +1807,14 @@ def build_model_selection_manifest(
     }
     feature_block_provenance = {
         tier: _feature_block_sha256(feature_blocks[tier]) for tier in TIER_ORDER
+    }
+    feature_encoding_provenance = {
+        tier: verified_feature_block_provenance(
+            feature_blocks[tier],
+            snapshot,
+            tier=tier,
+        )
+        for tier in TIER_ORDER
     }
     row_index_used_as_feature = any(
         name in _FORBIDDEN_FEATURE_NAMES
@@ -1454,26 +1830,51 @@ def build_model_selection_manifest(
         for tier in TIER_ORDER
         for horizon in HORIZONS_MINUTES
     ]
+    formal_map: dict[tuple[str, str, int], FormalModelTaskResult] = {}
     selection_map: dict[tuple[str, str, int], SelectionRecord] = {}
-    for record in selections:
-        if not isinstance(record, SelectionRecord):
-            raise TypeError("manifest selections must be SelectionRecord objects")
-        key = (record.learner, record.tier, record.horizon_minutes)
-        if key in selection_map:
-            raise ValueError("manifest contains a duplicate selection task")
-        selection_map[key] = record
     prediction_map: dict[tuple[str, str, int], PredictionBundle] = {}
-    for bundle in predictions:
-        if not isinstance(bundle, PredictionBundle):
-            raise TypeError("manifest test refits must be PredictionBundle objects")
-        key = (bundle.learner, bundle.tier, bundle.horizon_minutes)
-        if key in prediction_map:
-            raise ValueError("manifest contains a duplicate test-refit task")
+    for result in frozen_task_results:
+        _validate_formal_model_task_result(result)
+        record = result.selection_record
+        bundle = result.prediction_bundle
+        key = (record.learner, record.tier, record.horizon_minutes)
+        if key in formal_map:
+            raise ValueError("manifest contains a duplicate formal model task")
+        if (bundle.learner, bundle.tier, bundle.horizon_minutes) != key:
+            raise ValueError("formal task selection and prediction identities differ")
+        if result.implementation_sha256 != implementation_sha256:
+            raise ValueError("formal task implementation differs from the manifest runtime")
+        if result.config_sha256 != config_sha256:
+            raise ValueError("formal task config differs from the manifest config")
+        if result.snapshot_provenance_sha256 != snapshot_provenance_sha256:
+            raise ValueError("formal task snapshot seal differs from the manifest snapshot")
+        if result.split_provenance_sha256 != split.frozen_provenance_sha256:
+            raise ValueError("formal task split differs from the manifest split")
+        if result.feature_encoding_sha256 != feature_encoding_provenance[record.tier]:
+            raise ValueError(
+                "formal task feature encoding differs from the manifest encoder output"
+            )
+        if result.target_sha256 != target_provenance[str(record.horizon_minutes)]:
+            raise ValueError("formal task target differs from the manifest target")
+        formal_map[key] = result
+        selection_map[key] = record
         prediction_map[key] = bundle
-    if list(selection_map) != canonical_tasks or list(prediction_map) != canonical_tasks:
-        raise ValueError("manifest requires all 40 tasks in complete canonical order")
+    if list(formal_map) != canonical_tasks:
+        raise ValueError("manifest requires all 40 formal tasks in complete canonical order")
 
     selection_items: list[dict[str, Any]] = []
+    execution_contracts = {key: formal_map[key].execution_contract for key in canonical_tasks}
+    test_time_retuning = any(
+        contract["test_parameter_policy"] != "fixed_selected_sha256"
+        for contract in execution_contracts.values()
+    )
+    prediction_postprocessing = {
+        str(operation)
+        for contract in execution_contracts.values()
+        for operation in contract["prediction_emission"]["postprocessing_operations"]
+    }
+    test_prediction_clipping = "clipping" in prediction_postprocessing
+    test_prediction_calibration = "calibration" in prediction_postprocessing
     canonical_test_times = split.issue_times[split.test_rows]
     common_row_identity = all(
         np.array_equal(prediction_map[key].issue_times, canonical_test_times)
@@ -1512,6 +1913,11 @@ def build_model_selection_manifest(
             raise ValueError("selection feature schema differs from the actual feature block")
         if record.feature_block_sha256 != feature_block_provenance[record.tier]:
             raise ValueError("selection feature block provenance differs from the manifest block")
+        result = formal_map[key]
+        if result.selection_sha256 != _selection_result_sha256(record):
+            raise ValueError("formal selection seal differs from the manifest record")
+        if result.prediction_sha256 != _prediction_result_sha256(bundle):
+            raise ValueError("formal prediction seal differs from the manifest bundle")
         expected_counts = (
             len(split.selection_fit_rows(horizon)),
             len(split.validation_score_rows(horizon)),
@@ -1535,6 +1941,9 @@ def build_model_selection_manifest(
         unique_days = np.unique(bundle.day_start_utc_s)
         if len(unique_days) != 14:
             raise ValueError("each model task must contain exactly 14 midnight refits")
+        execution_contract = execution_contracts[key]
+        if execution_contract["test_refit_count"] != len(unique_days):
+            raise ValueError("formal execution refit count differs from the prediction bundle")
         candidates = []
         for position, (params, score) in enumerate(
             zip(record.candidate_params, record.candidate_validation_mae, strict=True)
@@ -1560,8 +1969,11 @@ def build_model_selection_manifest(
                 "test_refits": {
                     "count": len(unique_days),
                     "unique_parameter_sha256": sorted(hashes),
-                    "retuned_during_test": False,
+                    "retuned_during_test": (
+                        execution_contract["test_parameter_policy"] != "fixed_selected_sha256"
+                    ),
                 },
+                "formal_execution_sha256": result.execution_sha256,
             }
         )
 
@@ -1591,7 +2003,10 @@ def build_model_selection_manifest(
             "rolling_test_local_days": len(split.test_day_rows),
         },
         "horizon_row_counts": row_counts,
-        "candidate_budgets": {"ridge": 4, "hgb": 16},
+        "candidate_budgets": {
+            learner: len(frozen_model_candidates(learner, canonical_config))
+            for learner in LEARNER_ORDER
+        },
         "candidate_grids": {
             learner: [
                 dict(candidate) for candidate in frozen_model_candidates(learner, canonical_config)
@@ -1600,10 +2015,14 @@ def build_model_selection_manifest(
         },
         "provenance": {
             "data_snapshot_sha256": snapshot.data_snapshot_sha256,
+            "snapshot_verification_sha256": snapshot_provenance_sha256,
             "split_sha256": split.frozen_provenance_sha256,
+            "config_sha256": config_sha256,
+            "formal_implementation_sha256": implementation_sha256,
             "target_sha256_by_horizon": target_provenance,
             "feature_schema_sha256_by_tier": feature_schema_provenance,
             "feature_block_sha256_by_tier": feature_block_provenance,
+            "feature_encoding_sha256_by_tier": feature_encoding_provenance,
         },
         "preprocessing": {
             "ridge": (
@@ -1628,15 +2047,17 @@ def build_model_selection_manifest(
             },
             "available_test_rows": persistence,
         },
-        "test_refit_count_per_task": 14,
+        "test_refit_count_per_task": next(
+            iter({int(contract["test_refit_count"]) for contract in execution_contracts.values()})
+        ),
         "selections": selection_items,
         "audits": {
             "common_row_identity": common_row_identity,
             "per_horizon_tier_row_identity": len(truth_by_horizon) == len(HORIZONS_MINUTES),
             "test_parameter_hash_constant": parameter_hash_constant,
-            "test_time_retuning": False,
-            "test_prediction_clipping": False,
-            "test_prediction_calibration": False,
+            "test_time_retuning": test_time_retuning,
+            "test_prediction_clipping": test_prediction_clipping,
+            "test_prediction_calibration": test_prediction_calibration,
             "finite_learning_outputs": finite_learning_outputs,
             "row_index_used_as_feature": row_index_used_as_feature,
             "full_test_values_published": False,

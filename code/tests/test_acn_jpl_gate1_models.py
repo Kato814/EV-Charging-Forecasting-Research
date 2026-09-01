@@ -2,23 +2,28 @@ from __future__ import annotations
 
 import copy
 import inspect
-import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import numpy as np
 import pytest
 from evcf.forecasting.acn_jpl_gate1_contracts import load_gate1_config
-from evcf.forecasting.acn_jpl_gate1_data import Gate1Snapshot
+from evcf.forecasting.acn_jpl_gate1_data import (
+    Gate1Snapshot,
+    verified_snapshot_provenance,
+)
 from evcf.forecasting.acn_jpl_gate1_features import (
     FeatureBlock,
     canonical_feature_schema,
+    verified_feature_block_provenance,
 )
 from evcf.forecasting.acn_jpl_gate1_models import (
+    FormalModelTaskResult,
     Gate1TimeSplit,
     HGBPreprocessor,
     PersistencePrediction,
@@ -27,6 +32,8 @@ from evcf.forecasting.acn_jpl_gate1_models import (
     SelectionRecord,
     _feature_block_sha256,
     _feature_schema_sha256,
+    _freeze_formal_task_results,
+    _persistence_coverage_from_results,
     _rolling_origin_predict_with_factories,
     _select_model_params_with_factories,
     _snapshot_target,
@@ -37,6 +44,7 @@ from evcf.forecasting.acn_jpl_gate1_models import (
     rolling_origin_predict,
     run_model_task,
     select_model_params,
+    verified_formal_model_task_provenance,
 )
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.linear_model import Ridge
@@ -202,6 +210,15 @@ def test_model_split_reuses_the_complete_frozen_config_contract(
     mutation(changed)
     with pytest.raises(ValueError, match=expected):
         Gate1TimeSplit.from_config(_formal_issue_times(), changed)
+
+
+def test_runtime_config_accepts_read_only_mapping(
+    config: Mapping[str, Any],
+) -> None:
+    read_only = MappingProxyType(copy.deepcopy(dict(config)))
+    rebuilt = Gate1TimeSplit.from_config(_formal_issue_times(), read_only)
+    assert rebuilt.frozen_provenance_sha256
+    assert len(frozen_model_candidates("hgb", read_only)) == 16
 
 
 def test_label_availability_and_rolling_fit_rows_are_exact(split: Gate1TimeSplit) -> None:
@@ -414,8 +431,52 @@ def test_manifest_api_requires_actual_blocks_persistence_and_formal_results() ->
     parameters = inspect.signature(build_model_selection_manifest).parameters
     assert "feature_blocks" in parameters
     assert "persistence_by_horizon" in parameters
+    assert "task_results" in parameters
+    assert "selections" not in parameters
+    assert "predictions" not in parameters
     assert "feature_dimensions" not in parameters
     assert "persistence_coverage" not in parameters
+    assert inspect.signature(run_model_task).return_annotation in {
+        "FormalModelTaskResult",
+        FormalModelTaskResult,
+    }
+
+
+def test_synthetic_snapshot_and_manual_results_are_not_formally_sealed(
+    split: Gate1TimeSplit, config: Mapping[str, Any]
+) -> None:
+    snapshot = _model_snapshot(split.issue_times, config)
+    with pytest.raises(ValueError, match="verified|loader|seal"):
+        verified_snapshot_provenance(snapshot)
+    with pytest.raises(TypeError):
+        FormalModelTaskResult()  # type: ignore[call-arg]
+    forged = object.__new__(FormalModelTaskResult)
+    with pytest.raises(TypeError, match="checkpoint verifier"):
+        forged.__setstate__((object(), object()))
+    with pytest.raises(TypeError, match="FormalModelTaskResult"):
+        verified_formal_model_task_provenance((object(), object()))  # type: ignore[arg-type]
+
+
+def test_formal_task_sequence_is_materialized_once_before_type_validation() -> None:
+    class ChangingSequence(Sequence[FormalModelTaskResult]):
+        def __init__(self) -> None:
+            self.iteration_count = 0
+
+        def __len__(self) -> int:
+            return 0
+
+        def __getitem__(self, _index: int) -> FormalModelTaskResult:
+            raise IndexError
+
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            self.iteration_count += 1
+            return iter(()) if self.iteration_count == 1 else iter((object(),))
+
+    changing = ChangingSequence()
+    assert _freeze_formal_task_results(changing) == ()
+    assert changing.iteration_count == 1
+    with pytest.raises(TypeError, match="FormalModelTaskResult"):
+        _freeze_formal_task_results([object()])  # type: ignore[list-item]
 
 
 class _ConstantEstimator:
@@ -799,7 +860,7 @@ def _dummy_prediction(
     )
 
 
-def test_manifest_is_complete_aggregate_only_and_fail_closed(
+def test_manifest_rejects_manual_records_bundles_and_unsealed_inputs(
     split: Gate1TimeSplit, config: Mapping[str, Any]
 ) -> None:
     snapshot = _model_snapshot(split.issue_times, config)
@@ -823,61 +884,34 @@ def test_manifest_is_complete_aggregate_only_and_fail_closed(
         horizon: persistence_predictions(snapshot, split.test_rows, horizon_minutes=horizon)
         for horizon in HORIZONS
     }
-    manifest = build_model_selection_manifest(
-        config=config,
-        snapshot=snapshot,
-        split=split,
-        feature_blocks=feature_blocks,
-        selections=records,
-        predictions=predictions,
-        persistence_by_horizon=persistence_by_horizon,
-    )
-    assert manifest["schema_version"] == "acn-jpl-gate1-model-selection/v1"
-    assert len(manifest["selections"]) == 40
-    assert manifest["candidate_budgets"] == {"ridge": 4, "hgb": 16}
-    assert manifest["test_refit_count_per_task"] == 14
-    encoded = json.dumps(manifest, sort_keys=True, allow_nan=False)
-    assert "C:\\\\" not in encoded
-    assert "/home/" not in encoded
-    assert "predictions" not in encoded.lower()
-    assert "preprocessor_statistics" not in encoded
-    assert "issue_times" not in manifest
-    assert "PASS" not in encoded
-    assert manifest["provenance"]["data_snapshot_sha256"] == config["data_snapshot_sha256"]
-    assert manifest["audits"]["common_row_identity"] is True
-
-    with pytest.raises(ValueError, match="40|complete"):
+    assert not isinstance(records[0], FormalModelTaskResult)
+    assert not isinstance(predictions[0], FormalModelTaskResult)
+    with pytest.raises(TypeError, match="unexpected keyword"):
         build_model_selection_manifest(
             config=config,
             snapshot=snapshot,
             split=split,
             feature_blocks=feature_blocks,
-            selections=records[:-1],
-            predictions=predictions[:-1],
+            selections=records,  # type: ignore[call-arg]
+            predictions=predictions,  # type: ignore[call-arg]
             persistence_by_horizon=persistence_by_horizon,
         )
-
-    changed_truth = predictions[5].y_true.copy()
-    changed_truth[0] += 1.0
-    inconsistent = list(predictions)
-    inconsistent[5] = PredictionBundle.create(
-        learner=predictions[5].learner,
-        tier=predictions[5].tier,
-        horizon_minutes=predictions[5].horizon_minutes,
-        issue_times=predictions[5].issue_times,
-        y_true=changed_truth,
-        predictions=predictions[5].predictions,
-        day_start_utc_s=predictions[5].day_start_utc_s,
-        selected_param_sha256=records[5].selected_param_sha256,
-    )
-    with pytest.raises(ValueError, match="truth differs"):
+    with pytest.raises(TypeError, match="FormalModelTaskResult"):
         build_model_selection_manifest(
             config=config,
             snapshot=snapshot,
             split=split,
             feature_blocks=feature_blocks,
-            selections=records,
-            predictions=inconsistent,
+            task_results=list(zip(records, predictions, strict=True)),  # type: ignore[arg-type]
+            persistence_by_horizon=persistence_by_horizon,
+        )
+    with pytest.raises(ValueError, match="verified|loader|seal"):
+        build_model_selection_manifest(
+            config=config,
+            snapshot=snapshot,
+            split=split,
+            feature_blocks=feature_blocks,
+            task_results=[],
             persistence_by_horizon=persistence_by_horizon,
         )
 
@@ -896,15 +930,7 @@ def test_manifest_is_complete_aggregate_only_and_fail_closed(
     )
     forged_persistence[15] = forged_horizon
     with pytest.raises(ValueError, match="persistence.*recomputation"):
-        build_model_selection_manifest(
-            config=config,
-            snapshot=snapshot,
-            split=split,
-            feature_blocks=feature_blocks,
-            selections=records,
-            predictions=predictions,
-            persistence_by_horizon=forged_persistence,
-        )
+        _persistence_coverage_from_results(forged_persistence, snapshot, split)
 
     changed_blocks = dict(feature_blocks)
     changed_values = feature_blocks["M1"].values.copy()
@@ -915,16 +941,8 @@ def test_manifest_is_complete_aggregate_only_and_fail_closed(
         feature_names=feature_blocks["M1"].feature_names,
         nullable_mask=feature_blocks["M1"].nullable_mask,
     )
-    with pytest.raises(ValueError, match="feature block.*provenance"):
-        build_model_selection_manifest(
-            config=config,
-            snapshot=snapshot,
-            split=split,
-            feature_blocks=changed_blocks,
-            selections=records,
-            predictions=predictions,
-            persistence_by_horizon=persistence_by_horizon,
-        )
+    with pytest.raises(ValueError, match="verified|encoder|seal"):
+        verified_feature_block_provenance(changed_blocks["M1"], snapshot, tier="M1")
 
 
 def test_prediction_bundle_rejects_mixed_parameter_hashes() -> None:

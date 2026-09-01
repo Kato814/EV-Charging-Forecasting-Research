@@ -4,7 +4,8 @@ import csv
 import gzip
 import hashlib
 import json
-from dataclasses import fields
+import pickle
+from dataclasses import fields, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -16,8 +17,15 @@ import pytest
 from evcf.forecasting.acn_jpl_gate1_data import (
     CausalSessionSeries,
     group_by_canonical_issue_time,
+    verified_snapshot_provenance,
     verify_and_load_snapshot,
 )
+from evcf.forecasting.acn_jpl_gate1_features import (
+    M4FeatureAccumulator,
+    encode_m1,
+    verified_feature_block_provenance,
+)
+from joblib import Parallel, delayed
 
 _ISSUE_COUNT = 2_853
 _STATION_COUNT = 2_976
@@ -39,6 +47,15 @@ _ARTIFACTS = (
 )
 
 
+def _verify_feature_block_in_worker(block: Any, snapshot: Any) -> tuple[str, bool]:
+    seal = verified_feature_block_provenance(block, snapshot, tier="M1")
+    immutable = all(
+        not array.flags.writeable
+        for array in (block.issue_times, block.values, block.nullable_mask)
+    )
+    return seal, immutable
+
+
 class SnapshotFixture:
     def __init__(self, root: Path, *, future_value: float = 999.0) -> None:
         self.processed = root / "processed"
@@ -46,9 +63,9 @@ class SnapshotFixture:
         self.processed.mkdir(parents=True)
         self.interim.mkdir(parents=True)
         self.issue_times = _FIRST_ISSUE + np.arange(_ISSUE_COUNT, dtype=np.int64) * 900
-        self.station_times = self.issue_times[0] - 86_400 + np.arange(
-            _STATION_COUNT, dtype=np.int64
-        ) * 900
+        self.station_times = (
+            self.issue_times[0] - 86_400 + np.arange(_STATION_COUNT, dtype=np.int64) * 900
+        )
         self.source_inventory_sha256 = _SOURCE_SHA256
         self.protocol_sha256 = _PROTOCOL_SHA256
         self.prepared_snapshot_sha256 = _SNAPSHOT_SHA256
@@ -275,7 +292,11 @@ class SnapshotFixture:
     def refresh_manifest(self) -> None:
         entries = []
         for name in _ARTIFACTS:
-            path = self.interim / name if name.startswith("cleaned_sessions") else self.processed / name
+            path = (
+                self.interim / name
+                if name.startswith("cleaned_sessions")
+                else self.processed / name
+            )
             entries.append(
                 {
                     "artifact_name": name,
@@ -371,6 +392,72 @@ def test_snapshot_gate_requires_exact_hashes_and_common_issue_times(
     assert not hasattr(snapshot, "causal_sessions")
     assert "causal_sessions" not in {field.name for field in fields(snapshot)}
     assert not hasattr(gate1_data, "CausalSessionStore")
+
+
+def test_snapshot_verification_seal_survives_checkpoint_but_not_replacement(
+    snapshot_fixture: SnapshotFixture,
+) -> None:
+    snapshot = snapshot_fixture.load()
+    provenance = verified_snapshot_provenance(snapshot)
+    restored = pickle.loads(pickle.dumps(snapshot))
+    assert verified_snapshot_provenance(restored) == provenance
+
+    changed_labels = snapshot.labels.copy()
+    changed_labels[0, 0] += 1.0
+    changed = replace(snapshot, labels=changed_labels)
+    with pytest.raises(ValueError, match="verified|seal|loader"):
+        verified_snapshot_provenance(changed)
+
+    tampered = pickle.loads(pickle.dumps(snapshot))
+    changed_history = tampered.m1_history.copy()
+    changed_history[0, 0] += 1.0
+    changed_history = np.frombuffer(changed_history.tobytes(), dtype=changed_history.dtype).reshape(
+        changed_history.shape
+    )
+    object.__setattr__(tampered, "m1_history", changed_history)
+    with pytest.raises(ValueError, match="feature source|content|seal"):
+        verified_snapshot_provenance(tampered)
+
+
+def test_verified_m4_rejects_non_loader_causal_series(
+    snapshot_fixture: SnapshotFixture,
+) -> None:
+    accumulator = M4FeatureAccumulator()
+    poisoned = False
+
+    def consume(position: int, issue: int, series: CausalSessionSeries) -> None:
+        nonlocal poisoned
+        delivered = series
+        if not poisoned and len(series.current_values_a):
+            values = series.current_values_a.copy()
+            values[0] += 7.0
+            delivered = replace(series, current_values_a=values)
+            poisoned = True
+        accumulator(position, issue, delivered)
+
+    snapshot = snapshot_fixture.load(consume)
+    assert poisoned
+    with pytest.raises(ValueError, match="causal prefix|loader delivery|provenance"):
+        accumulator.encode(snapshot)
+
+
+def test_verified_feature_block_survives_pickle_and_loky_read_only(
+    snapshot_fixture: SnapshotFixture,
+) -> None:
+    snapshot = snapshot_fixture.load()
+    block = encode_m1(snapshot)
+    expected = verified_feature_block_provenance(block, snapshot, tier="M1")
+    restored = pickle.loads(pickle.dumps(block))
+    assert _verify_feature_block_in_worker(restored, snapshot) == (expected, True)
+    assert Parallel(n_jobs=2, backend="loky")(
+        delayed(_verify_feature_block_in_worker)(block, snapshot) for _ in range(2)
+    ) == [(expected, True), (expected, True)]
+
+    changed_values = restored.values.copy()
+    changed_values[0, 0] += 1.0
+    object.__setattr__(restored, "values", gate1_data._readonly(changed_values))
+    with pytest.raises(ValueError, match="content|seal"):
+        verified_feature_block_provenance(restored, snapshot, tier="M1")
 
 
 def test_frozen_preparation_hash_constants_are_exact() -> None:
@@ -504,13 +591,13 @@ def test_snapshot_gate_rejects_invalid_m3_rows(
     snapshot_fixture.write_m3(rows)
     snapshot_fixture.refresh_manifest()
 
-    with pytest.raises((TypeError, ValueError), match="(canonical|duplicate|user input|schema|integer)"):
+    with pytest.raises(
+        (TypeError, ValueError), match="(canonical|duplicate|user input|schema|integer)"
+    ):
         snapshot_fixture.load()
 
 
-@pytest.mark.parametrize(
-    "problem", ["future_cutoff", "bad_ref", "missing_session", "offset_drift"]
-)
+@pytest.mark.parametrize("problem", ["future_cutoff", "bad_ref", "missing_session", "offset_drift"])
 def test_snapshot_gate_rejects_invalid_m4_rows(
     snapshot_fixture: SnapshotFixture, problem: str
 ) -> None:
@@ -559,7 +646,9 @@ def test_causal_consumer_never_returns_future_or_retrospective_fields(tmp_path: 
     second_fixture.refresh_manifest()
     first_seen: list[tuple[int, int, CausalSessionSeries]] = []
     second_seen: list[tuple[int, int, CausalSessionSeries]] = []
-    first = first_fixture.load(lambda position, issue, series: first_seen.append((position, issue, series)))
+    first = first_fixture.load(
+        lambda position, issue, series: first_seen.append((position, issue, series))
+    )
     second = second_fixture.load(
         lambda position, issue, series: second_seen.append((position, issue, series))
     )
@@ -602,9 +691,7 @@ def test_snapshot_and_causal_arrays_are_bytes_backed_immutable(
     snapshot_fixture: SnapshotFixture,
 ) -> None:
     causal: list[CausalSessionSeries] = []
-    snapshot = snapshot_fixture.load(
-        lambda _position, _issue, series: causal.append(series)
-    )
+    snapshot = snapshot_fixture.load(lambda _position, _issue, series: causal.append(series))
 
     arrays = [
         snapshot.issue_times,
@@ -678,9 +765,7 @@ def test_real_jpl_snapshot_passes_read_only_when_present() -> None:
                 assert int(timestamps[-1]) <= issue
         calls += 1
 
-    snapshot = verify_and_load_snapshot(
-        processed, interim, causal_prefix_consumer=consume
-    )
+    snapshot = verify_and_load_snapshot(processed, interim, causal_prefix_consumer=consume)
 
     assert snapshot.issue_times.shape == (2_853,)
     assert len(snapshot.m3_rows) == 43_506

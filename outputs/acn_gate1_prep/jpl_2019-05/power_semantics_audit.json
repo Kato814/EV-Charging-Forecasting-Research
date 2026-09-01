@@ -1,0 +1,4503 @@
+{
+  "cohorts": {
+    "primary": {
+      "aggregate_by_evse_distribution": {
+        "absolute_relative_error": {
+          "count": 52,
+          "iqr": 0.010609623735565126,
+          "median": 0.011261188614215233,
+          "p05": 0.0016491346725263061,
+          "p95": 0.023907422506201335
+        },
+        "evse_count": 52,
+        "groups": [
+          {
+            "anonymous_evse_index": 1,
+            "e208_kwh": 688.3030844444445,
+            "median_absolute_percentage_error": 0.026300053598401908,
+            "observed_kwh": 672.296,
+            "relative_error": 0.02380957858509413,
+            "session_count": 45
+          },
+          {
+            "anonymous_evse_index": 2,
+            "e208_kwh": 413.7915831111111,
+            "median_absolute_percentage_error": 0.024155641146726782,
+            "observed_kwh": 404.555,
+            "relative_error": 0.022831464476056624,
+            "session_count": 40
+          },
+          {
+            "anonymous_evse_index": 3,
+            "e208_kwh": 665.81762,
+            "median_absolute_percentage_error": 0.026092826851939244,
+            "observed_kwh": 645.597,
+            "relative_error": 0.03132080849198502,
+            "session_count": 44
+          },
+          {
+            "anonymous_evse_index": 4,
+            "e208_kwh": 435.2492271111111,
+            "median_absolute_percentage_error": 0.02227816726860694,
+            "observed_kwh": 425.262,
+            "relative_error": 0.023484880170603323,
+            "session_count": 41
+          },
+          {
+            "anonymous_evse_index": 5,
+            "e208_kwh": 481.888576,
+            "median_absolute_percentage_error": 0.01960866548721696,
+            "observed_kwh": 473.214,
+            "relative_error": 0.018331190539586744,
+            "session_count": 47
+          },
+          {
+            "anonymous_evse_index": 6,
+            "e208_kwh": 576.9531271111111,
+            "median_absolute_percentage_error": 0.021823105168020232,
+            "observed_kwh": 564.796,
+            "relative_error": 0.021524810924849137,
+            "session_count": 52
+          },
+          {
+            "anonymous_evse_index": 7,
+            "e208_kwh": 445.8731564444445,
+            "median_absolute_percentage_error": 0.019963525652619586,
+            "observed_kwh": 437.38,
+            "relative_error": 0.01941825516586145,
+            "session_count": 41
+          },
+          {
+            "anonymous_evse_index": 8,
+            "e208_kwh": 519.9904146666667,
+            "median_absolute_percentage_error": 0.011241399459989601,
+            "observed_kwh": 517.268243888889,
+            "relative_error": 0.005262590174320536,
+            "session_count": 68
+          },
+          {
+            "anonymous_evse_index": 9,
+            "e208_kwh": 532.1404053333333,
+            "median_absolute_percentage_error": 0.015636917116369078,
+            "observed_kwh": 527.571,
+            "relative_error": 0.008661214004054986,
+            "session_count": 49
+          },
+          {
+            "anonymous_evse_index": 10,
+            "e208_kwh": 623.9738728888889,
+            "median_absolute_percentage_error": 0.019671729531652506,
+            "observed_kwh": 615.417,
+            "relative_error": 0.013904186736617362,
+            "session_count": 51
+          },
+          {
+            "anonymous_evse_index": 11,
+            "e208_kwh": 720.074784,
+            "median_absolute_percentage_error": 0.015335769665865636,
+            "observed_kwh": 709.479,
+            "relative_error": 0.014934598487058786,
+            "session_count": 34
+          },
+          {
+            "anonymous_evse_index": 12,
+            "e208_kwh": 731.4401986666667,
+            "median_absolute_percentage_error": 0.00857197019029726,
+            "observed_kwh": 729.33,
+            "relative_error": 0.0028933386350028564,
+            "session_count": 48
+          },
+          {
+            "anonymous_evse_index": 13,
+            "e208_kwh": 527.721272,
+            "median_absolute_percentage_error": 0.01681419753086426,
+            "observed_kwh": 520.288,
+            "relative_error": 0.014286841134141068,
+            "session_count": 47
+          },
+          {
+            "anonymous_evse_index": 14,
+            "e208_kwh": 490.4637168888889,
+            "median_absolute_percentage_error": 0.02353230485232076,
+            "observed_kwh": 479.443,
+            "relative_error": 0.022986500770454256,
+            "session_count": 35
+          },
+          {
+            "anonymous_evse_index": 15,
+            "e208_kwh": 427.3378142222222,
+            "median_absolute_percentage_error": 0.019867319926686333,
+            "observed_kwh": 418.548,
+            "relative_error": 0.0210007316298781,
+            "session_count": 26
+          },
+          {
+            "anonymous_evse_index": 16,
+            "e208_kwh": 281.819408,
+            "median_absolute_percentage_error": 0.007645299620290298,
+            "observed_kwh": 280.585,
+            "relative_error": 0.004399408378922717,
+            "session_count": 30
+          },
+          {
+            "anonymous_evse_index": 17,
+            "e208_kwh": 396.19377199999997,
+            "median_absolute_percentage_error": 0.015511162439775475,
+            "observed_kwh": 390.985,
+            "relative_error": 0.013322178600201934,
+            "session_count": 24
+          },
+          {
+            "anonymous_evse_index": 18,
+            "e208_kwh": 482.1826128888889,
+            "median_absolute_percentage_error": 0.017458717590884684,
+            "observed_kwh": 472.867,
+            "relative_error": 0.019700281239521666,
+            "session_count": 28
+          },
+          {
+            "anonymous_evse_index": 19,
+            "e208_kwh": 327.89944488888887,
+            "median_absolute_percentage_error": 0.016957409079182507,
+            "observed_kwh": 325.52,
+            "relative_error": 0.007309673411430584,
+            "session_count": 20
+          },
+          {
+            "anonymous_evse_index": 20,
+            "e208_kwh": 389.1729515555556,
+            "median_absolute_percentage_error": 0.006952564000602044,
+            "observed_kwh": 389.186,
+            "relative_error": -3.352752782575345e-05,
+            "session_count": 28
+          },
+          {
+            "anonymous_evse_index": 21,
+            "e208_kwh": 429.0586617777778,
+            "median_absolute_percentage_error": 0.009872065264384491,
+            "observed_kwh": 426.351,
+            "relative_error": 0.006350780877206309,
+            "session_count": 21
+          },
+          {
+            "anonymous_evse_index": 22,
+            "e208_kwh": 437.16275777777776,
+            "median_absolute_percentage_error": 0.009047180093230888,
+            "observed_kwh": 434.577,
+            "relative_error": 0.0059500566706884115,
+            "session_count": 23
+          },
+          {
+            "anonymous_evse_index": 23,
+            "e208_kwh": 336.1945542222222,
+            "median_absolute_percentage_error": 0.012683217847656171,
+            "observed_kwh": 331.432,
+            "relative_error": 0.014369627019184044,
+            "session_count": 24
+          },
+          {
+            "anonymous_evse_index": 24,
+            "e208_kwh": 449.78783200000004,
+            "median_absolute_percentage_error": 0.01223682720634108,
+            "observed_kwh": 444.3540291666667,
+            "relative_error": 0.01222854408122235,
+            "session_count": 31
+          },
+          {
+            "anonymous_evse_index": 25,
+            "e208_kwh": 500.1661831111111,
+            "median_absolute_percentage_error": 0.008266950411717964,
+            "observed_kwh": 497.723,
+            "relative_error": 0.00490872053554099,
+            "session_count": 35
+          },
+          {
+            "anonymous_evse_index": 26,
+            "e208_kwh": 391.33886133333334,
+            "median_absolute_percentage_error": 0.006669630611227577,
+            "observed_kwh": 390.485,
+            "relative_error": 0.002186668715400918,
+            "session_count": 32
+          },
+          {
+            "anonymous_evse_index": 27,
+            "e208_kwh": 490.608248,
+            "median_absolute_percentage_error": 0.013583686779300688,
+            "observed_kwh": 485.453,
+            "relative_error": 0.010619458526366156,
+            "session_count": 24
+          },
+          {
+            "anonymous_evse_index": 28,
+            "e208_kwh": 302.92731733333335,
+            "median_absolute_percentage_error": 0.00471788984556506,
+            "observed_kwh": 304.288,
+            "relative_error": -0.00447169348336662,
+            "session_count": 25
+          },
+          {
+            "anonymous_evse_index": 29,
+            "e208_kwh": 549.7609577777778,
+            "median_absolute_percentage_error": 0.02152001929126836,
+            "observed_kwh": 534.471,
+            "relative_error": 0.028607647146014978,
+            "session_count": 24
+          },
+          {
+            "anonymous_evse_index": 30,
+            "e208_kwh": 875.1666386666667,
+            "median_absolute_percentage_error": 0.014065549336420052,
+            "observed_kwh": 864.271,
+            "relative_error": 0.012606738704256815,
+            "session_count": 33
+          },
+          {
+            "anonymous_evse_index": 31,
+            "e208_kwh": 292.67952133333335,
+            "median_absolute_percentage_error": 0.0120207818364918,
+            "observed_kwh": 291.584,
+            "relative_error": 0.003757138023119759,
+            "session_count": 27
+          },
+          {
+            "anonymous_evse_index": 32,
+            "e208_kwh": 329.1981622222222,
+            "median_absolute_percentage_error": 0.017516106144458508,
+            "observed_kwh": 324.35699999999997,
+            "relative_error": 0.014925413116480416,
+            "session_count": 27
+          },
+          {
+            "anonymous_evse_index": 33,
+            "e208_kwh": 368.4204622222222,
+            "median_absolute_percentage_error": 0.01064992407130916,
+            "observed_kwh": 363.851,
+            "relative_error": 0.012558608392507449,
+            "session_count": 33
+          },
+          {
+            "anonymous_evse_index": 34,
+            "e208_kwh": 502.9191208888889,
+            "median_absolute_percentage_error": 0.028722192812187623,
+            "observed_kwh": 491.11899999999997,
+            "relative_error": 0.02402700952088792,
+            "session_count": 27
+          },
+          {
+            "anonymous_evse_index": 35,
+            "e208_kwh": 282.4425586666667,
+            "median_absolute_percentage_error": 0.02954022119476199,
+            "observed_kwh": 279.214,
+            "relative_error": 0.011563025731756596,
+            "session_count": 21
+          },
+          {
+            "anonymous_evse_index": 36,
+            "e208_kwh": 375.0835457777778,
+            "median_absolute_percentage_error": 0.0176210045662099,
+            "observed_kwh": 367.654,
+            "relative_error": 0.02020798298883672,
+            "session_count": 23
+          },
+          {
+            "anonymous_evse_index": 37,
+            "e208_kwh": 382.08176933333334,
+            "median_absolute_percentage_error": 0.008839884997888669,
+            "observed_kwh": 381.373,
+            "relative_error": 0.0018584675195500219,
+            "session_count": 32
+          },
+          {
+            "anonymous_evse_index": 38,
+            "e208_kwh": 417.1383031111111,
+            "median_absolute_percentage_error": 0.01604780361757108,
+            "observed_kwh": 412.529,
+            "relative_error": 0.011173282632520631,
+            "session_count": 25
+          },
+          {
+            "anonymous_evse_index": 39,
+            "e208_kwh": 208.62497066666666,
+            "median_absolute_percentage_error": 0.01935764457546309,
+            "observed_kwh": 206.498,
+            "relative_error": 0.010300199840514994,
+            "session_count": 21
+          },
+          {
+            "anonymous_evse_index": 40,
+            "e208_kwh": 480.6978164444444,
+            "median_absolute_percentage_error": 0.007312041260800985,
+            "observed_kwh": 480.029,
+            "relative_error": 0.0013932834150528757,
+            "session_count": 24
+          },
+          {
+            "anonymous_evse_index": 41,
+            "e208_kwh": 300.6821942222222,
+            "median_absolute_percentage_error": 0.009743879972292233,
+            "observed_kwh": 298.42900000000003,
+            "relative_error": 0.007550185210626954,
+            "session_count": 23
+          },
+          {
+            "anonymous_evse_index": 42,
+            "e208_kwh": 478.79321244444446,
+            "median_absolute_percentage_error": 0.01483747963367253,
+            "observed_kwh": 472.625,
+            "relative_error": 0.013050965235534439,
+            "session_count": 26
+          },
+          {
+            "anonymous_evse_index": 43,
+            "e208_kwh": 430.68641777777776,
+            "median_absolute_percentage_error": 0.004568746774212769,
+            "observed_kwh": 431.667,
+            "relative_error": -0.0022716172934743924,
+            "session_count": 23
+          },
+          {
+            "anonymous_evse_index": 44,
+            "e208_kwh": 347.29795244444443,
+            "median_absolute_percentage_error": 0.007306035907583544,
+            "observed_kwh": 347.348,
+            "relative_error": -0.00014408476673416715,
+            "session_count": 26
+          },
+          {
+            "anonymous_evse_index": 45,
+            "e208_kwh": 342.47787600000004,
+            "median_absolute_percentage_error": 0.011971745759365708,
+            "observed_kwh": 339.69907027777776,
+            "relative_error": 0.008180198197039504,
+            "session_count": 24
+          },
+          {
+            "anonymous_evse_index": 46,
+            "e208_kwh": 382.2197888888889,
+            "median_absolute_percentage_error": 0.016160705087472596,
+            "observed_kwh": 376.72499999999997,
+            "relative_error": 0.014585676259576439,
+            "session_count": 20
+          },
+          {
+            "anonymous_evse_index": 47,
+            "e208_kwh": 369.2678888888889,
+            "median_absolute_percentage_error": 0.010736056935892737,
+            "observed_kwh": 370.972,
+            "relative_error": -0.004593638094279632,
+            "session_count": 24
+          },
+          {
+            "anonymous_evse_index": 48,
+            "e208_kwh": 191.32535066666668,
+            "median_absolute_percentage_error": 0.016902449566279835,
+            "observed_kwh": 189.394,
+            "relative_error": 0.010197528256790996,
+            "session_count": 22
+          },
+          {
+            "anonymous_evse_index": 49,
+            "e208_kwh": 530.7622782222222,
+            "median_absolute_percentage_error": 0.010486536356041264,
+            "observed_kwh": 527.83,
+            "relative_error": 0.005555345892090597,
+            "session_count": 24
+          },
+          {
+            "anonymous_evse_index": 50,
+            "e208_kwh": 389.6638488888889,
+            "median_absolute_percentage_error": 0.014020959307143706,
+            "observed_kwh": 387.283,
+            "relative_error": 0.0061475688034043924,
+            "session_count": 24
+          },
+          {
+            "anonymous_evse_index": 51,
+            "e208_kwh": 456.08304444444445,
+            "median_absolute_percentage_error": 0.014543522885906063,
+            "observed_kwh": 450.965,
+            "relative_error": 0.011349094595909836,
+            "session_count": 24
+          },
+          {
+            "anonymous_evse_index": 52,
+            "e208_kwh": 186.90654088888888,
+            "median_absolute_percentage_error": 0.003985185185185331,
+            "observed_kwh": 186.29,
+            "relative_error": 0.003309575870357464,
+            "session_count": 23
+          }
+        ],
+        "relative_error": {
+          "count": 52,
+          "iqr": 0.010609623735565126,
+          "median": 0.011261188614215233,
+          "p05": -0.001101474403767268,
+          "p95": 0.023907422506201335
+        },
+        "session_count": {
+          "count": 52,
+          "iqr": 11.0,
+          "median": 26.5,
+          "p05": 21.0,
+          "p95": 49.89999999999999
+        }
+      },
+      "aggregate_energy": {
+        "absolute_relative_error": 0.012140993695928535,
+        "e208_kwh": 22965.911678666667,
+        "error_kwh": 275.48433533333446,
+        "observed_kwh": 22690.427343333333,
+        "relative_error": 0.012140993695928535,
+        "session_count": 1613
+      },
+      "audit_coverage": 0.9914893617021276,
+      "coverage_qualified_session_count": 1631,
+      "e208_error": {
+        "count": 1613,
+        "mae_kwh": 0.26170833684645584,
+        "median_absolute_percentage_error": 0.014462584127407144,
+        "p90_absolute_percentage_error": 0.030683860527211684
+      },
+      "effective_voltage_v": {
+        "count": 1613,
+        "iqr": 3.789046381764763,
+        "median": 205.39838010694547,
+        "p05": 201.4182829433969,
+        "p95": 211.4888056669413
+      },
+      "eligible_session_count": 1645,
+      "input_session_count": 1645,
+      "retained_rate": 0.9805471124620061,
+      "retained_session_count": 1613,
+      "thresholds": {
+        "minimum_current_coverage": 0.9,
+        "minimum_kwh_delivered": 0.5
+      },
+      "weekday_aggregate_energy": {
+        "absolute_relative_error": 0.012211094102839168,
+        "e208_kwh": 22428.029728,
+        "error_kwh": 270.5668641111115,
+        "observed_kwh": 22157.46286388889,
+        "relative_error": 0.012211094102839168,
+        "session_count": 1535
+      },
+      "weekend_aggregate_energy": {
+        "absolute_relative_error": 0.009226639695290898,
+        "e208_kwh": 537.8819506666666,
+        "error_kwh": 4.9174712222221615,
+        "observed_kwh": 532.9644794444445,
+        "relative_error": 0.009226639695290898,
+        "session_count": 78
+      }
+    },
+    "sensitivity": [
+      {
+        "aggregate_by_evse_distribution": {
+          "absolute_relative_error": {
+            "count": 52,
+            "iqr": 0.010128245686627612,
+            "median": 0.010459829183440576,
+            "p05": 0.0009300684605404676,
+            "p95": 0.0234547297081494
+          },
+          "evse_count": 52,
+          "groups": [
+            {
+              "anonymous_evse_index": 1,
+              "e208_kwh": 752.4554497777777,
+              "median_absolute_percentage_error": 0.027357205748954776,
+              "observed_kwh": 744.9110000000001,
+              "relative_error": 0.010127988145936476,
+              "session_count": 48
+            },
+            {
+              "anonymous_evse_index": 2,
+              "e208_kwh": 432.63586888888887,
+              "median_absolute_percentage_error": 0.02431734305693667,
+              "observed_kwh": 425.865,
+              "relative_error": 0.015899096870813183,
+              "session_count": 41
+            },
+            {
+              "anonymous_evse_index": 3,
+              "e208_kwh": 671.8081355555555,
+              "median_absolute_percentage_error": 0.0265011508273613,
+              "observed_kwh": 652.653,
+              "relative_error": 0.029349647600724258,
+              "session_count": 45
+            },
+            {
+              "anonymous_evse_index": 4,
+              "e208_kwh": 446.13353777777775,
+              "median_absolute_percentage_error": 0.022813951626663886,
+              "observed_kwh": 439.049,
+              "relative_error": 0.016136098198100367,
+              "session_count": 42
+            },
+            {
+              "anonymous_evse_index": 5,
+              "e208_kwh": 481.888576,
+              "median_absolute_percentage_error": 0.01960866548721696,
+              "observed_kwh": 473.214,
+              "relative_error": 0.018331190539586744,
+              "session_count": 47
+            },
+            {
+              "anonymous_evse_index": 6,
+              "e208_kwh": 576.9531271111111,
+              "median_absolute_percentage_error": 0.021823105168020232,
+              "observed_kwh": 564.796,
+              "relative_error": 0.021524810924849137,
+              "session_count": 52
+            },
+            {
+              "anonymous_evse_index": 7,
+              "e208_kwh": 445.8731564444445,
+              "median_absolute_percentage_error": 0.019963525652619586,
+              "observed_kwh": 437.38,
+              "relative_error": 0.01941825516586145,
+              "session_count": 41
+            },
+            {
+              "anonymous_evse_index": 8,
+              "e208_kwh": 519.9904146666667,
+              "median_absolute_percentage_error": 0.011241399459989601,
+              "observed_kwh": 517.268243888889,
+              "relative_error": 0.005262590174320536,
+              "session_count": 68
+            },
+            {
+              "anonymous_evse_index": 9,
+              "e208_kwh": 532.1404053333333,
+              "median_absolute_percentage_error": 0.015636917116369078,
+              "observed_kwh": 527.571,
+              "relative_error": 0.008661214004054986,
+              "session_count": 49
+            },
+            {
+              "anonymous_evse_index": 10,
+              "e208_kwh": 623.9738728888889,
+              "median_absolute_percentage_error": 0.019671729531652506,
+              "observed_kwh": 615.417,
+              "relative_error": 0.013904186736617362,
+              "session_count": 51
+            },
+            {
+              "anonymous_evse_index": 11,
+              "e208_kwh": 720.074784,
+              "median_absolute_percentage_error": 0.015335769665865636,
+              "observed_kwh": 709.479,
+              "relative_error": 0.014934598487058786,
+              "session_count": 34
+            },
+            {
+              "anonymous_evse_index": 12,
+              "e208_kwh": 731.4401986666667,
+              "median_absolute_percentage_error": 0.00857197019029726,
+              "observed_kwh": 729.33,
+              "relative_error": 0.0028933386350028564,
+              "session_count": 48
+            },
+            {
+              "anonymous_evse_index": 13,
+              "e208_kwh": 527.721272,
+              "median_absolute_percentage_error": 0.01681419753086426,
+              "observed_kwh": 520.288,
+              "relative_error": 0.014286841134141068,
+              "session_count": 47
+            },
+            {
+              "anonymous_evse_index": 14,
+              "e208_kwh": 490.4637168888889,
+              "median_absolute_percentage_error": 0.02353230485232076,
+              "observed_kwh": 479.443,
+              "relative_error": 0.022986500770454256,
+              "session_count": 35
+            },
+            {
+              "anonymous_evse_index": 15,
+              "e208_kwh": 427.3378142222222,
+              "median_absolute_percentage_error": 0.019867319926686333,
+              "observed_kwh": 418.548,
+              "relative_error": 0.0210007316298781,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 16,
+              "e208_kwh": 281.819408,
+              "median_absolute_percentage_error": 0.007645299620290298,
+              "observed_kwh": 280.585,
+              "relative_error": 0.004399408378922717,
+              "session_count": 30
+            },
+            {
+              "anonymous_evse_index": 17,
+              "e208_kwh": 396.19377199999997,
+              "median_absolute_percentage_error": 0.015511162439775475,
+              "observed_kwh": 390.985,
+              "relative_error": 0.013322178600201934,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 18,
+              "e208_kwh": 482.1826128888889,
+              "median_absolute_percentage_error": 0.017458717590884684,
+              "observed_kwh": 472.867,
+              "relative_error": 0.019700281239521666,
+              "session_count": 28
+            },
+            {
+              "anonymous_evse_index": 19,
+              "e208_kwh": 327.89944488888887,
+              "median_absolute_percentage_error": 0.016957409079182507,
+              "observed_kwh": 325.52,
+              "relative_error": 0.007309673411430584,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 20,
+              "e208_kwh": 389.1729515555556,
+              "median_absolute_percentage_error": 0.006952564000602044,
+              "observed_kwh": 389.186,
+              "relative_error": -3.352752782575345e-05,
+              "session_count": 28
+            },
+            {
+              "anonymous_evse_index": 21,
+              "e208_kwh": 429.0586617777778,
+              "median_absolute_percentage_error": 0.009872065264384491,
+              "observed_kwh": 426.351,
+              "relative_error": 0.006350780877206309,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 22,
+              "e208_kwh": 437.16275777777776,
+              "median_absolute_percentage_error": 0.009047180093230888,
+              "observed_kwh": 434.577,
+              "relative_error": 0.0059500566706884115,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 23,
+              "e208_kwh": 336.1945542222222,
+              "median_absolute_percentage_error": 0.012683217847656171,
+              "observed_kwh": 331.432,
+              "relative_error": 0.014369627019184044,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 24,
+              "e208_kwh": 449.78783200000004,
+              "median_absolute_percentage_error": 0.01223682720634108,
+              "observed_kwh": 444.3540291666667,
+              "relative_error": 0.01222854408122235,
+              "session_count": 31
+            },
+            {
+              "anonymous_evse_index": 25,
+              "e208_kwh": 500.1661831111111,
+              "median_absolute_percentage_error": 0.008266950411717964,
+              "observed_kwh": 497.723,
+              "relative_error": 0.00490872053554099,
+              "session_count": 35
+            },
+            {
+              "anonymous_evse_index": 26,
+              "e208_kwh": 391.33886133333334,
+              "median_absolute_percentage_error": 0.006669630611227577,
+              "observed_kwh": 390.485,
+              "relative_error": 0.002186668715400918,
+              "session_count": 32
+            },
+            {
+              "anonymous_evse_index": 27,
+              "e208_kwh": 490.608248,
+              "median_absolute_percentage_error": 0.013583686779300688,
+              "observed_kwh": 485.453,
+              "relative_error": 0.010619458526366156,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 28,
+              "e208_kwh": 302.92731733333335,
+              "median_absolute_percentage_error": 0.00471788984556506,
+              "observed_kwh": 304.288,
+              "relative_error": -0.00447169348336662,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 29,
+              "e208_kwh": 549.7609577777778,
+              "median_absolute_percentage_error": 0.02152001929126836,
+              "observed_kwh": 534.471,
+              "relative_error": 0.028607647146014978,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 30,
+              "e208_kwh": 875.1666386666667,
+              "median_absolute_percentage_error": 0.014065549336420052,
+              "observed_kwh": 864.271,
+              "relative_error": 0.012606738704256815,
+              "session_count": 33
+            },
+            {
+              "anonymous_evse_index": 31,
+              "e208_kwh": 292.67952133333335,
+              "median_absolute_percentage_error": 0.0120207818364918,
+              "observed_kwh": 291.584,
+              "relative_error": 0.003757138023119759,
+              "session_count": 27
+            },
+            {
+              "anonymous_evse_index": 32,
+              "e208_kwh": 329.1981622222222,
+              "median_absolute_percentage_error": 0.017516106144458508,
+              "observed_kwh": 324.35699999999997,
+              "relative_error": 0.014925413116480416,
+              "session_count": 27
+            },
+            {
+              "anonymous_evse_index": 33,
+              "e208_kwh": 368.4204622222222,
+              "median_absolute_percentage_error": 0.01064992407130916,
+              "observed_kwh": 363.851,
+              "relative_error": 0.012558608392507449,
+              "session_count": 33
+            },
+            {
+              "anonymous_evse_index": 34,
+              "e208_kwh": 502.9191208888889,
+              "median_absolute_percentage_error": 0.028722192812187623,
+              "observed_kwh": 491.11899999999997,
+              "relative_error": 0.02402700952088792,
+              "session_count": 27
+            },
+            {
+              "anonymous_evse_index": 35,
+              "e208_kwh": 282.4425586666667,
+              "median_absolute_percentage_error": 0.02954022119476199,
+              "observed_kwh": 279.214,
+              "relative_error": 0.011563025731756596,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 36,
+              "e208_kwh": 382.5188062222222,
+              "median_absolute_percentage_error": 0.016697259543962936,
+              "observed_kwh": 375.121,
+              "relative_error": 0.019721119911234625,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 37,
+              "e208_kwh": 382.08176933333334,
+              "median_absolute_percentage_error": 0.008839884997888669,
+              "observed_kwh": 381.373,
+              "relative_error": 0.0018584675195500219,
+              "session_count": 32
+            },
+            {
+              "anonymous_evse_index": 38,
+              "e208_kwh": 458.40965155555557,
+              "median_absolute_percentage_error": 0.016174406314677876,
+              "observed_kwh": 457.189,
+              "relative_error": 0.002669905784162673,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 39,
+              "e208_kwh": 208.62497066666666,
+              "median_absolute_percentage_error": 0.01935764457546309,
+              "observed_kwh": 206.498,
+              "relative_error": 0.010300199840514994,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 40,
+              "e208_kwh": 480.6978164444444,
+              "median_absolute_percentage_error": 0.007312041260800985,
+              "observed_kwh": 480.029,
+              "relative_error": 0.0013932834150528757,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 41,
+              "e208_kwh": 300.6821942222222,
+              "median_absolute_percentage_error": 0.009743879972292233,
+              "observed_kwh": 298.42900000000003,
+              "relative_error": 0.007550185210626954,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 42,
+              "e208_kwh": 478.79321244444446,
+              "median_absolute_percentage_error": 0.01483747963367253,
+              "observed_kwh": 472.625,
+              "relative_error": 0.013050965235534439,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 43,
+              "e208_kwh": 430.68641777777776,
+              "median_absolute_percentage_error": 0.004568746774212769,
+              "observed_kwh": 431.667,
+              "relative_error": -0.0022716172934743924,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 44,
+              "e208_kwh": 347.29795244444443,
+              "median_absolute_percentage_error": 0.007306035907583544,
+              "observed_kwh": 347.348,
+              "relative_error": -0.00014408476673416715,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 45,
+              "e208_kwh": 342.47787600000004,
+              "median_absolute_percentage_error": 0.011971745759365708,
+              "observed_kwh": 339.69907027777776,
+              "relative_error": 0.008180198197039504,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 46,
+              "e208_kwh": 382.2197888888889,
+              "median_absolute_percentage_error": 0.016160705087472596,
+              "observed_kwh": 376.72499999999997,
+              "relative_error": 0.014585676259576439,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 47,
+              "e208_kwh": 382.4034297777778,
+              "median_absolute_percentage_error": 0.012425463847313953,
+              "observed_kwh": 386.152,
+              "relative_error": -0.009707499177065542,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 48,
+              "e208_kwh": 191.32535066666668,
+              "median_absolute_percentage_error": 0.016902449566279835,
+              "observed_kwh": 189.394,
+              "relative_error": 0.010197528256790996,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 49,
+              "e208_kwh": 530.7622782222222,
+              "median_absolute_percentage_error": 0.010486536356041264,
+              "observed_kwh": 527.83,
+              "relative_error": 0.005555345892090597,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 50,
+              "e208_kwh": 396.1381088888889,
+              "median_absolute_percentage_error": 0.015305444421047825,
+              "observed_kwh": 395.99399999999997,
+              "relative_error": 0.000363916849469746,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 51,
+              "e208_kwh": 456.08304444444445,
+              "median_absolute_percentage_error": 0.014543522885906063,
+              "observed_kwh": 450.965,
+              "relative_error": 0.011349094595909836,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 52,
+              "e208_kwh": 186.90654088888888,
+              "median_absolute_percentage_error": 0.003985185185185331,
+              "observed_kwh": 186.29,
+              "relative_error": 0.003309575870357464,
+              "session_count": 23
+            }
+          ],
+          "relative_error": {
+            "count": 52,
+            "iqr": 0.010688868669153032,
+            "median": 0.010459829183440576,
+            "p05": -0.001101474403767268,
+            "p95": 0.0234547297081494
+          },
+          "session_count": {
+            "count": 52,
+            "iqr": 11.0,
+            "median": 26.5,
+            "p05": 21.0,
+            "p95": 49.89999999999999
+          }
+        },
+        "aggregate_energy": {
+          "absolute_relative_error": 0.011052133409617741,
+          "e208_kwh": 23134.09956577778,
+          "error_kwh": 252.8862224444456,
+          "observed_kwh": 22881.213343333333,
+          "relative_error": 0.011052133409617741,
+          "session_count": 1624
+        },
+        "audit_coverage": 0.998176291793313,
+        "coverage_qualified_session_count": 1642,
+        "e208_error": {
+          "count": 1624,
+          "mae_kwh": 0.2738507759989053,
+          "median_absolute_percentage_error": 0.014519721121978916,
+          "p90_absolute_percentage_error": 0.031085385108259436
+        },
+        "effective_voltage_v": {
+          "count": 1624,
+          "iqr": 3.8170629353346612,
+          "median": 205.44997098502716,
+          "p05": 201.42251937402838,
+          "p95": 212.22973668025483
+        },
+        "eligible_session_count": 1645,
+        "input_session_count": 1645,
+        "retained_rate": 0.9872340425531915,
+        "retained_session_count": 1624,
+        "thresholds": {
+          "minimum_current_coverage": 0.8,
+          "minimum_kwh_delivered": 0.1
+        },
+        "weekday_aggregate_energy": {
+          "absolute_relative_error": 0.011095668064753813,
+          "e208_kwh": 22596.217615111113,
+          "error_kwh": 247.96875122222264,
+          "observed_kwh": 22348.24886388889,
+          "relative_error": 0.011095668064753813,
+          "session_count": 1546
+        },
+        "weekend_aggregate_energy": {
+          "absolute_relative_error": 0.009226639695290898,
+          "e208_kwh": 537.8819506666666,
+          "error_kwh": 4.9174712222221615,
+          "observed_kwh": 532.9644794444445,
+          "relative_error": 0.009226639695290898,
+          "session_count": 78
+        }
+      },
+      {
+        "aggregate_by_evse_distribution": {
+          "absolute_relative_error": {
+            "count": 52,
+            "iqr": 0.010609623735565126,
+            "median": 0.011261188614215233,
+            "p05": 0.0016491346725263061,
+            "p95": 0.023907422506201335
+          },
+          "evse_count": 52,
+          "groups": [
+            {
+              "anonymous_evse_index": 1,
+              "e208_kwh": 688.3030844444445,
+              "median_absolute_percentage_error": 0.026300053598401908,
+              "observed_kwh": 672.296,
+              "relative_error": 0.02380957858509413,
+              "session_count": 45
+            },
+            {
+              "anonymous_evse_index": 2,
+              "e208_kwh": 413.7915831111111,
+              "median_absolute_percentage_error": 0.024155641146726782,
+              "observed_kwh": 404.555,
+              "relative_error": 0.022831464476056624,
+              "session_count": 40
+            },
+            {
+              "anonymous_evse_index": 3,
+              "e208_kwh": 665.81762,
+              "median_absolute_percentage_error": 0.026092826851939244,
+              "observed_kwh": 645.597,
+              "relative_error": 0.03132080849198502,
+              "session_count": 44
+            },
+            {
+              "anonymous_evse_index": 4,
+              "e208_kwh": 435.2492271111111,
+              "median_absolute_percentage_error": 0.02227816726860694,
+              "observed_kwh": 425.262,
+              "relative_error": 0.023484880170603323,
+              "session_count": 41
+            },
+            {
+              "anonymous_evse_index": 5,
+              "e208_kwh": 481.888576,
+              "median_absolute_percentage_error": 0.01960866548721696,
+              "observed_kwh": 473.214,
+              "relative_error": 0.018331190539586744,
+              "session_count": 47
+            },
+            {
+              "anonymous_evse_index": 6,
+              "e208_kwh": 576.9531271111111,
+              "median_absolute_percentage_error": 0.021823105168020232,
+              "observed_kwh": 564.796,
+              "relative_error": 0.021524810924849137,
+              "session_count": 52
+            },
+            {
+              "anonymous_evse_index": 7,
+              "e208_kwh": 445.8731564444445,
+              "median_absolute_percentage_error": 0.019963525652619586,
+              "observed_kwh": 437.38,
+              "relative_error": 0.01941825516586145,
+              "session_count": 41
+            },
+            {
+              "anonymous_evse_index": 8,
+              "e208_kwh": 519.9904146666667,
+              "median_absolute_percentage_error": 0.011241399459989601,
+              "observed_kwh": 517.268243888889,
+              "relative_error": 0.005262590174320536,
+              "session_count": 68
+            },
+            {
+              "anonymous_evse_index": 9,
+              "e208_kwh": 532.1404053333333,
+              "median_absolute_percentage_error": 0.015636917116369078,
+              "observed_kwh": 527.571,
+              "relative_error": 0.008661214004054986,
+              "session_count": 49
+            },
+            {
+              "anonymous_evse_index": 10,
+              "e208_kwh": 623.9738728888889,
+              "median_absolute_percentage_error": 0.019671729531652506,
+              "observed_kwh": 615.417,
+              "relative_error": 0.013904186736617362,
+              "session_count": 51
+            },
+            {
+              "anonymous_evse_index": 11,
+              "e208_kwh": 720.074784,
+              "median_absolute_percentage_error": 0.015335769665865636,
+              "observed_kwh": 709.479,
+              "relative_error": 0.014934598487058786,
+              "session_count": 34
+            },
+            {
+              "anonymous_evse_index": 12,
+              "e208_kwh": 731.4401986666667,
+              "median_absolute_percentage_error": 0.00857197019029726,
+              "observed_kwh": 729.33,
+              "relative_error": 0.0028933386350028564,
+              "session_count": 48
+            },
+            {
+              "anonymous_evse_index": 13,
+              "e208_kwh": 527.721272,
+              "median_absolute_percentage_error": 0.01681419753086426,
+              "observed_kwh": 520.288,
+              "relative_error": 0.014286841134141068,
+              "session_count": 47
+            },
+            {
+              "anonymous_evse_index": 14,
+              "e208_kwh": 490.4637168888889,
+              "median_absolute_percentage_error": 0.02353230485232076,
+              "observed_kwh": 479.443,
+              "relative_error": 0.022986500770454256,
+              "session_count": 35
+            },
+            {
+              "anonymous_evse_index": 15,
+              "e208_kwh": 427.3378142222222,
+              "median_absolute_percentage_error": 0.019867319926686333,
+              "observed_kwh": 418.548,
+              "relative_error": 0.0210007316298781,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 16,
+              "e208_kwh": 281.819408,
+              "median_absolute_percentage_error": 0.007645299620290298,
+              "observed_kwh": 280.585,
+              "relative_error": 0.004399408378922717,
+              "session_count": 30
+            },
+            {
+              "anonymous_evse_index": 17,
+              "e208_kwh": 396.19377199999997,
+              "median_absolute_percentage_error": 0.015511162439775475,
+              "observed_kwh": 390.985,
+              "relative_error": 0.013322178600201934,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 18,
+              "e208_kwh": 482.1826128888889,
+              "median_absolute_percentage_error": 0.017458717590884684,
+              "observed_kwh": 472.867,
+              "relative_error": 0.019700281239521666,
+              "session_count": 28
+            },
+            {
+              "anonymous_evse_index": 19,
+              "e208_kwh": 327.89944488888887,
+              "median_absolute_percentage_error": 0.016957409079182507,
+              "observed_kwh": 325.52,
+              "relative_error": 0.007309673411430584,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 20,
+              "e208_kwh": 389.1729515555556,
+              "median_absolute_percentage_error": 0.006952564000602044,
+              "observed_kwh": 389.186,
+              "relative_error": -3.352752782575345e-05,
+              "session_count": 28
+            },
+            {
+              "anonymous_evse_index": 21,
+              "e208_kwh": 429.0586617777778,
+              "median_absolute_percentage_error": 0.009872065264384491,
+              "observed_kwh": 426.351,
+              "relative_error": 0.006350780877206309,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 22,
+              "e208_kwh": 437.16275777777776,
+              "median_absolute_percentage_error": 0.009047180093230888,
+              "observed_kwh": 434.577,
+              "relative_error": 0.0059500566706884115,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 23,
+              "e208_kwh": 336.1945542222222,
+              "median_absolute_percentage_error": 0.012683217847656171,
+              "observed_kwh": 331.432,
+              "relative_error": 0.014369627019184044,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 24,
+              "e208_kwh": 449.78783200000004,
+              "median_absolute_percentage_error": 0.01223682720634108,
+              "observed_kwh": 444.3540291666667,
+              "relative_error": 0.01222854408122235,
+              "session_count": 31
+            },
+            {
+              "anonymous_evse_index": 25,
+              "e208_kwh": 500.1661831111111,
+              "median_absolute_percentage_error": 0.008266950411717964,
+              "observed_kwh": 497.723,
+              "relative_error": 0.00490872053554099,
+              "session_count": 35
+            },
+            {
+              "anonymous_evse_index": 26,
+              "e208_kwh": 391.33886133333334,
+              "median_absolute_percentage_error": 0.006669630611227577,
+              "observed_kwh": 390.485,
+              "relative_error": 0.002186668715400918,
+              "session_count": 32
+            },
+            {
+              "anonymous_evse_index": 27,
+              "e208_kwh": 490.608248,
+              "median_absolute_percentage_error": 0.013583686779300688,
+              "observed_kwh": 485.453,
+              "relative_error": 0.010619458526366156,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 28,
+              "e208_kwh": 302.92731733333335,
+              "median_absolute_percentage_error": 0.00471788984556506,
+              "observed_kwh": 304.288,
+              "relative_error": -0.00447169348336662,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 29,
+              "e208_kwh": 549.7609577777778,
+              "median_absolute_percentage_error": 0.02152001929126836,
+              "observed_kwh": 534.471,
+              "relative_error": 0.028607647146014978,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 30,
+              "e208_kwh": 875.1666386666667,
+              "median_absolute_percentage_error": 0.014065549336420052,
+              "observed_kwh": 864.271,
+              "relative_error": 0.012606738704256815,
+              "session_count": 33
+            },
+            {
+              "anonymous_evse_index": 31,
+              "e208_kwh": 292.67952133333335,
+              "median_absolute_percentage_error": 0.0120207818364918,
+              "observed_kwh": 291.584,
+              "relative_error": 0.003757138023119759,
+              "session_count": 27
+            },
+            {
+              "anonymous_evse_index": 32,
+              "e208_kwh": 329.1981622222222,
+              "median_absolute_percentage_error": 0.017516106144458508,
+              "observed_kwh": 324.35699999999997,
+              "relative_error": 0.014925413116480416,
+              "session_count": 27
+            },
+            {
+              "anonymous_evse_index": 33,
+              "e208_kwh": 368.4204622222222,
+              "median_absolute_percentage_error": 0.01064992407130916,
+              "observed_kwh": 363.851,
+              "relative_error": 0.012558608392507449,
+              "session_count": 33
+            },
+            {
+              "anonymous_evse_index": 34,
+              "e208_kwh": 502.9191208888889,
+              "median_absolute_percentage_error": 0.028722192812187623,
+              "observed_kwh": 491.11899999999997,
+              "relative_error": 0.02402700952088792,
+              "session_count": 27
+            },
+            {
+              "anonymous_evse_index": 35,
+              "e208_kwh": 282.4425586666667,
+              "median_absolute_percentage_error": 0.02954022119476199,
+              "observed_kwh": 279.214,
+              "relative_error": 0.011563025731756596,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 36,
+              "e208_kwh": 375.0835457777778,
+              "median_absolute_percentage_error": 0.0176210045662099,
+              "observed_kwh": 367.654,
+              "relative_error": 0.02020798298883672,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 37,
+              "e208_kwh": 382.08176933333334,
+              "median_absolute_percentage_error": 0.008839884997888669,
+              "observed_kwh": 381.373,
+              "relative_error": 0.0018584675195500219,
+              "session_count": 32
+            },
+            {
+              "anonymous_evse_index": 38,
+              "e208_kwh": 417.1383031111111,
+              "median_absolute_percentage_error": 0.01604780361757108,
+              "observed_kwh": 412.529,
+              "relative_error": 0.011173282632520631,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 39,
+              "e208_kwh": 208.62497066666666,
+              "median_absolute_percentage_error": 0.01935764457546309,
+              "observed_kwh": 206.498,
+              "relative_error": 0.010300199840514994,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 40,
+              "e208_kwh": 480.6978164444444,
+              "median_absolute_percentage_error": 0.007312041260800985,
+              "observed_kwh": 480.029,
+              "relative_error": 0.0013932834150528757,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 41,
+              "e208_kwh": 300.6821942222222,
+              "median_absolute_percentage_error": 0.009743879972292233,
+              "observed_kwh": 298.42900000000003,
+              "relative_error": 0.007550185210626954,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 42,
+              "e208_kwh": 478.79321244444446,
+              "median_absolute_percentage_error": 0.01483747963367253,
+              "observed_kwh": 472.625,
+              "relative_error": 0.013050965235534439,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 43,
+              "e208_kwh": 430.68641777777776,
+              "median_absolute_percentage_error": 0.004568746774212769,
+              "observed_kwh": 431.667,
+              "relative_error": -0.0022716172934743924,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 44,
+              "e208_kwh": 347.29795244444443,
+              "median_absolute_percentage_error": 0.007306035907583544,
+              "observed_kwh": 347.348,
+              "relative_error": -0.00014408476673416715,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 45,
+              "e208_kwh": 342.47787600000004,
+              "median_absolute_percentage_error": 0.011971745759365708,
+              "observed_kwh": 339.69907027777776,
+              "relative_error": 0.008180198197039504,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 46,
+              "e208_kwh": 382.2197888888889,
+              "median_absolute_percentage_error": 0.016160705087472596,
+              "observed_kwh": 376.72499999999997,
+              "relative_error": 0.014585676259576439,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 47,
+              "e208_kwh": 369.2678888888889,
+              "median_absolute_percentage_error": 0.010736056935892737,
+              "observed_kwh": 370.972,
+              "relative_error": -0.004593638094279632,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 48,
+              "e208_kwh": 191.32535066666668,
+              "median_absolute_percentage_error": 0.016902449566279835,
+              "observed_kwh": 189.394,
+              "relative_error": 0.010197528256790996,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 49,
+              "e208_kwh": 530.7622782222222,
+              "median_absolute_percentage_error": 0.010486536356041264,
+              "observed_kwh": 527.83,
+              "relative_error": 0.005555345892090597,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 50,
+              "e208_kwh": 389.6638488888889,
+              "median_absolute_percentage_error": 0.014020959307143706,
+              "observed_kwh": 387.283,
+              "relative_error": 0.0061475688034043924,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 51,
+              "e208_kwh": 456.08304444444445,
+              "median_absolute_percentage_error": 0.014543522885906063,
+              "observed_kwh": 450.965,
+              "relative_error": 0.011349094595909836,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 52,
+              "e208_kwh": 186.90654088888888,
+              "median_absolute_percentage_error": 0.003985185185185331,
+              "observed_kwh": 186.29,
+              "relative_error": 0.003309575870357464,
+              "session_count": 23
+            }
+          ],
+          "relative_error": {
+            "count": 52,
+            "iqr": 0.010609623735565126,
+            "median": 0.011261188614215233,
+            "p05": -0.001101474403767268,
+            "p95": 0.023907422506201335
+          },
+          "session_count": {
+            "count": 52,
+            "iqr": 11.0,
+            "median": 26.5,
+            "p05": 21.0,
+            "p95": 49.89999999999999
+          }
+        },
+        "aggregate_energy": {
+          "absolute_relative_error": 0.012140993695928535,
+          "e208_kwh": 22965.911678666667,
+          "error_kwh": 275.48433533333446,
+          "observed_kwh": 22690.427343333333,
+          "relative_error": 0.012140993695928535,
+          "session_count": 1613
+        },
+        "audit_coverage": 0.9914893617021276,
+        "coverage_qualified_session_count": 1631,
+        "e208_error": {
+          "count": 1613,
+          "mae_kwh": 0.26170833684645584,
+          "median_absolute_percentage_error": 0.014462584127407144,
+          "p90_absolute_percentage_error": 0.030683860527211684
+        },
+        "effective_voltage_v": {
+          "count": 1613,
+          "iqr": 3.789046381764763,
+          "median": 205.39838010694547,
+          "p05": 201.4182829433969,
+          "p95": 211.4888056669413
+        },
+        "eligible_session_count": 1645,
+        "input_session_count": 1645,
+        "retained_rate": 0.9805471124620061,
+        "retained_session_count": 1613,
+        "thresholds": {
+          "minimum_current_coverage": 0.9,
+          "minimum_kwh_delivered": 0.1
+        },
+        "weekday_aggregate_energy": {
+          "absolute_relative_error": 0.012211094102839168,
+          "e208_kwh": 22428.029728,
+          "error_kwh": 270.5668641111115,
+          "observed_kwh": 22157.46286388889,
+          "relative_error": 0.012211094102839168,
+          "session_count": 1535
+        },
+        "weekend_aggregate_energy": {
+          "absolute_relative_error": 0.009226639695290898,
+          "e208_kwh": 537.8819506666666,
+          "error_kwh": 4.9174712222221615,
+          "observed_kwh": 532.9644794444445,
+          "relative_error": 0.009226639695290898,
+          "session_count": 78
+        }
+      },
+      {
+        "aggregate_by_evse_distribution": {
+          "absolute_relative_error": {
+            "count": 52,
+            "iqr": 0.01303963538303488,
+            "median": 0.013737959070008032,
+            "p05": 0.0010348850838949254,
+            "p95": 0.026270391573141393
+          },
+          "evse_count": 52,
+          "groups": [
+            {
+              "anonymous_evse_index": 1,
+              "e208_kwh": 658.3331906666667,
+              "median_absolute_percentage_error": 0.026661738510912726,
+              "observed_kwh": 641.716,
+              "relative_error": 0.025894929636578665,
+              "session_count": 44
+            },
+            {
+              "anonymous_evse_index": 2,
+              "e208_kwh": 413.7915831111111,
+              "median_absolute_percentage_error": 0.024155641146726782,
+              "observed_kwh": 404.555,
+              "relative_error": 0.022831464476056624,
+              "session_count": 40
+            },
+            {
+              "anonymous_evse_index": 3,
+              "e208_kwh": 665.81762,
+              "median_absolute_percentage_error": 0.026092826851939244,
+              "observed_kwh": 645.597,
+              "relative_error": 0.03132080849198502,
+              "session_count": 44
+            },
+            {
+              "anonymous_evse_index": 4,
+              "e208_kwh": 435.2492271111111,
+              "median_absolute_percentage_error": 0.02227816726860694,
+              "observed_kwh": 425.262,
+              "relative_error": 0.023484880170603323,
+              "session_count": 41
+            },
+            {
+              "anonymous_evse_index": 5,
+              "e208_kwh": 462.38850088888887,
+              "median_absolute_percentage_error": 0.019527481466712848,
+              "observed_kwh": 453.084,
+              "relative_error": 0.020535929074716536,
+              "session_count": 46
+            },
+            {
+              "anonymous_evse_index": 6,
+              "e208_kwh": 564.4971511111111,
+              "median_absolute_percentage_error": 0.021521794658226776,
+              "observed_kwh": 551.282,
+              "relative_error": 0.023971671687287133,
+              "session_count": 51
+            },
+            {
+              "anonymous_evse_index": 7,
+              "e208_kwh": 441.40304000000003,
+              "median_absolute_percentage_error": 0.0197549064132465,
+              "observed_kwh": 432.028,
+              "relative_error": 0.02170007499513923,
+              "session_count": 40
+            },
+            {
+              "anonymous_evse_index": 8,
+              "e208_kwh": 509.972424,
+              "median_absolute_percentage_error": 0.011231052244297284,
+              "observed_kwh": 505.8662438888889,
+              "relative_error": 0.00811712613900561,
+              "session_count": 67
+            },
+            {
+              "anonymous_evse_index": 9,
+              "e208_kwh": 506.57051466666667,
+              "median_absolute_percentage_error": 0.01357999566335219,
+              "observed_kwh": 499.654,
+              "relative_error": 0.013842608418358847,
+              "session_count": 47
+            },
+            {
+              "anonymous_evse_index": 10,
+              "e208_kwh": 614.0148271111111,
+              "median_absolute_percentage_error": 0.019638266465223625,
+              "observed_kwh": 602.932,
+              "relative_error": 0.01838155399134745,
+              "session_count": 50
+            },
+            {
+              "anonymous_evse_index": 11,
+              "e208_kwh": 676.2119462222222,
+              "median_absolute_percentage_error": 0.01336109829257041,
+              "observed_kwh": 664.604,
+              "relative_error": 0.017465959010511754,
+              "session_count": 33
+            },
+            {
+              "anonymous_evse_index": 12,
+              "e208_kwh": 717.4114884444444,
+              "median_absolute_percentage_error": 0.008427955048093993,
+              "observed_kwh": 714.186,
+              "relative_error": 0.00451631429969841,
+              "session_count": 47
+            },
+            {
+              "anonymous_evse_index": 13,
+              "e208_kwh": 514.2158262222222,
+              "median_absolute_percentage_error": 0.01678123255848895,
+              "observed_kwh": 505.385,
+              "relative_error": 0.01747346324529257,
+              "session_count": 46
+            },
+            {
+              "anonymous_evse_index": 14,
+              "e208_kwh": 482.83326,
+              "median_absolute_percentage_error": 0.023185242657331122,
+              "observed_kwh": 471.072,
+              "relative_error": 0.024967011412268172,
+              "session_count": 34
+            },
+            {
+              "anonymous_evse_index": 15,
+              "e208_kwh": 427.3378142222222,
+              "median_absolute_percentage_error": 0.019867319926686333,
+              "observed_kwh": 418.548,
+              "relative_error": 0.0210007316298781,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 16,
+              "e208_kwh": 274.5636168888889,
+              "median_absolute_percentage_error": 0.007478932934430309,
+              "observed_kwh": 272.266,
+              "relative_error": 0.008438868198338587,
+              "session_count": 29
+            },
+            {
+              "anonymous_evse_index": 17,
+              "e208_kwh": 396.19377199999997,
+              "median_absolute_percentage_error": 0.015511162439775475,
+              "observed_kwh": 390.985,
+              "relative_error": 0.013322178600201934,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 18,
+              "e208_kwh": 459.5438986666667,
+              "median_absolute_percentage_error": 0.01692090080029772,
+              "observed_kwh": 449.65500000000003,
+              "relative_error": 0.021992191050175462,
+              "session_count": 27
+            },
+            {
+              "anonymous_evse_index": 19,
+              "e208_kwh": 300.36325511111113,
+              "median_absolute_percentage_error": 0.014815066649667943,
+              "observed_kwh": 294.787,
+              "relative_error": 0.018916217849196715,
+              "session_count": 19
+            },
+            {
+              "anonymous_evse_index": 20,
+              "e208_kwh": 389.1729515555556,
+              "median_absolute_percentage_error": 0.006952564000602044,
+              "observed_kwh": 389.186,
+              "relative_error": -3.352752782575345e-05,
+              "session_count": 28
+            },
+            {
+              "anonymous_evse_index": 21,
+              "e208_kwh": 429.0586617777778,
+              "median_absolute_percentage_error": 0.009872065264384491,
+              "observed_kwh": 426.351,
+              "relative_error": 0.006350780877206309,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 22,
+              "e208_kwh": 417.5270897777778,
+              "median_absolute_percentage_error": 0.008961261792805817,
+              "observed_kwh": 413.549,
+              "relative_error": 0.009619391602392523,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 23,
+              "e208_kwh": 336.1945542222222,
+              "median_absolute_percentage_error": 0.012683217847656171,
+              "observed_kwh": 331.432,
+              "relative_error": 0.014369627019184044,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 24,
+              "e208_kwh": 436.468136,
+              "median_absolute_percentage_error": 0.011973927726011411,
+              "observed_kwh": 431.2650291666667,
+              "relative_error": 0.012064754806081273,
+              "session_count": 30
+            },
+            {
+              "anonymous_evse_index": 25,
+              "e208_kwh": 471.73128888888886,
+              "median_absolute_percentage_error": 0.007493347095487006,
+              "observed_kwh": 467.696,
+              "relative_error": 0.008628016679400356,
+              "session_count": 34
+            },
+            {
+              "anonymous_evse_index": 26,
+              "e208_kwh": 384.57068,
+              "median_absolute_percentage_error": 0.006500198505169658,
+              "observed_kwh": 382.546,
+              "relative_error": 0.005292644544708321,
+              "session_count": 31
+            },
+            {
+              "anonymous_evse_index": 27,
+              "e208_kwh": 490.608248,
+              "median_absolute_percentage_error": 0.013583686779300688,
+              "observed_kwh": 485.453,
+              "relative_error": 0.010619458526366156,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 28,
+              "e208_kwh": 302.92731733333335,
+              "median_absolute_percentage_error": 0.00471788984556506,
+              "observed_kwh": 304.288,
+              "relative_error": -0.00447169348336662,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 29,
+              "e208_kwh": 549.7609577777778,
+              "median_absolute_percentage_error": 0.02152001929126836,
+              "observed_kwh": 534.471,
+              "relative_error": 0.028607647146014978,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 30,
+              "e208_kwh": 839.5659422222222,
+              "median_absolute_percentage_error": 0.014010147388212537,
+              "observed_kwh": 826.204,
+              "relative_error": 0.016172691275063177,
+              "session_count": 32
+            },
+            {
+              "anonymous_evse_index": 31,
+              "e208_kwh": 292.67952133333335,
+              "median_absolute_percentage_error": 0.0120207818364918,
+              "observed_kwh": 291.584,
+              "relative_error": 0.003757138023119759,
+              "session_count": 27
+            },
+            {
+              "anonymous_evse_index": 32,
+              "e208_kwh": 321.60696533333333,
+              "median_absolute_percentage_error": 0.016958560014309322,
+              "observed_kwh": 315.621,
+              "relative_error": 0.01896567507654229,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 33,
+              "e208_kwh": 368.4204622222222,
+              "median_absolute_percentage_error": 0.01064992407130916,
+              "observed_kwh": 363.851,
+              "relative_error": 0.012558608392507449,
+              "session_count": 33
+            },
+            {
+              "anonymous_evse_index": 34,
+              "e208_kwh": 496.54887244444444,
+              "median_absolute_percentage_error": 0.02832837591581923,
+              "observed_kwh": 483.622,
+              "relative_error": 0.026729289495606955,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 35,
+              "e208_kwh": 227.254196,
+              "median_absolute_percentage_error": 0.02954022119476199,
+              "observed_kwh": 221.878,
+              "relative_error": 0.02423041491269987,
+              "session_count": 19
+            },
+            {
+              "anonymous_evse_index": 36,
+              "e208_kwh": 375.0835457777778,
+              "median_absolute_percentage_error": 0.0176210045662099,
+              "observed_kwh": 367.654,
+              "relative_error": 0.02020798298883672,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 37,
+              "e208_kwh": 335.25197333333335,
+              "median_absolute_percentage_error": 0.008405195418585427,
+              "observed_kwh": 335.052,
+              "relative_error": 0.0005968426791463189,
+              "session_count": 31
+            },
+            {
+              "anonymous_evse_index": 38,
+              "e208_kwh": 413.96387644444445,
+              "median_absolute_percentage_error": 0.015158308300082506,
+              "observed_kwh": 407.942,
+              "relative_error": 0.014761599552006031,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 39,
+              "e208_kwh": 203.31207866666668,
+              "median_absolute_percentage_error": 0.019205591037032996,
+              "observed_kwh": 199.74699999999999,
+              "relative_error": 0.017847971016669555,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 40,
+              "e208_kwh": 480.6978164444444,
+              "median_absolute_percentage_error": 0.007312041260800985,
+              "observed_kwh": 480.029,
+              "relative_error": 0.0013932834150528757,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 41,
+              "e208_kwh": 300.6821942222222,
+              "median_absolute_percentage_error": 0.009743879972292233,
+              "observed_kwh": 298.42900000000003,
+              "relative_error": 0.007550185210626954,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 42,
+              "e208_kwh": 478.79321244444446,
+              "median_absolute_percentage_error": 0.01483747963367253,
+              "observed_kwh": 472.625,
+              "relative_error": 0.013050965235534439,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 43,
+              "e208_kwh": 430.68641777777776,
+              "median_absolute_percentage_error": 0.004568746774212769,
+              "observed_kwh": 431.667,
+              "relative_error": -0.0022716172934743924,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 44,
+              "e208_kwh": 347.29795244444443,
+              "median_absolute_percentage_error": 0.007306035907583544,
+              "observed_kwh": 347.348,
+              "relative_error": -0.00014408476673416715,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 45,
+              "e208_kwh": 342.47787600000004,
+              "median_absolute_percentage_error": 0.011971745759365708,
+              "observed_kwh": 339.69907027777776,
+              "relative_error": 0.008180198197039504,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 46,
+              "e208_kwh": 382.2197888888889,
+              "median_absolute_percentage_error": 0.016160705087472596,
+              "observed_kwh": 376.72499999999997,
+              "relative_error": 0.014585676259576439,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 47,
+              "e208_kwh": 358.78172488888885,
+              "median_absolute_percentage_error": 0.010663979578127099,
+              "observed_kwh": 356.632,
+              "relative_error": 0.006027851928286976,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 48,
+              "e208_kwh": 191.32535066666668,
+              "median_absolute_percentage_error": 0.016902449566279835,
+              "observed_kwh": 189.394,
+              "relative_error": 0.010197528256790996,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 49,
+              "e208_kwh": 530.7622782222222,
+              "median_absolute_percentage_error": 0.010486536356041264,
+              "observed_kwh": 527.83,
+              "relative_error": 0.005555345892090597,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 50,
+              "e208_kwh": 356.3133946666667,
+              "median_absolute_percentage_error": 0.010511466036914966,
+              "observed_kwh": 351.521,
+              "relative_error": 0.013633309721657216,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 51,
+              "e208_kwh": 422.677736,
+              "median_absolute_percentage_error": 0.01386891046567627,
+              "observed_kwh": 416.737,
+              "relative_error": 0.014255360095215826,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 52,
+              "e208_kwh": 186.90654088888888,
+              "median_absolute_percentage_error": 0.003985185185185331,
+              "observed_kwh": 186.29,
+              "relative_error": 0.003309575870357464,
+              "session_count": 23
+            }
+          ],
+          "relative_error": {
+            "count": 52,
+            "iqr": 0.01303963538303488,
+            "median": 0.013737959070008032,
+            "p05": -8.327828533453958e-05,
+            "p95": 0.026270391573141393
+          },
+          "session_count": {
+            "count": 52,
+            "iqr": 11.0,
+            "median": 26.0,
+            "p05": 20.0,
+            "p95": 48.34999999999999
+          }
+        },
+        "aggregate_energy": {
+          "absolute_relative_error": 0.014221346327659395,
+          "e208_kwh": 22412.042559111112,
+          "error_kwh": 314.2602157777801,
+          "observed_kwh": 22097.782343333332,
+          "relative_error": 0.014221346327659395,
+          "session_count": 1580
+        },
+        "audit_coverage": 0.9677811550151976,
+        "coverage_qualified_session_count": 1592,
+        "e208_error": {
+          "count": 1580,
+          "mae_kwh": 0.24113205527426157,
+          "median_absolute_percentage_error": 0.014279759317109722,
+          "p90_absolute_percentage_error": 0.029910326161509123
+        },
+        "effective_voltage_v": {
+          "count": 1580,
+          "iqr": 3.720276673733565,
+          "median": 205.34115647645723,
+          "p05": 201.40892861526243,
+          "p95": 210.55924755001732
+        },
+        "eligible_session_count": 1645,
+        "input_session_count": 1645,
+        "retained_rate": 0.9604863221884499,
+        "retained_session_count": 1580,
+        "thresholds": {
+          "minimum_current_coverage": 0.95,
+          "minimum_kwh_delivered": 0.1
+        },
+        "weekday_aggregate_energy": {
+          "absolute_relative_error": 0.014344788187316887,
+          "e208_kwh": 21874.160608444443,
+          "error_kwh": 309.3427445555535,
+          "observed_kwh": 21564.81786388889,
+          "relative_error": 0.014344788187316887,
+          "session_count": 1502
+        },
+        "weekend_aggregate_energy": {
+          "absolute_relative_error": 0.009226639695290898,
+          "e208_kwh": 537.8819506666666,
+          "error_kwh": 4.9174712222221615,
+          "observed_kwh": 532.9644794444445,
+          "relative_error": 0.009226639695290898,
+          "session_count": 78
+        }
+      },
+      {
+        "aggregate_by_evse_distribution": {
+          "absolute_relative_error": {
+            "count": 52,
+            "iqr": 0.010128245686627612,
+            "median": 0.010459829183440576,
+            "p05": 0.0009300684605404676,
+            "p95": 0.0234547297081494
+          },
+          "evse_count": 52,
+          "groups": [
+            {
+              "anonymous_evse_index": 1,
+              "e208_kwh": 752.4554497777777,
+              "median_absolute_percentage_error": 0.027357205748954776,
+              "observed_kwh": 744.9110000000001,
+              "relative_error": 0.010127988145936476,
+              "session_count": 48
+            },
+            {
+              "anonymous_evse_index": 2,
+              "e208_kwh": 432.63586888888887,
+              "median_absolute_percentage_error": 0.02431734305693667,
+              "observed_kwh": 425.865,
+              "relative_error": 0.015899096870813183,
+              "session_count": 41
+            },
+            {
+              "anonymous_evse_index": 3,
+              "e208_kwh": 671.8081355555555,
+              "median_absolute_percentage_error": 0.0265011508273613,
+              "observed_kwh": 652.653,
+              "relative_error": 0.029349647600724258,
+              "session_count": 45
+            },
+            {
+              "anonymous_evse_index": 4,
+              "e208_kwh": 446.13353777777775,
+              "median_absolute_percentage_error": 0.022813951626663886,
+              "observed_kwh": 439.049,
+              "relative_error": 0.016136098198100367,
+              "session_count": 42
+            },
+            {
+              "anonymous_evse_index": 5,
+              "e208_kwh": 481.888576,
+              "median_absolute_percentage_error": 0.01960866548721696,
+              "observed_kwh": 473.214,
+              "relative_error": 0.018331190539586744,
+              "session_count": 47
+            },
+            {
+              "anonymous_evse_index": 6,
+              "e208_kwh": 576.9531271111111,
+              "median_absolute_percentage_error": 0.021823105168020232,
+              "observed_kwh": 564.796,
+              "relative_error": 0.021524810924849137,
+              "session_count": 52
+            },
+            {
+              "anonymous_evse_index": 7,
+              "e208_kwh": 445.8731564444445,
+              "median_absolute_percentage_error": 0.019963525652619586,
+              "observed_kwh": 437.38,
+              "relative_error": 0.01941825516586145,
+              "session_count": 41
+            },
+            {
+              "anonymous_evse_index": 8,
+              "e208_kwh": 519.9904146666667,
+              "median_absolute_percentage_error": 0.011241399459989601,
+              "observed_kwh": 517.268243888889,
+              "relative_error": 0.005262590174320536,
+              "session_count": 68
+            },
+            {
+              "anonymous_evse_index": 9,
+              "e208_kwh": 532.1404053333333,
+              "median_absolute_percentage_error": 0.015636917116369078,
+              "observed_kwh": 527.571,
+              "relative_error": 0.008661214004054986,
+              "session_count": 49
+            },
+            {
+              "anonymous_evse_index": 10,
+              "e208_kwh": 623.9738728888889,
+              "median_absolute_percentage_error": 0.019671729531652506,
+              "observed_kwh": 615.417,
+              "relative_error": 0.013904186736617362,
+              "session_count": 51
+            },
+            {
+              "anonymous_evse_index": 11,
+              "e208_kwh": 720.074784,
+              "median_absolute_percentage_error": 0.015335769665865636,
+              "observed_kwh": 709.479,
+              "relative_error": 0.014934598487058786,
+              "session_count": 34
+            },
+            {
+              "anonymous_evse_index": 12,
+              "e208_kwh": 731.4401986666667,
+              "median_absolute_percentage_error": 0.00857197019029726,
+              "observed_kwh": 729.33,
+              "relative_error": 0.0028933386350028564,
+              "session_count": 48
+            },
+            {
+              "anonymous_evse_index": 13,
+              "e208_kwh": 527.721272,
+              "median_absolute_percentage_error": 0.01681419753086426,
+              "observed_kwh": 520.288,
+              "relative_error": 0.014286841134141068,
+              "session_count": 47
+            },
+            {
+              "anonymous_evse_index": 14,
+              "e208_kwh": 490.4637168888889,
+              "median_absolute_percentage_error": 0.02353230485232076,
+              "observed_kwh": 479.443,
+              "relative_error": 0.022986500770454256,
+              "session_count": 35
+            },
+            {
+              "anonymous_evse_index": 15,
+              "e208_kwh": 427.3378142222222,
+              "median_absolute_percentage_error": 0.019867319926686333,
+              "observed_kwh": 418.548,
+              "relative_error": 0.0210007316298781,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 16,
+              "e208_kwh": 281.819408,
+              "median_absolute_percentage_error": 0.007645299620290298,
+              "observed_kwh": 280.585,
+              "relative_error": 0.004399408378922717,
+              "session_count": 30
+            },
+            {
+              "anonymous_evse_index": 17,
+              "e208_kwh": 396.19377199999997,
+              "median_absolute_percentage_error": 0.015511162439775475,
+              "observed_kwh": 390.985,
+              "relative_error": 0.013322178600201934,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 18,
+              "e208_kwh": 482.1826128888889,
+              "median_absolute_percentage_error": 0.017458717590884684,
+              "observed_kwh": 472.867,
+              "relative_error": 0.019700281239521666,
+              "session_count": 28
+            },
+            {
+              "anonymous_evse_index": 19,
+              "e208_kwh": 327.89944488888887,
+              "median_absolute_percentage_error": 0.016957409079182507,
+              "observed_kwh": 325.52,
+              "relative_error": 0.007309673411430584,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 20,
+              "e208_kwh": 389.1729515555556,
+              "median_absolute_percentage_error": 0.006952564000602044,
+              "observed_kwh": 389.186,
+              "relative_error": -3.352752782575345e-05,
+              "session_count": 28
+            },
+            {
+              "anonymous_evse_index": 21,
+              "e208_kwh": 429.0586617777778,
+              "median_absolute_percentage_error": 0.009872065264384491,
+              "observed_kwh": 426.351,
+              "relative_error": 0.006350780877206309,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 22,
+              "e208_kwh": 437.16275777777776,
+              "median_absolute_percentage_error": 0.009047180093230888,
+              "observed_kwh": 434.577,
+              "relative_error": 0.0059500566706884115,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 23,
+              "e208_kwh": 336.1945542222222,
+              "median_absolute_percentage_error": 0.012683217847656171,
+              "observed_kwh": 331.432,
+              "relative_error": 0.014369627019184044,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 24,
+              "e208_kwh": 449.78783200000004,
+              "median_absolute_percentage_error": 0.01223682720634108,
+              "observed_kwh": 444.3540291666667,
+              "relative_error": 0.01222854408122235,
+              "session_count": 31
+            },
+            {
+              "anonymous_evse_index": 25,
+              "e208_kwh": 500.1661831111111,
+              "median_absolute_percentage_error": 0.008266950411717964,
+              "observed_kwh": 497.723,
+              "relative_error": 0.00490872053554099,
+              "session_count": 35
+            },
+            {
+              "anonymous_evse_index": 26,
+              "e208_kwh": 391.33886133333334,
+              "median_absolute_percentage_error": 0.006669630611227577,
+              "observed_kwh": 390.485,
+              "relative_error": 0.002186668715400918,
+              "session_count": 32
+            },
+            {
+              "anonymous_evse_index": 27,
+              "e208_kwh": 490.608248,
+              "median_absolute_percentage_error": 0.013583686779300688,
+              "observed_kwh": 485.453,
+              "relative_error": 0.010619458526366156,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 28,
+              "e208_kwh": 302.92731733333335,
+              "median_absolute_percentage_error": 0.00471788984556506,
+              "observed_kwh": 304.288,
+              "relative_error": -0.00447169348336662,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 29,
+              "e208_kwh": 549.7609577777778,
+              "median_absolute_percentage_error": 0.02152001929126836,
+              "observed_kwh": 534.471,
+              "relative_error": 0.028607647146014978,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 30,
+              "e208_kwh": 875.1666386666667,
+              "median_absolute_percentage_error": 0.014065549336420052,
+              "observed_kwh": 864.271,
+              "relative_error": 0.012606738704256815,
+              "session_count": 33
+            },
+            {
+              "anonymous_evse_index": 31,
+              "e208_kwh": 292.67952133333335,
+              "median_absolute_percentage_error": 0.0120207818364918,
+              "observed_kwh": 291.584,
+              "relative_error": 0.003757138023119759,
+              "session_count": 27
+            },
+            {
+              "anonymous_evse_index": 32,
+              "e208_kwh": 329.1981622222222,
+              "median_absolute_percentage_error": 0.017516106144458508,
+              "observed_kwh": 324.35699999999997,
+              "relative_error": 0.014925413116480416,
+              "session_count": 27
+            },
+            {
+              "anonymous_evse_index": 33,
+              "e208_kwh": 368.4204622222222,
+              "median_absolute_percentage_error": 0.01064992407130916,
+              "observed_kwh": 363.851,
+              "relative_error": 0.012558608392507449,
+              "session_count": 33
+            },
+            {
+              "anonymous_evse_index": 34,
+              "e208_kwh": 502.9191208888889,
+              "median_absolute_percentage_error": 0.028722192812187623,
+              "observed_kwh": 491.11899999999997,
+              "relative_error": 0.02402700952088792,
+              "session_count": 27
+            },
+            {
+              "anonymous_evse_index": 35,
+              "e208_kwh": 282.4425586666667,
+              "median_absolute_percentage_error": 0.02954022119476199,
+              "observed_kwh": 279.214,
+              "relative_error": 0.011563025731756596,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 36,
+              "e208_kwh": 382.5188062222222,
+              "median_absolute_percentage_error": 0.016697259543962936,
+              "observed_kwh": 375.121,
+              "relative_error": 0.019721119911234625,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 37,
+              "e208_kwh": 382.08176933333334,
+              "median_absolute_percentage_error": 0.008839884997888669,
+              "observed_kwh": 381.373,
+              "relative_error": 0.0018584675195500219,
+              "session_count": 32
+            },
+            {
+              "anonymous_evse_index": 38,
+              "e208_kwh": 458.40965155555557,
+              "median_absolute_percentage_error": 0.016174406314677876,
+              "observed_kwh": 457.189,
+              "relative_error": 0.002669905784162673,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 39,
+              "e208_kwh": 208.62497066666666,
+              "median_absolute_percentage_error": 0.01935764457546309,
+              "observed_kwh": 206.498,
+              "relative_error": 0.010300199840514994,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 40,
+              "e208_kwh": 480.6978164444444,
+              "median_absolute_percentage_error": 0.007312041260800985,
+              "observed_kwh": 480.029,
+              "relative_error": 0.0013932834150528757,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 41,
+              "e208_kwh": 300.6821942222222,
+              "median_absolute_percentage_error": 0.009743879972292233,
+              "observed_kwh": 298.42900000000003,
+              "relative_error": 0.007550185210626954,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 42,
+              "e208_kwh": 478.79321244444446,
+              "median_absolute_percentage_error": 0.01483747963367253,
+              "observed_kwh": 472.625,
+              "relative_error": 0.013050965235534439,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 43,
+              "e208_kwh": 430.68641777777776,
+              "median_absolute_percentage_error": 0.004568746774212769,
+              "observed_kwh": 431.667,
+              "relative_error": -0.0022716172934743924,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 44,
+              "e208_kwh": 347.29795244444443,
+              "median_absolute_percentage_error": 0.007306035907583544,
+              "observed_kwh": 347.348,
+              "relative_error": -0.00014408476673416715,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 45,
+              "e208_kwh": 342.47787600000004,
+              "median_absolute_percentage_error": 0.011971745759365708,
+              "observed_kwh": 339.69907027777776,
+              "relative_error": 0.008180198197039504,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 46,
+              "e208_kwh": 382.2197888888889,
+              "median_absolute_percentage_error": 0.016160705087472596,
+              "observed_kwh": 376.72499999999997,
+              "relative_error": 0.014585676259576439,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 47,
+              "e208_kwh": 382.4034297777778,
+              "median_absolute_percentage_error": 0.012425463847313953,
+              "observed_kwh": 386.152,
+              "relative_error": -0.009707499177065542,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 48,
+              "e208_kwh": 191.32535066666668,
+              "median_absolute_percentage_error": 0.016902449566279835,
+              "observed_kwh": 189.394,
+              "relative_error": 0.010197528256790996,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 49,
+              "e208_kwh": 530.7622782222222,
+              "median_absolute_percentage_error": 0.010486536356041264,
+              "observed_kwh": 527.83,
+              "relative_error": 0.005555345892090597,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 50,
+              "e208_kwh": 396.1381088888889,
+              "median_absolute_percentage_error": 0.015305444421047825,
+              "observed_kwh": 395.99399999999997,
+              "relative_error": 0.000363916849469746,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 51,
+              "e208_kwh": 456.08304444444445,
+              "median_absolute_percentage_error": 0.014543522885906063,
+              "observed_kwh": 450.965,
+              "relative_error": 0.011349094595909836,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 52,
+              "e208_kwh": 186.90654088888888,
+              "median_absolute_percentage_error": 0.003985185185185331,
+              "observed_kwh": 186.29,
+              "relative_error": 0.003309575870357464,
+              "session_count": 23
+            }
+          ],
+          "relative_error": {
+            "count": 52,
+            "iqr": 0.010688868669153032,
+            "median": 0.010459829183440576,
+            "p05": -0.001101474403767268,
+            "p95": 0.0234547297081494
+          },
+          "session_count": {
+            "count": 52,
+            "iqr": 11.0,
+            "median": 26.5,
+            "p05": 21.0,
+            "p95": 49.89999999999999
+          }
+        },
+        "aggregate_energy": {
+          "absolute_relative_error": 0.011052133409617741,
+          "e208_kwh": 23134.09956577778,
+          "error_kwh": 252.8862224444456,
+          "observed_kwh": 22881.213343333333,
+          "relative_error": 0.011052133409617741,
+          "session_count": 1624
+        },
+        "audit_coverage": 0.998176291793313,
+        "coverage_qualified_session_count": 1642,
+        "e208_error": {
+          "count": 1624,
+          "mae_kwh": 0.2738507759989053,
+          "median_absolute_percentage_error": 0.014519721121978916,
+          "p90_absolute_percentage_error": 0.031085385108259436
+        },
+        "effective_voltage_v": {
+          "count": 1624,
+          "iqr": 3.8170629353346612,
+          "median": 205.44997098502716,
+          "p05": 201.42251937402838,
+          "p95": 212.22973668025483
+        },
+        "eligible_session_count": 1645,
+        "input_session_count": 1645,
+        "retained_rate": 0.9872340425531915,
+        "retained_session_count": 1624,
+        "thresholds": {
+          "minimum_current_coverage": 0.8,
+          "minimum_kwh_delivered": 0.5
+        },
+        "weekday_aggregate_energy": {
+          "absolute_relative_error": 0.011095668064753813,
+          "e208_kwh": 22596.217615111113,
+          "error_kwh": 247.96875122222264,
+          "observed_kwh": 22348.24886388889,
+          "relative_error": 0.011095668064753813,
+          "session_count": 1546
+        },
+        "weekend_aggregate_energy": {
+          "absolute_relative_error": 0.009226639695290898,
+          "e208_kwh": 537.8819506666666,
+          "error_kwh": 4.9174712222221615,
+          "observed_kwh": 532.9644794444445,
+          "relative_error": 0.009226639695290898,
+          "session_count": 78
+        }
+      },
+      {
+        "aggregate_by_evse_distribution": {
+          "absolute_relative_error": {
+            "count": 52,
+            "iqr": 0.01303963538303488,
+            "median": 0.013737959070008032,
+            "p05": 0.0010348850838949254,
+            "p95": 0.026270391573141393
+          },
+          "evse_count": 52,
+          "groups": [
+            {
+              "anonymous_evse_index": 1,
+              "e208_kwh": 658.3331906666667,
+              "median_absolute_percentage_error": 0.026661738510912726,
+              "observed_kwh": 641.716,
+              "relative_error": 0.025894929636578665,
+              "session_count": 44
+            },
+            {
+              "anonymous_evse_index": 2,
+              "e208_kwh": 413.7915831111111,
+              "median_absolute_percentage_error": 0.024155641146726782,
+              "observed_kwh": 404.555,
+              "relative_error": 0.022831464476056624,
+              "session_count": 40
+            },
+            {
+              "anonymous_evse_index": 3,
+              "e208_kwh": 665.81762,
+              "median_absolute_percentage_error": 0.026092826851939244,
+              "observed_kwh": 645.597,
+              "relative_error": 0.03132080849198502,
+              "session_count": 44
+            },
+            {
+              "anonymous_evse_index": 4,
+              "e208_kwh": 435.2492271111111,
+              "median_absolute_percentage_error": 0.02227816726860694,
+              "observed_kwh": 425.262,
+              "relative_error": 0.023484880170603323,
+              "session_count": 41
+            },
+            {
+              "anonymous_evse_index": 5,
+              "e208_kwh": 462.38850088888887,
+              "median_absolute_percentage_error": 0.019527481466712848,
+              "observed_kwh": 453.084,
+              "relative_error": 0.020535929074716536,
+              "session_count": 46
+            },
+            {
+              "anonymous_evse_index": 6,
+              "e208_kwh": 564.4971511111111,
+              "median_absolute_percentage_error": 0.021521794658226776,
+              "observed_kwh": 551.282,
+              "relative_error": 0.023971671687287133,
+              "session_count": 51
+            },
+            {
+              "anonymous_evse_index": 7,
+              "e208_kwh": 441.40304000000003,
+              "median_absolute_percentage_error": 0.0197549064132465,
+              "observed_kwh": 432.028,
+              "relative_error": 0.02170007499513923,
+              "session_count": 40
+            },
+            {
+              "anonymous_evse_index": 8,
+              "e208_kwh": 509.972424,
+              "median_absolute_percentage_error": 0.011231052244297284,
+              "observed_kwh": 505.8662438888889,
+              "relative_error": 0.00811712613900561,
+              "session_count": 67
+            },
+            {
+              "anonymous_evse_index": 9,
+              "e208_kwh": 506.57051466666667,
+              "median_absolute_percentage_error": 0.01357999566335219,
+              "observed_kwh": 499.654,
+              "relative_error": 0.013842608418358847,
+              "session_count": 47
+            },
+            {
+              "anonymous_evse_index": 10,
+              "e208_kwh": 614.0148271111111,
+              "median_absolute_percentage_error": 0.019638266465223625,
+              "observed_kwh": 602.932,
+              "relative_error": 0.01838155399134745,
+              "session_count": 50
+            },
+            {
+              "anonymous_evse_index": 11,
+              "e208_kwh": 676.2119462222222,
+              "median_absolute_percentage_error": 0.01336109829257041,
+              "observed_kwh": 664.604,
+              "relative_error": 0.017465959010511754,
+              "session_count": 33
+            },
+            {
+              "anonymous_evse_index": 12,
+              "e208_kwh": 717.4114884444444,
+              "median_absolute_percentage_error": 0.008427955048093993,
+              "observed_kwh": 714.186,
+              "relative_error": 0.00451631429969841,
+              "session_count": 47
+            },
+            {
+              "anonymous_evse_index": 13,
+              "e208_kwh": 514.2158262222222,
+              "median_absolute_percentage_error": 0.01678123255848895,
+              "observed_kwh": 505.385,
+              "relative_error": 0.01747346324529257,
+              "session_count": 46
+            },
+            {
+              "anonymous_evse_index": 14,
+              "e208_kwh": 482.83326,
+              "median_absolute_percentage_error": 0.023185242657331122,
+              "observed_kwh": 471.072,
+              "relative_error": 0.024967011412268172,
+              "session_count": 34
+            },
+            {
+              "anonymous_evse_index": 15,
+              "e208_kwh": 427.3378142222222,
+              "median_absolute_percentage_error": 0.019867319926686333,
+              "observed_kwh": 418.548,
+              "relative_error": 0.0210007316298781,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 16,
+              "e208_kwh": 274.5636168888889,
+              "median_absolute_percentage_error": 0.007478932934430309,
+              "observed_kwh": 272.266,
+              "relative_error": 0.008438868198338587,
+              "session_count": 29
+            },
+            {
+              "anonymous_evse_index": 17,
+              "e208_kwh": 396.19377199999997,
+              "median_absolute_percentage_error": 0.015511162439775475,
+              "observed_kwh": 390.985,
+              "relative_error": 0.013322178600201934,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 18,
+              "e208_kwh": 459.5438986666667,
+              "median_absolute_percentage_error": 0.01692090080029772,
+              "observed_kwh": 449.65500000000003,
+              "relative_error": 0.021992191050175462,
+              "session_count": 27
+            },
+            {
+              "anonymous_evse_index": 19,
+              "e208_kwh": 300.36325511111113,
+              "median_absolute_percentage_error": 0.014815066649667943,
+              "observed_kwh": 294.787,
+              "relative_error": 0.018916217849196715,
+              "session_count": 19
+            },
+            {
+              "anonymous_evse_index": 20,
+              "e208_kwh": 389.1729515555556,
+              "median_absolute_percentage_error": 0.006952564000602044,
+              "observed_kwh": 389.186,
+              "relative_error": -3.352752782575345e-05,
+              "session_count": 28
+            },
+            {
+              "anonymous_evse_index": 21,
+              "e208_kwh": 429.0586617777778,
+              "median_absolute_percentage_error": 0.009872065264384491,
+              "observed_kwh": 426.351,
+              "relative_error": 0.006350780877206309,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 22,
+              "e208_kwh": 417.5270897777778,
+              "median_absolute_percentage_error": 0.008961261792805817,
+              "observed_kwh": 413.549,
+              "relative_error": 0.009619391602392523,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 23,
+              "e208_kwh": 336.1945542222222,
+              "median_absolute_percentage_error": 0.012683217847656171,
+              "observed_kwh": 331.432,
+              "relative_error": 0.014369627019184044,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 24,
+              "e208_kwh": 436.468136,
+              "median_absolute_percentage_error": 0.011973927726011411,
+              "observed_kwh": 431.2650291666667,
+              "relative_error": 0.012064754806081273,
+              "session_count": 30
+            },
+            {
+              "anonymous_evse_index": 25,
+              "e208_kwh": 471.73128888888886,
+              "median_absolute_percentage_error": 0.007493347095487006,
+              "observed_kwh": 467.696,
+              "relative_error": 0.008628016679400356,
+              "session_count": 34
+            },
+            {
+              "anonymous_evse_index": 26,
+              "e208_kwh": 384.57068,
+              "median_absolute_percentage_error": 0.006500198505169658,
+              "observed_kwh": 382.546,
+              "relative_error": 0.005292644544708321,
+              "session_count": 31
+            },
+            {
+              "anonymous_evse_index": 27,
+              "e208_kwh": 490.608248,
+              "median_absolute_percentage_error": 0.013583686779300688,
+              "observed_kwh": 485.453,
+              "relative_error": 0.010619458526366156,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 28,
+              "e208_kwh": 302.92731733333335,
+              "median_absolute_percentage_error": 0.00471788984556506,
+              "observed_kwh": 304.288,
+              "relative_error": -0.00447169348336662,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 29,
+              "e208_kwh": 549.7609577777778,
+              "median_absolute_percentage_error": 0.02152001929126836,
+              "observed_kwh": 534.471,
+              "relative_error": 0.028607647146014978,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 30,
+              "e208_kwh": 839.5659422222222,
+              "median_absolute_percentage_error": 0.014010147388212537,
+              "observed_kwh": 826.204,
+              "relative_error": 0.016172691275063177,
+              "session_count": 32
+            },
+            {
+              "anonymous_evse_index": 31,
+              "e208_kwh": 292.67952133333335,
+              "median_absolute_percentage_error": 0.0120207818364918,
+              "observed_kwh": 291.584,
+              "relative_error": 0.003757138023119759,
+              "session_count": 27
+            },
+            {
+              "anonymous_evse_index": 32,
+              "e208_kwh": 321.60696533333333,
+              "median_absolute_percentage_error": 0.016958560014309322,
+              "observed_kwh": 315.621,
+              "relative_error": 0.01896567507654229,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 33,
+              "e208_kwh": 368.4204622222222,
+              "median_absolute_percentage_error": 0.01064992407130916,
+              "observed_kwh": 363.851,
+              "relative_error": 0.012558608392507449,
+              "session_count": 33
+            },
+            {
+              "anonymous_evse_index": 34,
+              "e208_kwh": 496.54887244444444,
+              "median_absolute_percentage_error": 0.02832837591581923,
+              "observed_kwh": 483.622,
+              "relative_error": 0.026729289495606955,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 35,
+              "e208_kwh": 227.254196,
+              "median_absolute_percentage_error": 0.02954022119476199,
+              "observed_kwh": 221.878,
+              "relative_error": 0.02423041491269987,
+              "session_count": 19
+            },
+            {
+              "anonymous_evse_index": 36,
+              "e208_kwh": 375.0835457777778,
+              "median_absolute_percentage_error": 0.0176210045662099,
+              "observed_kwh": 367.654,
+              "relative_error": 0.02020798298883672,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 37,
+              "e208_kwh": 335.25197333333335,
+              "median_absolute_percentage_error": 0.008405195418585427,
+              "observed_kwh": 335.052,
+              "relative_error": 0.0005968426791463189,
+              "session_count": 31
+            },
+            {
+              "anonymous_evse_index": 38,
+              "e208_kwh": 413.96387644444445,
+              "median_absolute_percentage_error": 0.015158308300082506,
+              "observed_kwh": 407.942,
+              "relative_error": 0.014761599552006031,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 39,
+              "e208_kwh": 203.31207866666668,
+              "median_absolute_percentage_error": 0.019205591037032996,
+              "observed_kwh": 199.74699999999999,
+              "relative_error": 0.017847971016669555,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 40,
+              "e208_kwh": 480.6978164444444,
+              "median_absolute_percentage_error": 0.007312041260800985,
+              "observed_kwh": 480.029,
+              "relative_error": 0.0013932834150528757,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 41,
+              "e208_kwh": 300.6821942222222,
+              "median_absolute_percentage_error": 0.009743879972292233,
+              "observed_kwh": 298.42900000000003,
+              "relative_error": 0.007550185210626954,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 42,
+              "e208_kwh": 478.79321244444446,
+              "median_absolute_percentage_error": 0.01483747963367253,
+              "observed_kwh": 472.625,
+              "relative_error": 0.013050965235534439,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 43,
+              "e208_kwh": 430.68641777777776,
+              "median_absolute_percentage_error": 0.004568746774212769,
+              "observed_kwh": 431.667,
+              "relative_error": -0.0022716172934743924,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 44,
+              "e208_kwh": 347.29795244444443,
+              "median_absolute_percentage_error": 0.007306035907583544,
+              "observed_kwh": 347.348,
+              "relative_error": -0.00014408476673416715,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 45,
+              "e208_kwh": 342.47787600000004,
+              "median_absolute_percentage_error": 0.011971745759365708,
+              "observed_kwh": 339.69907027777776,
+              "relative_error": 0.008180198197039504,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 46,
+              "e208_kwh": 382.2197888888889,
+              "median_absolute_percentage_error": 0.016160705087472596,
+              "observed_kwh": 376.72499999999997,
+              "relative_error": 0.014585676259576439,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 47,
+              "e208_kwh": 358.78172488888885,
+              "median_absolute_percentage_error": 0.010663979578127099,
+              "observed_kwh": 356.632,
+              "relative_error": 0.006027851928286976,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 48,
+              "e208_kwh": 191.32535066666668,
+              "median_absolute_percentage_error": 0.016902449566279835,
+              "observed_kwh": 189.394,
+              "relative_error": 0.010197528256790996,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 49,
+              "e208_kwh": 530.7622782222222,
+              "median_absolute_percentage_error": 0.010486536356041264,
+              "observed_kwh": 527.83,
+              "relative_error": 0.005555345892090597,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 50,
+              "e208_kwh": 356.3133946666667,
+              "median_absolute_percentage_error": 0.010511466036914966,
+              "observed_kwh": 351.521,
+              "relative_error": 0.013633309721657216,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 51,
+              "e208_kwh": 422.677736,
+              "median_absolute_percentage_error": 0.01386891046567627,
+              "observed_kwh": 416.737,
+              "relative_error": 0.014255360095215826,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 52,
+              "e208_kwh": 186.90654088888888,
+              "median_absolute_percentage_error": 0.003985185185185331,
+              "observed_kwh": 186.29,
+              "relative_error": 0.003309575870357464,
+              "session_count": 23
+            }
+          ],
+          "relative_error": {
+            "count": 52,
+            "iqr": 0.01303963538303488,
+            "median": 0.013737959070008032,
+            "p05": -8.327828533453958e-05,
+            "p95": 0.026270391573141393
+          },
+          "session_count": {
+            "count": 52,
+            "iqr": 11.0,
+            "median": 26.0,
+            "p05": 20.0,
+            "p95": 48.34999999999999
+          }
+        },
+        "aggregate_energy": {
+          "absolute_relative_error": 0.014221346327659395,
+          "e208_kwh": 22412.042559111112,
+          "error_kwh": 314.2602157777801,
+          "observed_kwh": 22097.782343333332,
+          "relative_error": 0.014221346327659395,
+          "session_count": 1580
+        },
+        "audit_coverage": 0.9677811550151976,
+        "coverage_qualified_session_count": 1592,
+        "e208_error": {
+          "count": 1580,
+          "mae_kwh": 0.24113205527426157,
+          "median_absolute_percentage_error": 0.014279759317109722,
+          "p90_absolute_percentage_error": 0.029910326161509123
+        },
+        "effective_voltage_v": {
+          "count": 1580,
+          "iqr": 3.720276673733565,
+          "median": 205.34115647645723,
+          "p05": 201.40892861526243,
+          "p95": 210.55924755001732
+        },
+        "eligible_session_count": 1645,
+        "input_session_count": 1645,
+        "retained_rate": 0.9604863221884499,
+        "retained_session_count": 1580,
+        "thresholds": {
+          "minimum_current_coverage": 0.95,
+          "minimum_kwh_delivered": 0.5
+        },
+        "weekday_aggregate_energy": {
+          "absolute_relative_error": 0.014344788187316887,
+          "e208_kwh": 21874.160608444443,
+          "error_kwh": 309.3427445555535,
+          "observed_kwh": 21564.81786388889,
+          "relative_error": 0.014344788187316887,
+          "session_count": 1502
+        },
+        "weekend_aggregate_energy": {
+          "absolute_relative_error": 0.009226639695290898,
+          "e208_kwh": 537.8819506666666,
+          "error_kwh": 4.9174712222221615,
+          "observed_kwh": 532.9644794444445,
+          "relative_error": 0.009226639695290898,
+          "session_count": 78
+        }
+      },
+      {
+        "aggregate_by_evse_distribution": {
+          "absolute_relative_error": {
+            "count": 52,
+            "iqr": 0.010122656180011121,
+            "median": 0.010514672817703196,
+            "p05": 0.000955700495636224,
+            "p95": 0.02353116234258634
+          },
+          "evse_count": 52,
+          "groups": [
+            {
+              "anonymous_evse_index": 1,
+              "e208_kwh": 749.8901395555556,
+              "median_absolute_percentage_error": 0.028008408039904197,
+              "observed_kwh": 742.35,
+              "relative_error": 0.010157122052341327,
+              "session_count": 45
+            },
+            {
+              "anonymous_evse_index": 2,
+              "e208_kwh": 431.11078977777777,
+              "median_absolute_percentage_error": 0.02431734305693667,
+              "observed_kwh": 424.371,
+              "relative_error": 0.015881834003213666,
+              "session_count": 39
+            },
+            {
+              "anonymous_evse_index": 3,
+              "e208_kwh": 670.1570777777778,
+              "median_absolute_percentage_error": 0.026965584089077788,
+              "observed_kwh": 651.02,
+              "relative_error": 0.029395529749896763,
+              "session_count": 43
+            },
+            {
+              "anonymous_evse_index": 4,
+              "e208_kwh": 445.3139773333333,
+              "median_absolute_percentage_error": 0.02334973598472083,
+              "observed_kwh": 438.221,
+              "relative_error": 0.01618584534591746,
+              "session_count": 41
+            },
+            {
+              "anonymous_evse_index": 5,
+              "e208_kwh": 478.54917066666667,
+              "median_absolute_percentage_error": 0.01960866548721696,
+              "observed_kwh": 469.847,
+              "relative_error": 0.018521286007288945,
+              "session_count": 43
+            },
+            {
+              "anonymous_evse_index": 6,
+              "e208_kwh": 574.3274391111112,
+              "median_absolute_percentage_error": 0.02368335170893057,
+              "observed_kwh": 562.211,
+              "relative_error": 0.021551408832468883,
+              "session_count": 49
+            },
+            {
+              "anonymous_evse_index": 7,
+              "e208_kwh": 441.6835164444445,
+              "median_absolute_percentage_error": 0.020801870107259826,
+              "observed_kwh": 433.243,
+              "relative_error": 0.019482176156209063,
+              "session_count": 36
+            },
+            {
+              "anonymous_evse_index": 8,
+              "e208_kwh": 515.27944,
+              "median_absolute_percentage_error": 0.01111347159125789,
+              "observed_kwh": 512.496,
+              "relative_error": 0.005431144828447523,
+              "session_count": 62
+            },
+            {
+              "anonymous_evse_index": 9,
+              "e208_kwh": 531.3020151111111,
+              "median_absolute_percentage_error": 0.015683461357960587,
+              "observed_kwh": 526.73,
+              "relative_error": 0.008679997553036875,
+              "session_count": 48
+            },
+            {
+              "anonymous_evse_index": 10,
+              "e208_kwh": 619.0443884444444,
+              "median_absolute_percentage_error": 0.01981311586816173,
+              "observed_kwh": 610.502,
+              "relative_error": 0.013992400425296628,
+              "session_count": 45
+            },
+            {
+              "anonymous_evse_index": 11,
+              "e208_kwh": 716.7555488888888,
+              "median_absolute_percentage_error": 0.01799225909790069,
+              "observed_kwh": 706.122,
+              "relative_error": 0.015059081701021734,
+              "session_count": 30
+            },
+            {
+              "anonymous_evse_index": 12,
+              "e208_kwh": 729.8521995555556,
+              "median_absolute_percentage_error": 0.008346508768217832,
+              "observed_kwh": 727.709,
+              "relative_error": 0.002945132677424096,
+              "session_count": 46
+            },
+            {
+              "anonymous_evse_index": 13,
+              "e208_kwh": 526.9843568888889,
+              "median_absolute_percentage_error": 0.01678123255848895,
+              "observed_kwh": 519.537,
+              "relative_error": 0.01433460348134755,
+              "session_count": 46
+            },
+            {
+              "anonymous_evse_index": 14,
+              "e208_kwh": 489.5901342222222,
+              "median_absolute_percentage_error": 0.02398341559900518,
+              "observed_kwh": 478.549,
+              "relative_error": 0.02307210802284038,
+              "session_count": 34
+            },
+            {
+              "anonymous_evse_index": 15,
+              "e208_kwh": 426.43866488888887,
+              "median_absolute_percentage_error": 0.019562362486248583,
+              "observed_kwh": 417.67,
+              "relative_error": 0.020994241599561494,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 16,
+              "e208_kwh": 280.9356911111111,
+              "median_absolute_percentage_error": 0.007478932934430309,
+              "observed_kwh": 279.69,
+              "relative_error": 0.004453827849086896,
+              "session_count": 29
+            },
+            {
+              "anonymous_evse_index": 17,
+              "e208_kwh": 396.19377199999997,
+              "median_absolute_percentage_error": 0.015511162439775475,
+              "observed_kwh": 390.985,
+              "relative_error": 0.013322178600201934,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 18,
+              "e208_kwh": 482.1826128888889,
+              "median_absolute_percentage_error": 0.017458717590884684,
+              "observed_kwh": 472.867,
+              "relative_error": 0.019700281239521666,
+              "session_count": 28
+            },
+            {
+              "anonymous_evse_index": 19,
+              "e208_kwh": 327.89944488888887,
+              "median_absolute_percentage_error": 0.016957409079182507,
+              "observed_kwh": 325.52,
+              "relative_error": 0.007309673411430584,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 20,
+              "e208_kwh": 388.3114213333333,
+              "median_absolute_percentage_error": 0.006644719621464043,
+              "observed_kwh": 388.452,
+              "relative_error": -0.00036189456269158086,
+              "session_count": 27
+            },
+            {
+              "anonymous_evse_index": 21,
+              "e208_kwh": 429.0586617777778,
+              "median_absolute_percentage_error": 0.009872065264384491,
+              "observed_kwh": 426.351,
+              "relative_error": 0.006350780877206309,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 22,
+              "e208_kwh": 436.2354706666667,
+              "median_absolute_percentage_error": 0.0097587569650667,
+              "observed_kwh": 433.647,
+              "relative_error": 0.0059690731555082695,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 23,
+              "e208_kwh": 335.3780502222222,
+              "median_absolute_percentage_error": 0.01326174395432765,
+              "observed_kwh": 330.616,
+              "relative_error": 0.014403568557547815,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 24,
+              "e208_kwh": 447.3881475555556,
+              "median_absolute_percentage_error": 0.011973927726011411,
+              "observed_kwh": 441.9480291666667,
+              "relative_error": 0.012309407509174168,
+              "session_count": 28
+            },
+            {
+              "anonymous_evse_index": 25,
+              "e208_kwh": 498.5139582222222,
+              "median_absolute_percentage_error": 0.008266950411717964,
+              "observed_kwh": 496.049,
+              "relative_error": 0.004969182927941006,
+              "session_count": 33
+            },
+            {
+              "anonymous_evse_index": 26,
+              "e208_kwh": 391.33886133333334,
+              "median_absolute_percentage_error": 0.006669630611227577,
+              "observed_kwh": 390.485,
+              "relative_error": 0.002186668715400918,
+              "session_count": 32
+            },
+            {
+              "anonymous_evse_index": 27,
+              "e208_kwh": 488.9644817777778,
+              "median_absolute_percentage_error": 0.011605898416928698,
+              "observed_kwh": 483.774,
+              "relative_error": 0.010729145794891396,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 28,
+              "e208_kwh": 301.126176,
+              "median_absolute_percentage_error": 0.004441158348736981,
+              "observed_kwh": 302.452,
+              "relative_error": -0.0043835848332958996,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 29,
+              "e208_kwh": 549.7609577777778,
+              "median_absolute_percentage_error": 0.02152001929126836,
+              "observed_kwh": 534.471,
+              "relative_error": 0.028607647146014978,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 30,
+              "e208_kwh": 874.1733,
+              "median_absolute_percentage_error": 0.014608425275382133,
+              "observed_kwh": 863.286,
+              "relative_error": 0.012611463640091577,
+              "session_count": 32
+            },
+            {
+              "anonymous_evse_index": 31,
+              "e208_kwh": 290.18609244444445,
+              "median_absolute_percentage_error": 0.011268657351950572,
+              "observed_kwh": 289.054,
+              "relative_error": 0.003916543083453201,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 32,
+              "e208_kwh": 327.5141653333333,
+              "median_absolute_percentage_error": 0.020486425702811006,
+              "observed_kwh": 322.69599999999997,
+              "relative_error": 0.01493097321731089,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 33,
+              "e208_kwh": 366.750592,
+              "median_absolute_percentage_error": 0.01064992407130916,
+              "observed_kwh": 362.175,
+              "relative_error": 0.012633649478843023,
+              "session_count": 31
+            },
+            {
+              "anonymous_evse_index": 34,
+              "e208_kwh": 502.0806728888889,
+              "median_absolute_percentage_error": 0.02917375972159377,
+              "observed_kwh": 490.269,
+              "relative_error": 0.024092228733386963,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 35,
+              "e208_kwh": 282.4425586666667,
+              "median_absolute_percentage_error": 0.02954022119476199,
+              "observed_kwh": 279.214,
+              "relative_error": 0.011563025731756596,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 36,
+              "e208_kwh": 379.9044484444444,
+              "median_absolute_percentage_error": 0.0176210045662099,
+              "observed_kwh": 372.534,
+              "relative_error": 0.019784632931341663,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 37,
+              "e208_kwh": 382.08176933333334,
+              "median_absolute_percentage_error": 0.008839884997888669,
+              "observed_kwh": 381.373,
+              "relative_error": 0.0018584675195500219,
+              "session_count": 32
+            },
+            {
+              "anonymous_evse_index": 38,
+              "e208_kwh": 457.54853733333334,
+              "median_absolute_percentage_error": 0.01630100901178467,
+              "observed_kwh": 456.34,
+              "relative_error": 0.002648326540152886,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 39,
+              "e208_kwh": 208.62497066666666,
+              "median_absolute_percentage_error": 0.01935764457546309,
+              "observed_kwh": 206.498,
+              "relative_error": 0.010300199840514994,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 40,
+              "e208_kwh": 479.07852488888886,
+              "median_absolute_percentage_error": 0.007312041260800985,
+              "observed_kwh": 478.395,
+              "relative_error": 0.001428787694037109,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 41,
+              "e208_kwh": 300.6821942222222,
+              "median_absolute_percentage_error": 0.009743879972292233,
+              "observed_kwh": 298.42900000000003,
+              "relative_error": 0.007550185210626954,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 42,
+              "e208_kwh": 477.9531582222222,
+              "median_absolute_percentage_error": 0.014818668938748496,
+              "observed_kwh": 471.772,
+              "relative_error": 0.013102003133340307,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 43,
+              "e208_kwh": 430.68641777777776,
+              "median_absolute_percentage_error": 0.004568746774212769,
+              "observed_kwh": 431.667,
+              "relative_error": -0.0022716172934743924,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 44,
+              "e208_kwh": 346.5664568888889,
+              "median_absolute_percentage_error": 0.005798461456841308,
+              "observed_kwh": 346.61,
+              "relative_error": -0.00012562566316924367,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 45,
+              "e208_kwh": 339.9905195555556,
+              "median_absolute_percentage_error": 0.011565686722161789,
+              "observed_kwh": 337.073,
+              "relative_error": 0.00865545313791256,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 46,
+              "e208_kwh": 382.2197888888889,
+              "median_absolute_percentage_error": 0.016160705087472596,
+              "observed_kwh": 376.72499999999997,
+              "relative_error": 0.014585676259576439,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 47,
+              "e208_kwh": 380.773796,
+              "median_absolute_percentage_error": 0.012425463847313953,
+              "observed_kwh": 384.513,
+              "relative_error": -0.009724519066975558,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 48,
+              "e208_kwh": 191.32535066666668,
+              "median_absolute_percentage_error": 0.016902449566279835,
+              "observed_kwh": 189.394,
+              "relative_error": 0.010197528256790996,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 49,
+              "e208_kwh": 530.7622782222222,
+              "median_absolute_percentage_error": 0.010486536356041264,
+              "observed_kwh": 527.83,
+              "relative_error": 0.005555345892090597,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 50,
+              "e208_kwh": 395.29416044444446,
+              "median_absolute_percentage_error": 0.016157552704112583,
+              "observed_kwh": 395.145,
+              "relative_error": 0.0003774828087018084,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 51,
+              "e208_kwh": 454.45655377777774,
+              "median_absolute_percentage_error": 0.014543522885906063,
+              "observed_kwh": 449.332,
+              "relative_error": 0.01140482711620305,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 52,
+              "e208_kwh": 186.90654088888888,
+              "median_absolute_percentage_error": 0.003985185185185331,
+              "observed_kwh": 186.29,
+              "relative_error": 0.003309575870357464,
+              "session_count": 23
+            }
+          ],
+          "relative_error": {
+            "count": 52,
+            "iqr": 0.01064349368056013,
+            "median": 0.010514672817703196,
+            "p05": -0.0012212697915438455,
+            "p95": 0.02353116234258634
+          },
+          "session_count": {
+            "count": 52,
+            "iqr": 10.25,
+            "median": 25.0,
+            "p05": 21.0,
+            "p95": 46.89999999999999
+          }
+        },
+        "aggregate_energy": {
+          "absolute_relative_error": 0.011092524288505382,
+          "e208_kwh": 23067.56941377778,
+          "error_kwh": 253.0703846111137,
+          "observed_kwh": 22814.499029166665,
+          "relative_error": 0.011092524288505382,
+          "session_count": 1544
+        },
+        "audit_coverage": 0.9980818414322251,
+        "coverage_qualified_session_count": 1561,
+        "e208_error": {
+          "count": 1544,
+          "mae_kwh": 0.2872417370826137,
+          "median_absolute_percentage_error": 0.01454918783652407,
+          "p90_absolute_percentage_error": 0.031192318162634746
+        },
+        "effective_voltage_v": {
+          "count": 1544,
+          "iqr": 3.747695983826304,
+          "median": 205.3179414841905,
+          "p05": 201.41188841006698,
+          "p95": 211.1701728948081
+        },
+        "eligible_session_count": 1564,
+        "input_session_count": 1645,
+        "retained_rate": 0.9872122762148338,
+        "retained_session_count": 1544,
+        "thresholds": {
+          "minimum_current_coverage": 0.8,
+          "minimum_kwh_delivered": 1.0
+        },
+        "weekday_aggregate_energy": {
+          "absolute_relative_error": 0.01109842760162751,
+          "e208_kwh": 22566.211408,
+          "error_kwh": 247.70037883333134,
+          "observed_kwh": 22318.511029166668,
+          "relative_error": 0.01109842760162751,
+          "session_count": 1511
+        },
+        "weekend_aggregate_energy": {
+          "absolute_relative_error": 0.010826886492773512,
+          "e208_kwh": 501.35800577777775,
+          "error_kwh": 5.370005777777749,
+          "observed_kwh": 495.988,
+          "relative_error": 0.010826886492773512,
+          "session_count": 33
+        }
+      },
+      {
+        "aggregate_by_evse_distribution": {
+          "absolute_relative_error": {
+            "count": 52,
+            "iqr": 0.010608978424267643,
+            "median": 0.01128586294705516,
+            "p05": 0.001665111598069211,
+            "p95": 0.023983306512369726
+          },
+          "evse_count": 52,
+          "groups": [
+            {
+              "anonymous_evse_index": 1,
+              "e208_kwh": 685.7377742222222,
+              "median_absolute_percentage_error": 0.027357205748954776,
+              "observed_kwh": 669.735,
+              "relative_error": 0.02389418833153744,
+              "session_count": 42
+            },
+            {
+              "anonymous_evse_index": 2,
+              "e208_kwh": 412.266504,
+              "median_absolute_percentage_error": 0.024155641146726782,
+              "observed_kwh": 403.061,
+              "relative_error": 0.022838984669814294,
+              "session_count": 38
+            },
+            {
+              "anonymous_evse_index": 3,
+              "e208_kwh": 664.1665622222222,
+              "median_absolute_percentage_error": 0.026733367458219543,
+              "observed_kwh": 643.964,
+              "relative_error": 0.03137219195828047,
+              "session_count": 42
+            },
+            {
+              "anonymous_evse_index": 4,
+              "e208_kwh": 434.42966666666666,
+              "median_absolute_percentage_error": 0.022813951626663886,
+              "observed_kwh": 424.43399999999997,
+              "relative_error": 0.02355057951687823,
+              "session_count": 40
+            },
+            {
+              "anonymous_evse_index": 5,
+              "e208_kwh": 478.54917066666667,
+              "median_absolute_percentage_error": 0.01960866548721696,
+              "observed_kwh": 469.847,
+              "relative_error": 0.018521286007288945,
+              "session_count": 43
+            },
+            {
+              "anonymous_evse_index": 6,
+              "e208_kwh": 574.3274391111112,
+              "median_absolute_percentage_error": 0.02368335170893057,
+              "observed_kwh": 562.211,
+              "relative_error": 0.021551408832468883,
+              "session_count": 49
+            },
+            {
+              "anonymous_evse_index": 7,
+              "e208_kwh": 441.6835164444445,
+              "median_absolute_percentage_error": 0.020801870107259826,
+              "observed_kwh": 433.243,
+              "relative_error": 0.019482176156209063,
+              "session_count": 36
+            },
+            {
+              "anonymous_evse_index": 8,
+              "e208_kwh": 515.27944,
+              "median_absolute_percentage_error": 0.01111347159125789,
+              "observed_kwh": 512.496,
+              "relative_error": 0.005431144828447523,
+              "session_count": 62
+            },
+            {
+              "anonymous_evse_index": 9,
+              "e208_kwh": 531.3020151111111,
+              "median_absolute_percentage_error": 0.015683461357960587,
+              "observed_kwh": 526.73,
+              "relative_error": 0.008679997553036875,
+              "session_count": 48
+            },
+            {
+              "anonymous_evse_index": 10,
+              "e208_kwh": 619.0443884444444,
+              "median_absolute_percentage_error": 0.01981311586816173,
+              "observed_kwh": 610.502,
+              "relative_error": 0.013992400425296628,
+              "session_count": 45
+            },
+            {
+              "anonymous_evse_index": 11,
+              "e208_kwh": 716.7555488888888,
+              "median_absolute_percentage_error": 0.01799225909790069,
+              "observed_kwh": 706.122,
+              "relative_error": 0.015059081701021734,
+              "session_count": 30
+            },
+            {
+              "anonymous_evse_index": 12,
+              "e208_kwh": 729.8521995555556,
+              "median_absolute_percentage_error": 0.008346508768217832,
+              "observed_kwh": 727.709,
+              "relative_error": 0.002945132677424096,
+              "session_count": 46
+            },
+            {
+              "anonymous_evse_index": 13,
+              "e208_kwh": 526.9843568888889,
+              "median_absolute_percentage_error": 0.01678123255848895,
+              "observed_kwh": 519.537,
+              "relative_error": 0.01433460348134755,
+              "session_count": 46
+            },
+            {
+              "anonymous_evse_index": 14,
+              "e208_kwh": 489.5901342222222,
+              "median_absolute_percentage_error": 0.02398341559900518,
+              "observed_kwh": 478.549,
+              "relative_error": 0.02307210802284038,
+              "session_count": 34
+            },
+            {
+              "anonymous_evse_index": 15,
+              "e208_kwh": 426.43866488888887,
+              "median_absolute_percentage_error": 0.019562362486248583,
+              "observed_kwh": 417.67,
+              "relative_error": 0.020994241599561494,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 16,
+              "e208_kwh": 280.9356911111111,
+              "median_absolute_percentage_error": 0.007478932934430309,
+              "observed_kwh": 279.69,
+              "relative_error": 0.004453827849086896,
+              "session_count": 29
+            },
+            {
+              "anonymous_evse_index": 17,
+              "e208_kwh": 396.19377199999997,
+              "median_absolute_percentage_error": 0.015511162439775475,
+              "observed_kwh": 390.985,
+              "relative_error": 0.013322178600201934,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 18,
+              "e208_kwh": 482.1826128888889,
+              "median_absolute_percentage_error": 0.017458717590884684,
+              "observed_kwh": 472.867,
+              "relative_error": 0.019700281239521666,
+              "session_count": 28
+            },
+            {
+              "anonymous_evse_index": 19,
+              "e208_kwh": 327.89944488888887,
+              "median_absolute_percentage_error": 0.016957409079182507,
+              "observed_kwh": 325.52,
+              "relative_error": 0.007309673411430584,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 20,
+              "e208_kwh": 388.3114213333333,
+              "median_absolute_percentage_error": 0.006644719621464043,
+              "observed_kwh": 388.452,
+              "relative_error": -0.00036189456269158086,
+              "session_count": 27
+            },
+            {
+              "anonymous_evse_index": 21,
+              "e208_kwh": 429.0586617777778,
+              "median_absolute_percentage_error": 0.009872065264384491,
+              "observed_kwh": 426.351,
+              "relative_error": 0.006350780877206309,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 22,
+              "e208_kwh": 436.2354706666667,
+              "median_absolute_percentage_error": 0.0097587569650667,
+              "observed_kwh": 433.647,
+              "relative_error": 0.0059690731555082695,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 23,
+              "e208_kwh": 335.3780502222222,
+              "median_absolute_percentage_error": 0.01326174395432765,
+              "observed_kwh": 330.616,
+              "relative_error": 0.014403568557547815,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 24,
+              "e208_kwh": 447.3881475555556,
+              "median_absolute_percentage_error": 0.011973927726011411,
+              "observed_kwh": 441.9480291666667,
+              "relative_error": 0.012309407509174168,
+              "session_count": 28
+            },
+            {
+              "anonymous_evse_index": 25,
+              "e208_kwh": 498.5139582222222,
+              "median_absolute_percentage_error": 0.008266950411717964,
+              "observed_kwh": 496.049,
+              "relative_error": 0.004969182927941006,
+              "session_count": 33
+            },
+            {
+              "anonymous_evse_index": 26,
+              "e208_kwh": 391.33886133333334,
+              "median_absolute_percentage_error": 0.006669630611227577,
+              "observed_kwh": 390.485,
+              "relative_error": 0.002186668715400918,
+              "session_count": 32
+            },
+            {
+              "anonymous_evse_index": 27,
+              "e208_kwh": 488.9644817777778,
+              "median_absolute_percentage_error": 0.011605898416928698,
+              "observed_kwh": 483.774,
+              "relative_error": 0.010729145794891396,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 28,
+              "e208_kwh": 301.126176,
+              "median_absolute_percentage_error": 0.004441158348736981,
+              "observed_kwh": 302.452,
+              "relative_error": -0.0043835848332958996,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 29,
+              "e208_kwh": 549.7609577777778,
+              "median_absolute_percentage_error": 0.02152001929126836,
+              "observed_kwh": 534.471,
+              "relative_error": 0.028607647146014978,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 30,
+              "e208_kwh": 874.1733,
+              "median_absolute_percentage_error": 0.014608425275382133,
+              "observed_kwh": 863.286,
+              "relative_error": 0.012611463640091577,
+              "session_count": 32
+            },
+            {
+              "anonymous_evse_index": 31,
+              "e208_kwh": 290.18609244444445,
+              "median_absolute_percentage_error": 0.011268657351950572,
+              "observed_kwh": 289.054,
+              "relative_error": 0.003916543083453201,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 32,
+              "e208_kwh": 327.5141653333333,
+              "median_absolute_percentage_error": 0.020486425702811006,
+              "observed_kwh": 322.69599999999997,
+              "relative_error": 0.01493097321731089,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 33,
+              "e208_kwh": 366.750592,
+              "median_absolute_percentage_error": 0.01064992407130916,
+              "observed_kwh": 362.175,
+              "relative_error": 0.012633649478843023,
+              "session_count": 31
+            },
+            {
+              "anonymous_evse_index": 34,
+              "e208_kwh": 502.0806728888889,
+              "median_absolute_percentage_error": 0.02917375972159377,
+              "observed_kwh": 490.269,
+              "relative_error": 0.024092228733386963,
+              "session_count": 26
+            },
+            {
+              "anonymous_evse_index": 35,
+              "e208_kwh": 282.4425586666667,
+              "median_absolute_percentage_error": 0.02954022119476199,
+              "observed_kwh": 279.214,
+              "relative_error": 0.011563025731756596,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 36,
+              "e208_kwh": 372.469188,
+              "median_absolute_percentage_error": 0.018981577493252084,
+              "observed_kwh": 365.067,
+              "relative_error": 0.020276245182391087,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 37,
+              "e208_kwh": 382.08176933333334,
+              "median_absolute_percentage_error": 0.008839884997888669,
+              "observed_kwh": 381.373,
+              "relative_error": 0.0018584675195500219,
+              "session_count": 32
+            },
+            {
+              "anonymous_evse_index": 38,
+              "e208_kwh": 416.2771888888889,
+              "median_absolute_percentage_error": 0.016174406314677876,
+              "observed_kwh": 411.68,
+              "relative_error": 0.011166898777907271,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 39,
+              "e208_kwh": 208.62497066666666,
+              "median_absolute_percentage_error": 0.01935764457546309,
+              "observed_kwh": 206.498,
+              "relative_error": 0.010300199840514994,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 40,
+              "e208_kwh": 479.07852488888886,
+              "median_absolute_percentage_error": 0.007312041260800985,
+              "observed_kwh": 478.395,
+              "relative_error": 0.001428787694037109,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 41,
+              "e208_kwh": 300.6821942222222,
+              "median_absolute_percentage_error": 0.009743879972292233,
+              "observed_kwh": 298.42900000000003,
+              "relative_error": 0.007550185210626954,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 42,
+              "e208_kwh": 477.9531582222222,
+              "median_absolute_percentage_error": 0.014818668938748496,
+              "observed_kwh": 471.772,
+              "relative_error": 0.013102003133340307,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 43,
+              "e208_kwh": 430.68641777777776,
+              "median_absolute_percentage_error": 0.004568746774212769,
+              "observed_kwh": 431.667,
+              "relative_error": -0.0022716172934743924,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 44,
+              "e208_kwh": 346.5664568888889,
+              "median_absolute_percentage_error": 0.005798461456841308,
+              "observed_kwh": 346.61,
+              "relative_error": -0.00012562566316924367,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 45,
+              "e208_kwh": 339.9905195555556,
+              "median_absolute_percentage_error": 0.011565686722161789,
+              "observed_kwh": 337.073,
+              "relative_error": 0.00865545313791256,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 46,
+              "e208_kwh": 382.2197888888889,
+              "median_absolute_percentage_error": 0.016160705087472596,
+              "observed_kwh": 376.72499999999997,
+              "relative_error": 0.014585676259576439,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 47,
+              "e208_kwh": 367.6382551111111,
+              "median_absolute_percentage_error": 0.010466824804708827,
+              "observed_kwh": 369.333,
+              "relative_error": -0.004588663587843274,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 48,
+              "e208_kwh": 191.32535066666668,
+              "median_absolute_percentage_error": 0.016902449566279835,
+              "observed_kwh": 189.394,
+              "relative_error": 0.010197528256790996,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 49,
+              "e208_kwh": 530.7622782222222,
+              "median_absolute_percentage_error": 0.010486536356041264,
+              "observed_kwh": 527.83,
+              "relative_error": 0.005555345892090597,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 50,
+              "e208_kwh": 388.81990044444444,
+              "median_absolute_percentage_error": 0.015305444421047825,
+              "observed_kwh": 386.43399999999997,
+              "relative_error": 0.006174147317380131,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 51,
+              "e208_kwh": 454.45655377777774,
+              "median_absolute_percentage_error": 0.014543522885906063,
+              "observed_kwh": 449.332,
+              "relative_error": 0.01140482711620305,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 52,
+              "e208_kwh": 186.90654088888888,
+              "median_absolute_percentage_error": 0.003985185185185331,
+              "observed_kwh": 186.29,
+              "relative_error": 0.003309575870357464,
+              "session_count": 23
+            }
+          ],
+          "relative_error": {
+            "count": 52,
+            "iqr": 0.010608978424267643,
+            "median": 0.01128586294705516,
+            "p05": -0.0012212697915438455,
+            "p95": 0.023983306512369726
+          },
+          "session_count": {
+            "count": 52,
+            "iqr": 10.5,
+            "median": 25.0,
+            "p05": 20.55,
+            "p95": 46.89999999999999
+          }
+        },
+        "aggregate_energy": {
+          "absolute_relative_error": 0.012184936095353075,
+          "e208_kwh": 22899.381526666668,
+          "error_kwh": 275.66849750000256,
+          "observed_kwh": 22623.713029166665,
+          "relative_error": 0.012184936095353075,
+          "session_count": 1533
+        },
+        "audit_coverage": 0.9910485933503836,
+        "coverage_qualified_session_count": 1550,
+        "e208_error": {
+          "count": 1533,
+          "mae_kwh": 0.2745617280930637,
+          "median_absolute_percentage_error": 0.0144848664421998,
+          "p90_absolute_percentage_error": 0.030722837447895984
+        },
+        "effective_voltage_v": {
+          "count": 1533,
+          "iqr": 3.7126528667678826,
+          "median": 205.29991579573036,
+          "p05": 201.3914500764228,
+          "p95": 210.60208935063605
+        },
+        "eligible_session_count": 1564,
+        "input_session_count": 1645,
+        "retained_rate": 0.9801790281329923,
+        "retained_session_count": 1533,
+        "thresholds": {
+          "minimum_current_coverage": 0.9,
+          "minimum_kwh_delivered": 1.0
+        },
+        "weekday_aggregate_energy": {
+          "absolute_relative_error": 0.012215376472996586,
+          "e208_kwh": 22398.023520888888,
+          "error_kwh": 270.2984917222202,
+          "observed_kwh": 22127.725029166668,
+          "relative_error": 0.012215376472996586,
+          "session_count": 1500
+        },
+        "weekend_aggregate_energy": {
+          "absolute_relative_error": 0.010826886492773512,
+          "e208_kwh": 501.35800577777775,
+          "error_kwh": 5.370005777777749,
+          "observed_kwh": 495.988,
+          "relative_error": 0.010826886492773512,
+          "session_count": 33
+        }
+      },
+      {
+        "aggregate_by_evse_distribution": {
+          "absolute_relative_error": {
+            "count": 52,
+            "iqr": 0.01314460981504286,
+            "median": 0.013775950643841847,
+            "p05": 0.0010544124373362538,
+            "p95": 0.026355694440862117
+          },
+          "evse_count": 52,
+          "groups": [
+            {
+              "anonymous_evse_index": 1,
+              "e208_kwh": 655.7678804444445,
+              "median_absolute_percentage_error": 0.027690988074486007,
+              "observed_kwh": 639.155,
+              "relative_error": 0.025991943181926918,
+              "session_count": 41
+            },
+            {
+              "anonymous_evse_index": 2,
+              "e208_kwh": 412.266504,
+              "median_absolute_percentage_error": 0.024155641146726782,
+              "observed_kwh": 403.061,
+              "relative_error": 0.022838984669814294,
+              "session_count": 38
+            },
+            {
+              "anonymous_evse_index": 3,
+              "e208_kwh": 664.1665622222222,
+              "median_absolute_percentage_error": 0.026733367458219543,
+              "observed_kwh": 643.964,
+              "relative_error": 0.03137219195828047,
+              "session_count": 42
+            },
+            {
+              "anonymous_evse_index": 4,
+              "e208_kwh": 434.42966666666666,
+              "median_absolute_percentage_error": 0.022813951626663886,
+              "observed_kwh": 424.43399999999997,
+              "relative_error": 0.02355057951687823,
+              "session_count": 40
+            },
+            {
+              "anonymous_evse_index": 5,
+              "e208_kwh": 459.04909555555554,
+              "median_absolute_percentage_error": 0.019527481466712848,
+              "observed_kwh": 449.717,
+              "relative_error": 0.020751040222085345,
+              "session_count": 42
+            },
+            {
+              "anonymous_evse_index": 6,
+              "e208_kwh": 561.8714631111111,
+              "median_absolute_percentage_error": 0.022903883693372127,
+              "observed_kwh": 548.697,
+              "relative_error": 0.024010452237047213,
+              "session_count": 48
+            },
+            {
+              "anonymous_evse_index": 7,
+              "e208_kwh": 437.21340000000004,
+              "median_absolute_percentage_error": 0.019997764057219855,
+              "observed_kwh": 427.891,
+              "relative_error": 0.021786856933190966,
+              "session_count": 35
+            },
+            {
+              "anonymous_evse_index": 8,
+              "e208_kwh": 505.2614493333333,
+              "median_absolute_percentage_error": 0.010995890938218494,
+              "observed_kwh": 501.094,
+              "relative_error": 0.008316701723296046,
+              "session_count": 61
+            },
+            {
+              "anonymous_evse_index": 9,
+              "e208_kwh": 505.7321244444444,
+              "median_absolute_percentage_error": 0.014608456389860634,
+              "observed_kwh": 498.813,
+              "relative_error": 0.013871179067996293,
+              "session_count": 46
+            },
+            {
+              "anonymous_evse_index": 10,
+              "e208_kwh": 609.0853426666666,
+              "median_absolute_percentage_error": 0.019742422699907117,
+              "observed_kwh": 598.017,
+              "relative_error": 0.018508408066437207,
+              "session_count": 44
+            },
+            {
+              "anonymous_evse_index": 11,
+              "e208_kwh": 672.8927111111111,
+              "median_absolute_percentage_error": 0.01731044103916086,
+              "observed_kwh": 661.247,
+              "relative_error": 0.017611741317709047,
+              "session_count": 29
+            },
+            {
+              "anonymous_evse_index": 12,
+              "e208_kwh": 715.8234893333333,
+              "median_absolute_percentage_error": 0.008265062488341673,
+              "observed_kwh": 712.5649999999999,
+              "relative_error": 0.0045729011856229075,
+              "session_count": 45
+            },
+            {
+              "anonymous_evse_index": 13,
+              "e208_kwh": 513.4789111111111,
+              "median_absolute_percentage_error": 0.016748267586113638,
+              "observed_kwh": 504.634,
+              "relative_error": 0.017527378478483534,
+              "session_count": 45
+            },
+            {
+              "anonymous_evse_index": 14,
+              "e208_kwh": 481.95967733333333,
+              "median_absolute_percentage_error": 0.02353230485232076,
+              "observed_kwh": 470.178,
+              "relative_error": 0.025057908565124985,
+              "session_count": 33
+            },
+            {
+              "anonymous_evse_index": 15,
+              "e208_kwh": 426.43866488888887,
+              "median_absolute_percentage_error": 0.019562362486248583,
+              "observed_kwh": 417.67,
+              "relative_error": 0.020994241599561494,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 16,
+              "e208_kwh": 273.67990000000003,
+              "median_absolute_percentage_error": 0.0073199739139720825,
+              "observed_kwh": 271.371,
+              "relative_error": 0.008508278334825944,
+              "session_count": 28
+            },
+            {
+              "anonymous_evse_index": 17,
+              "e208_kwh": 396.19377199999997,
+              "median_absolute_percentage_error": 0.015511162439775475,
+              "observed_kwh": 390.985,
+              "relative_error": 0.013322178600201934,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 18,
+              "e208_kwh": 459.5438986666667,
+              "median_absolute_percentage_error": 0.01692090080029772,
+              "observed_kwh": 449.65500000000003,
+              "relative_error": 0.021992191050175462,
+              "session_count": 27
+            },
+            {
+              "anonymous_evse_index": 19,
+              "e208_kwh": 300.36325511111113,
+              "median_absolute_percentage_error": 0.014815066649667943,
+              "observed_kwh": 294.787,
+              "relative_error": 0.018916217849196715,
+              "session_count": 19
+            },
+            {
+              "anonymous_evse_index": 20,
+              "e208_kwh": 388.3114213333333,
+              "median_absolute_percentage_error": 0.006644719621464043,
+              "observed_kwh": 388.452,
+              "relative_error": -0.00036189456269158086,
+              "session_count": 27
+            },
+            {
+              "anonymous_evse_index": 21,
+              "e208_kwh": 429.0586617777778,
+              "median_absolute_percentage_error": 0.009872065264384491,
+              "observed_kwh": 426.351,
+              "relative_error": 0.006350780877206309,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 22,
+              "e208_kwh": 416.5998026666667,
+              "median_absolute_percentage_error": 0.009047180093230888,
+              "observed_kwh": 412.619,
+              "relative_error": 0.009647647506941385,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 23,
+              "e208_kwh": 335.3780502222222,
+              "median_absolute_percentage_error": 0.01326174395432765,
+              "observed_kwh": 330.616,
+              "relative_error": 0.014403568557547815,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 24,
+              "e208_kwh": 434.06845155555555,
+              "median_absolute_percentage_error": 0.011711028245681742,
+              "observed_kwh": 428.8590291666667,
+              "relative_error": 0.012147167331445736,
+              "session_count": 27
+            },
+            {
+              "anonymous_evse_index": 25,
+              "e208_kwh": 470.07906399999996,
+              "median_absolute_percentage_error": 0.007493347095487006,
+              "observed_kwh": 466.022,
+              "relative_error": 0.00870573492238557,
+              "session_count": 32
+            },
+            {
+              "anonymous_evse_index": 26,
+              "e208_kwh": 384.57068,
+              "median_absolute_percentage_error": 0.006500198505169658,
+              "observed_kwh": 382.546,
+              "relative_error": 0.005292644544708321,
+              "session_count": 31
+            },
+            {
+              "anonymous_evse_index": 27,
+              "e208_kwh": 488.9644817777778,
+              "median_absolute_percentage_error": 0.011605898416928698,
+              "observed_kwh": 483.774,
+              "relative_error": 0.010729145794891396,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 28,
+              "e208_kwh": 301.126176,
+              "median_absolute_percentage_error": 0.004441158348736981,
+              "observed_kwh": 302.452,
+              "relative_error": -0.0043835848332958996,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 29,
+              "e208_kwh": 549.7609577777778,
+              "median_absolute_percentage_error": 0.02152001929126836,
+              "observed_kwh": 534.471,
+              "relative_error": 0.028607647146014978,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 30,
+              "e208_kwh": 838.5726035555556,
+              "median_absolute_percentage_error": 0.014065549336420052,
+              "observed_kwh": 825.219,
+              "relative_error": 0.01618189057153984,
+              "session_count": 31
+            },
+            {
+              "anonymous_evse_index": 31,
+              "e208_kwh": 290.18609244444445,
+              "median_absolute_percentage_error": 0.011268657351950572,
+              "observed_kwh": 289.054,
+              "relative_error": 0.003916543083453201,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 32,
+              "e208_kwh": 319.92296844444445,
+              "median_absolute_percentage_error": 0.01844371979348557,
+              "observed_kwh": 313.96,
+              "relative_error": 0.018992764824960092,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 33,
+              "e208_kwh": 366.750592,
+              "median_absolute_percentage_error": 0.01064992407130916,
+              "observed_kwh": 362.175,
+              "relative_error": 0.012633649478843023,
+              "session_count": 31
+            },
+            {
+              "anonymous_evse_index": 34,
+              "e208_kwh": 495.71042444444447,
+              "median_absolute_percentage_error": 0.028722192812187623,
+              "observed_kwh": 482.772,
+              "relative_error": 0.026800279312894037,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 35,
+              "e208_kwh": 227.254196,
+              "median_absolute_percentage_error": 0.02954022119476199,
+              "observed_kwh": 221.878,
+              "relative_error": 0.02423041491269987,
+              "session_count": 19
+            },
+            {
+              "anonymous_evse_index": 36,
+              "e208_kwh": 372.469188,
+              "median_absolute_percentage_error": 0.018981577493252084,
+              "observed_kwh": 365.067,
+              "relative_error": 0.020276245182391087,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 37,
+              "e208_kwh": 335.25197333333335,
+              "median_absolute_percentage_error": 0.008405195418585427,
+              "observed_kwh": 335.052,
+              "relative_error": 0.0005968426791463189,
+              "session_count": 31
+            },
+            {
+              "anonymous_evse_index": 38,
+              "e208_kwh": 413.1027622222222,
+              "median_absolute_percentage_error": 0.01604780361757108,
+              "observed_kwh": 407.093,
+              "relative_error": 0.014762627267533971,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 39,
+              "e208_kwh": 203.31207866666668,
+              "median_absolute_percentage_error": 0.019205591037032996,
+              "observed_kwh": 199.74699999999999,
+              "relative_error": 0.017847971016669555,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 40,
+              "e208_kwh": 479.07852488888886,
+              "median_absolute_percentage_error": 0.007312041260800985,
+              "observed_kwh": 478.395,
+              "relative_error": 0.001428787694037109,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 41,
+              "e208_kwh": 300.6821942222222,
+              "median_absolute_percentage_error": 0.009743879972292233,
+              "observed_kwh": 298.42900000000003,
+              "relative_error": 0.007550185210626954,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 42,
+              "e208_kwh": 477.9531582222222,
+              "median_absolute_percentage_error": 0.014818668938748496,
+              "observed_kwh": 471.772,
+              "relative_error": 0.013102003133340307,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 43,
+              "e208_kwh": 430.68641777777776,
+              "median_absolute_percentage_error": 0.004568746774212769,
+              "observed_kwh": 431.667,
+              "relative_error": -0.0022716172934743924,
+              "session_count": 23
+            },
+            {
+              "anonymous_evse_index": 44,
+              "e208_kwh": 346.5664568888889,
+              "median_absolute_percentage_error": 0.005798461456841308,
+              "observed_kwh": 346.61,
+              "relative_error": -0.00012562566316924367,
+              "session_count": 25
+            },
+            {
+              "anonymous_evse_index": 45,
+              "e208_kwh": 339.9905195555556,
+              "median_absolute_percentage_error": 0.011565686722161789,
+              "observed_kwh": 337.073,
+              "relative_error": 0.00865545313791256,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 46,
+              "e208_kwh": 382.2197888888889,
+              "median_absolute_percentage_error": 0.016160705087472596,
+              "observed_kwh": 376.72499999999997,
+              "relative_error": 0.014585676259576439,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 47,
+              "e208_kwh": 357.1520911111111,
+              "median_absolute_percentage_error": 0.010125515315759278,
+              "observed_kwh": 354.993,
+              "relative_error": 0.006082066719938369,
+              "session_count": 21
+            },
+            {
+              "anonymous_evse_index": 48,
+              "e208_kwh": 191.32535066666668,
+              "median_absolute_percentage_error": 0.016902449566279835,
+              "observed_kwh": 189.394,
+              "relative_error": 0.010197528256790996,
+              "session_count": 22
+            },
+            {
+              "anonymous_evse_index": 49,
+              "e208_kwh": 530.7622782222222,
+              "median_absolute_percentage_error": 0.010486536356041264,
+              "observed_kwh": 527.83,
+              "relative_error": 0.005555345892090597,
+              "session_count": 24
+            },
+            {
+              "anonymous_evse_index": 50,
+              "e208_kwh": 355.46944622222225,
+              "median_absolute_percentage_error": 0.012908455228981396,
+              "observed_kwh": 350.672,
+              "relative_error": 0.0136807222196874,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 51,
+              "e208_kwh": 421.0512453333333,
+              "median_absolute_percentage_error": 0.01386891046567627,
+              "observed_kwh": 415.104,
+              "relative_error": 0.014327121235481572,
+              "session_count": 20
+            },
+            {
+              "anonymous_evse_index": 52,
+              "e208_kwh": 186.90654088888888,
+              "median_absolute_percentage_error": 0.003985185185185331,
+              "observed_kwh": 186.29,
+              "relative_error": 0.003309575870357464,
+              "session_count": 23
+            }
+          ],
+          "relative_error": {
+            "count": 52,
+            "iqr": 0.01314460981504286,
+            "median": 0.013775950643841847,
+            "p05": -0.00023194666795429535,
+            "p95": 0.026355694440862117
+          },
+          "session_count": {
+            "count": 52,
+            "iqr": 10.25,
+            "median": 25.0,
+            "p05": 20.0,
+            "p95": 45.449999999999996
+          }
+        },
+        "aggregate_energy": {
+          "absolute_relative_error": 0.01427277050427857,
+          "e208_kwh": 22345.51240711111,
+          "error_kwh": 314.44437794444457,
+          "observed_kwh": 22031.068029166665,
+          "relative_error": 0.01427277050427857,
+          "session_count": 1500
+        },
+        "audit_coverage": 0.9661125319693095,
+        "coverage_qualified_session_count": 1511,
+        "e208_error": {
+          "count": 1500,
+          "mae_kwh": 0.2531708194444444,
+          "median_absolute_percentage_error": 0.014279759317109722,
+          "p90_absolute_percentage_error": 0.02979667705279327
+        },
+        "effective_voltage_v": {
+          "count": 1500,
+          "iqr": 3.602144121872385,
+          "median": 205.2042893115693,
+          "p05": 201.32040068782862,
+          "p95": 210.00578082954587
+        },
+        "eligible_session_count": 1564,
+        "input_session_count": 1645,
+        "retained_rate": 0.959079283887468,
+        "retained_session_count": 1500,
+        "thresholds": {
+          "minimum_current_coverage": 0.95,
+          "minimum_kwh_delivered": 1.0
+        },
+        "weekday_aggregate_energy": {
+          "absolute_relative_error": 0.014352134830614137,
+          "e208_kwh": 21844.154401333333,
+          "error_kwh": 309.07437216666585,
+          "observed_kwh": 21535.080029166667,
+          "relative_error": 0.014352134830614137,
+          "session_count": 1467
+        },
+        "weekend_aggregate_energy": {
+          "absolute_relative_error": 0.010826886492773512,
+          "e208_kwh": 501.35800577777775,
+          "error_kwh": 5.370005777777749,
+          "observed_kwh": 495.988,
+          "relative_error": 0.010826886492773512,
+          "session_count": 33
+        }
+      }
+    ]
+  },
+  "decision": {
+    "conditions": {
+      "mapping_complete": true,
+      "mapping_not_severe": true,
+      "median_absolute_percentage_error_pass": true,
+      "monthly_relative_energy_error_candidate_pass": true,
+      "monthly_relative_energy_error_not_severe": true,
+      "p90_absolute_percentage_error_pass": true,
+      "primary_audit_coverage_pass": true,
+      "retained_rate_pass": true,
+      "statistics_finite": true
+    },
+    "current_proxy_available": true,
+    "direct_measured_kw_available": false,
+    "main_control_approval_required": true,
+    "reconstructed_kw_column_authorized": false,
+    "status": "KW_RECONSTRUCTION_CANDIDATE",
+    "threshold_interpretation": "predeclared_data_preparation_gate_not_scientific_validation",
+    "thresholds": {
+      "absolute_monthly_relative_energy_error_candidate_maximum": 0.1,
+      "absolute_monthly_relative_energy_error_fail_above": 0.5,
+      "mapping_rate_candidate": 1.0,
+      "mapping_rate_fail_below": 0.95,
+      "median_absolute_percentage_error_maximum": 0.2,
+      "p90_absolute_percentage_error_maximum": 0.4,
+      "primary_audit_coverage_minimum": 0.9,
+      "retained_rate_minimum": 0.9
+    }
+  },
+  "evidence": {
+    "commit": "14e723b11339e56ca3afd2bf4969f9e4bc8c2623",
+    "default_evse_voltage_v": 208.0,
+    "evse_naming_summary": "52 AG-prefixed, floor-coded, two-digit EVSE/space names: 14 first-floor, 19 third-floor, 19 fourth-floor.",
+    "license": "BSD-3-Clause",
+    "license_copyright": "Copyright 2019 California Institute of Technology",
+    "license_path": "LICENSE.txt",
+    "license_retrieved_utc": "2026-09-01T06:31:55.3086889Z",
+    "license_sha256": "34256c87b252573d30203b02ee12407bfbf2169684adfef3a3ea4f9bb9e0db5f",
+    "license_url": "https://raw.githubusercontent.com/zach401/acnportal/14e723b11339e56ca3afd2bf4969f9e4bc8c2623/LICENSE.txt",
+    "line_to_line_definition": "EVSEs are assigned to AB/BC/CA branches at 30/-90/150 degrees; phase currents are Ia=Iab-Ica, Ib=Ibc-Iab, Ic=Ica-Ibc.",
+    "line_to_line_network": true,
+    "pinned_evse_name_count": 52,
+    "repository": "https://github.com/zach401/acnportal",
+    "source_path": "acnportal/acnsim/network/sites/jpl_acn.py",
+    "source_retrieved_utc": "2026-09-01T06:31:52.7278373Z",
+    "source_sha256": "0a8c9de3c972995dd323e3c2a976bff8511b795553f3926b60251b5418d6140d",
+    "source_url": "https://raw.githubusercontent.com/zach401/acnportal/14e723b11339e56ca3afd2bf4969f9e4bc8c2623/acnportal/acnsim/network/sites/jpl_acn.py",
+    "static_mirror": "NOT_USED",
+    "topology_caveat": "ACN-Sim network-model defaults are audit evidence, not proof of per-session measured voltage or active power."
+  },
+  "mapping": {
+    "complete_for_candidate": true,
+    "mapped_record_count": 1645,
+    "mapped_unique_space_count": 52,
+    "mapping_rate": 1.0,
+    "observed_unique_space_count": 52,
+    "pinned_source_space_count": 52,
+    "raw_record_count": 1645,
+    "records_with_space": 1645,
+    "unmapped_record_count": 0,
+    "unmapped_unique_space_count": 0
+  },
+  "online_feature_policy": {
+    "e208_allowed": false,
+    "effective_voltage_allowed": false,
+    "final_kwh_delivered_allowed": false,
+    "reconstructed_kw_column_authorized": false,
+    "status": "ENFORCED"
+  },
+  "privacy": {
+    "aggregate_only": true,
+    "identifiers_emitted": false,
+    "space_names_emitted": false,
+    "token_emitted": false
+  },
+  "schema_version": "acn-jpl-power-semantics-audit/v1",
+  "static_mirror": "NOT_USED",
+  "status": "KW_RECONSTRUCTION_CANDIDATE"
+}

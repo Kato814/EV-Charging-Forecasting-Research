@@ -1,0 +1,67 @@
+{
+  "active_threshold_sensitivity": {
+    "comparison_end_bin_count_sum": 23416,
+    "comparison_threshold_a": 1.0,
+    "main_end_bin_count_sum": 23639,
+    "main_threshold_a": 0.1
+  },
+  "aggregation_semantics": {
+    "bin_rule": "left_closed_right_open",
+    "connected_active_count_rule": "state_at_bin_right_edge_minus_one_second",
+    "coverage_rule": "observed_current_session_seconds_divided_by_connected_session_seconds",
+    "max_hold_seconds": 12,
+    "mean_rule": "observed_ampere_seconds_divided_by_900_seconds",
+    "missing_is_zero": false,
+    "peak_rule": "maximum_bounded_piecewise_constant_current_proxy",
+    "pilot_coverage_rule": "observed_pilot_session_seconds_divided_by_connected_session_seconds",
+    "pilot_publication_gate": "coverage_at_least_0.90",
+    "power_label_type": "none"
+  },
+  "analysis_window": {
+    "expected_raw_objects": 1645,
+    "expected_scheduled_issue_times": 2865,
+    "expected_station_bins": 2976,
+    "local_end_exclusive": "2019-06-01T00:00:00-07:00",
+    "local_start_inclusive": "2019-05-01T00:00:00-07:00",
+    "timezone": "America/Los_Angeles"
+  },
+  "continuity_gate": {
+    "interpretation": "predeclared_data_preparation_gate_not_scientific_validation",
+    "maximum_missing_run_bins": 96,
+    "minimum_valid_bin_rate": 0.8,
+    "observed_valid_bin_rate": 0.9952956989247311,
+    "status": "PASS"
+  },
+  "coverage_sensitivity": {
+    "threshold_80_valid_bins": 2969,
+    "threshold_90_valid_bins": 2962,
+    "threshold_95_valid_bins": 2948
+  },
+  "expected_bins": 2976,
+  "generated_bins": 2976,
+  "longest_missing_run": 8,
+  "max_absolute_ramp_a": 255.10588889,
+  "missing_bin_rate": 0.0047043,
+  "peak_current_proxy_a": 758.7,
+  "pilot_valid_bins_at_80": 2970,
+  "pilot_valid_bins_at_90": 2963,
+  "pilot_valid_bins_at_95": 2948,
+  "schema_version": "acn-jpl-station-15min-qa/v1",
+  "session_count": 1645,
+  "status": "PASS",
+  "valid_bins_at_80": 2969,
+  "valid_bins_at_90": 2962,
+  "valid_bins_at_95": 2948,
+  "weekday_distribution": {
+    "bin_count": 2208,
+    "mean_current_a": 198.00207581,
+    "median_current_a": 93.9505,
+    "valid_bin_count": 2194
+  },
+  "weekend_distribution": {
+    "bin_count": 768,
+    "mean_current_a": 13.90579094,
+    "median_current_a": 0.0,
+    "valid_bin_count": 768
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "checkpoint_state": "samples_complete",
+  "current_proxy_available": true,
+  "environment": {
+    "cuda": "13.0",
+    "driver_modified": false,
+    "gpu": "NVIDIA GeForce RTX 5080",
+    "network_access_used": false,
+    "python": "3.13.14",
+    "pytorch": "2.13.0.dev20260518+cu130",
+    "pytorch_channel": "nightly",
+    "system_cuda_modified": false,
+    "training_environment_frozen": "NO",
+    "training_run": false
+  },
+  "formal_issue_times": 2853,
+  "permitted_target": "station_current_mean_a",
+  "power_semantics_status": "KW_RECONSTRUCTION_CANDIDATE",
+  "preparation_limitations": [
+    {
+      "category": "incomplete_multi_horizon_labels",
+      "issue_time_count": 12
+    }
+  ],
+  "privacy": {
+    "absolute_paths_emitted": false,
+    "aggregate_only": true,
+    "host_usernames_emitted": false,
+    "model_weights_emitted": false,
+    "private_values_emitted": false
+  },
+  "protocol_sha256": "2b95e9b09d31fdd30c559be80f9db64b22e33822b08a25de3715e168f3697bf3",
+  "raw_unchanged": true,
+  "ready_for_gate1_baseline": true,
+  "reconstructed_power_column_published": false,
+  "scheduled_issue_times": 2865,
+  "schema_version": "acn-jpl-gate1-preparation/v1",
+  "scope": {
+    "gate1_execution": false,
+    "optimization": false,
+    "other_month_acquisition": false,
+    "training": false
+  },
+  "sessions_processed": 1645,
+  "static_mirror": "NOT_USED",
+  "station_bins": 2976,
+  "status": "CONDITIONAL_PASS"
+}

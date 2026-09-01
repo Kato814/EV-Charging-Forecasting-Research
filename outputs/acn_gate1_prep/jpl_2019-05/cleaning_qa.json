@@ -1,0 +1,241 @@
+{
+  "analysis_window": {
+    "expected_raw_objects": 1645,
+    "expected_scheduled_issue_times": 2865,
+    "expected_station_bins": 2976,
+    "local_end_exclusive": "2019-06-01T00:00:00-07:00",
+    "local_start_inclusive": "2019-05-01T00:00:00-07:00",
+    "timezone": "America/Los_Angeles"
+  },
+  "current": {
+    "bounded_observation_coverage": 0.9951577921303792,
+    "bounded_value_hours": 112316.97211111111,
+    "conflict_affected_sessions": 17,
+    "conflicting_timestamps": 35,
+    "conflicts_isolated_as_missing": true,
+    "exact_duplicate_extras": 20,
+    "invalid_timestamps": 0,
+    "invalid_values": 0,
+    "raw_samples": 10510227,
+    "retained_sample_rate": 0.9952475812368277,
+    "retained_samples": 10460278
+  },
+  "duplicate_policy": {
+    "conflict_main": "mark_timestamp_missing",
+    "conflict_sensitivity": "last_write_wins",
+    "exact": "retain_first_remove_extra"
+  },
+  "expected_sessions": 1645,
+  "interval_rule": "left_closed_right_open",
+  "pilot": {
+    "bounded_observation_coverage": 0.9954324650861806,
+    "bounded_value_hours": 137052.6983333333,
+    "conflict_affected_sessions": 3,
+    "conflicting_timestamps": 3,
+    "conflicts_isolated_as_missing": true,
+    "exact_duplicate_extras": 56,
+    "invalid_timestamps": 0,
+    "invalid_values": 0,
+    "raw_samples": 10513238,
+    "retained_sample_rate": 0.9952510349332908,
+    "retained_samples": 10463311
+  },
+  "raw_modified": false,
+  "retrospective_done_time": {
+    "online_feature_allowed": false,
+    "original_value_retained_locally": true,
+    "parsed_count": 1645,
+    "present_count": 1645,
+    "unparseable_count": 0
+  },
+  "sampling_interval": {
+    "current_distinct_positive_delta_count": 239,
+    "current_mode_seconds": 4,
+    "current_positive_delta_count": 10508527,
+    "current_top_delta_counts": [
+      [
+        4,
+        9132210
+      ],
+      [
+        3,
+        880931
+      ],
+      [
+        5,
+        272380
+      ],
+      [
+        2,
+        107632
+      ],
+      [
+        6,
+        57878
+      ],
+      [
+        1,
+        34513
+      ],
+      [
+        7,
+        5419
+      ],
+      [
+        8,
+        3525
+      ],
+      [
+        9,
+        2238
+      ],
+      [
+        12,
+        1672
+      ],
+      [
+        11,
+        1426
+      ],
+      [
+        10,
+        1330
+      ],
+      [
+        13,
+        768
+      ],
+      [
+        15,
+        566
+      ],
+      [
+        14,
+        504
+      ],
+      [
+        16,
+        387
+      ],
+      [
+        18,
+        224
+      ],
+      [
+        20,
+        216
+      ],
+      [
+        24,
+        211
+      ],
+      [
+        17,
+        198
+      ]
+    ],
+    "derivation": "mode_of_positive_raw_timestamp_differences",
+    "main_current_hold_seconds": 12,
+    "main_pilot_hold_seconds": 12,
+    "pilot_distinct_positive_delta_count": 235,
+    "pilot_mode_seconds": 4,
+    "pilot_positive_delta_count": 10511534,
+    "pilot_top_delta_counts": [
+      [
+        4,
+        9132209
+      ],
+      [
+        3,
+        881323
+      ],
+      [
+        5,
+        273650
+      ],
+      [
+        2,
+        107902
+      ],
+      [
+        6,
+        58102
+      ],
+      [
+        1,
+        35086
+      ],
+      [
+        7,
+        5590
+      ],
+      [
+        8,
+        3672
+      ],
+      [
+        9,
+        2411
+      ],
+      [
+        12,
+        1814
+      ],
+      [
+        11,
+        1486
+      ],
+      [
+        10,
+        1317
+      ],
+      [
+        13,
+        762
+      ],
+      [
+        15,
+        597
+      ],
+      [
+        14,
+        574
+      ],
+      [
+        16,
+        362
+      ],
+      [
+        18,
+        197
+      ],
+      [
+        20,
+        184
+      ],
+      [
+        17,
+        182
+      ],
+      [
+        24,
+        173
+      ]
+    ],
+    "unbounded_interpolation": false
+  },
+  "schema_version": "acn-jpl-cleaning-qa/v1",
+  "sessions_processed": 1645,
+  "status": "PASS",
+  "timezone_policy": {
+    "aware_only": true,
+    "calendar_mapping": "America/Los_Angeles",
+    "internal": "UTC"
+  },
+  "user_inputs": {
+    "issue_time_truncation_ready": true,
+    "raw_revision_count": 2040,
+    "sanitized_revision_count": 2040,
+    "unparseable_modified_count": 0
+  }
+}

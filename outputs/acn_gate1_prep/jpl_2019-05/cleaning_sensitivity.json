@@ -1,0 +1,83 @@
+{
+  "boundary_plus_minus_60_seconds": {
+    "current": {
+      "coverage": 0.9951371914990808,
+      "eligible_seconds": 41559317,
+      "observed_seconds": 41357222,
+      "relative_value_hours_change": 0.00015720687326306688,
+      "value_hours": 112334.62911111108
+    },
+    "pilot": {
+      "coverage": 0.9954098379431982,
+      "eligible_seconds": 41559317,
+      "observed_seconds": 41368553,
+      "relative_value_hours_change": 0.0031035486888977004,
+      "value_hours": 137478.0480555556
+    }
+  },
+  "hold_thresholds": {
+    "current": {
+      "12": {
+        "coverage": 0.9951577921303792,
+        "eligible_seconds": 41361917,
+        "observed_seconds": 41161634,
+        "value_hours": 112316.97211111111
+      },
+      "4": {
+        "coverage": 0.9826433093030964,
+        "eligible_seconds": 41361917,
+        "observed_seconds": 40644011,
+        "value_hours": 110690.98808333326
+      },
+      "60": {
+        "coverage": 0.9985205956484077,
+        "eligible_seconds": 41361917,
+        "observed_seconds": 41300726,
+        "value_hours": 112804.97116666666
+      }
+    },
+    "pilot": {
+      "12": {
+        "coverage": 0.9954324650861806,
+        "eligible_seconds": 41361917,
+        "observed_seconds": 41172995,
+        "value_hours": 137052.6983333333
+      },
+      "4": {
+        "coverage": 0.9828714902164714,
+        "eligible_seconds": 41361917,
+        "observed_seconds": 40653449,
+        "value_hours": 135130.31055555557
+      },
+      "60": {
+        "coverage": 0.9985577070811297,
+        "eligible_seconds": 41361917,
+        "observed_seconds": 41302261,
+        "value_hours": 137570.89416666664
+      }
+    }
+  },
+  "hold_thresholds_seconds": [
+    4,
+    12,
+    60
+  ],
+  "last_write_wins": {
+    "current": {
+      "coverage": 0.9951583240206202,
+      "eligible_seconds": 41361917,
+      "observed_seconds": 41161656,
+      "relative_value_hours_change": 6.215049626325897e-07,
+      "value_hours": 112317.04191666667
+    },
+    "pilot": {
+      "coverage": 0.9954325376166681,
+      "eligible_seconds": 41361917,
+      "observed_seconds": 41172998,
+      "relative_value_hours_change": 1.945723579060219e-07,
+      "value_hours": 137052.72499999998
+    }
+  },
+  "main_hold_seconds": 12,
+  "schema_version": "acn-jpl-cleaning-sensitivity/v1"
+}

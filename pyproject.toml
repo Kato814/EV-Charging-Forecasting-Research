@@ -16,6 +16,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.12"]
+gate1 = [
+  "scipy==1.17.1",
+  "scikit-learn==1.9.0",
+  "joblib==1.6.0",
+  "pyarrow==25.0.1",
+]
 
 [tool.setuptools]
 package-dir = {"" = "code/src"}

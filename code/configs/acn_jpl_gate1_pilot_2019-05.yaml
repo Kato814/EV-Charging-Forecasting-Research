@@ -1,0 +1,36 @@
+schema_version: acn-jpl-gate1-pilot/v1
+data_snapshot_sha256: 7066ffc8ba42a98f73246acfbc62352fe55a1433a43cba80957c6034e3aeaa5d
+target: station_current_mean_a
+
+seeds:
+  model: 20260901
+  bootstrap: 20260902
+bootstrap_repetitions: 10000
+horizons_minutes: [15, 30, 60, 120, 240]
+
+time_split:
+  timezone: America/Los_Angeles
+  initial_train:
+    start_local_date: "2019-05-02"
+    end_local_date_inclusive: "2019-05-14"
+  validation:
+    start_local_date: "2019-05-15"
+    end_local_date_inclusive: "2019-05-17"
+  rolling_test:
+    start_local_date: "2019-05-18"
+    end_local_date_inclusive: "2019-05-31"
+
+ridge:
+  alpha: [0.1, 1, 10, 100]
+
+hgb:
+  learning_rate: [0.03, 0.08]
+  max_leaf_nodes: [15, 31]
+  min_samples_leaf: [20, 50]
+  l2_regularization: [0, 1]
+  max_iter: 300
+  early_stopping: false
+  loss: squared_error
+
+windows_minutes: [5, 15, 30, 60]
+bounded_hold_seconds: 12

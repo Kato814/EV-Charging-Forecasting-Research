@@ -15,6 +15,7 @@ from evcf.evaluation.acn_jpl_gate1_metrics import (
     ExecutionFailureCode,
     Gate1EvaluationResult,
     GateEvidence,
+    _evaluate_gate1_series,
     assert_public_payload_safe,
     bootstrap_tier_comparison,
     build_public_aggregate_payload,
@@ -25,7 +26,11 @@ from evcf.evaluation.acn_jpl_gate1_metrics import (
     evaluate_gate1,
     evaluate_scopes,
 )
-from evcf.forecasting.acn_jpl_gate1_models import PersistencePrediction, PredictionBundle
+from evcf.forecasting.acn_jpl_gate1_models import (
+    FormalModelTaskResult,
+    PersistencePrediction,
+    PredictionBundle,
+)
 
 ZONE = ZoneInfo("America/Los_Angeles")
 HORIZONS = (15, 30, 60, 120, 240)
@@ -154,7 +159,7 @@ def _canonical_evaluation_series(
 
 @pytest.fixture(scope="module")
 def canonical_result() -> Gate1EvaluationResult:
-    return evaluate_gate1(_canonical_evaluation_series())
+    return _evaluate_gate1_series(_canonical_evaluation_series())
 
 
 def test_exact_error_metrics_zero_wape_and_nominal_208v() -> None:
@@ -513,6 +518,34 @@ def test_gate_evidence_cannot_be_created_from_anonymous_arrays() -> None:
         GateEvidence()  # type: ignore[call-arg]
 
 
+def test_public_formal_evaluation_rejects_bare_or_forged_learning_results() -> None:
+    issue_times, day_starts = _formal_small_index()
+    bundle = PredictionBundle.create(
+        learner="hgb",
+        tier="M1",
+        horizon_minutes=15,
+        issue_times=issue_times,
+        y_true=np.ones(len(issue_times)),
+        predictions=np.ones(len(issue_times)),
+        day_start_utc_s=day_starts,
+        selected_param_sha256="a" * 64,
+    )
+    formal_arguments = {
+        "persistence_by_horizon": {},
+        "snapshot": object(),
+        "split": object(),
+    }
+    with pytest.raises(TypeError, match="FormalModelTaskResult"):
+        evaluate_gate1(task_results=(bundle,) * 40, **formal_arguments)  # type: ignore[arg-type]
+
+    forged = object.__new__(FormalModelTaskResult)
+    with pytest.raises((TypeError, ValueError), match="formal|Formal|provenance|seal"):
+        evaluate_gate1(task_results=(forged,) * 40, **formal_arguments)  # type: ignore[arg-type]
+
+    with pytest.raises(TypeError):
+        evaluate_gate1(_canonical_evaluation_series())  # type: ignore[misc]
+
+
 def test_formal_evaluation_seals_complete_canonical_evidence(
     canonical_result: Gate1EvaluationResult,
 ) -> None:
@@ -552,7 +585,7 @@ def test_formal_evaluation_rejects_missing_or_replaced_canonical_test_rows() -> 
         for series in original
     )
     with pytest.raises(ValueError, match="canonical.*row|1,329|1329"):
-        evaluate_gate1(missing)
+        _evaluate_gate1_series(missing)
 
     replace_position = 13 * 96 + 40
     replacement_time = original[0].issue_times[-1] + 900
@@ -569,11 +602,11 @@ def test_formal_evaluation_rejects_missing_or_replaced_canonical_test_rows() -> 
         for series in original
     )
     with pytest.raises(ValueError, match="canonical.*row|identity"):
-        evaluate_gate1(replaced)
+        _evaluate_gate1_series(replaced)
 
 
 def test_gate_exact_thresholds_and_active_session_classes() -> None:
-    active = evaluate_gate1(_canonical_evaluation_series()).gate_decision
+    active = _evaluate_gate1_series(_canonical_evaluation_series()).gate_decision
     assert active.classification == "PASS_ACTIVE_SESSION"
     assert active.m3_pass is True
     assert active.m4_keep is True
@@ -583,18 +616,20 @@ def test_gate_exact_thresholds_and_active_session_classes() -> None:
     )
 
     drop_errors = _hgb_errors(m4=(97.0 * (1.0 - 0.00999999), 97.0 * (1.0 - 0.00999999), 103.0))
-    drop = evaluate_gate1(_canonical_evaluation_series(hgb_mae_by_tier=drop_errors)).gate_decision
+    drop = _evaluate_gate1_series(
+        _canonical_evaluation_series(hgb_mae_by_tier=drop_errors)
+    ).gate_decision
     assert drop.classification == "PASS_ACTIVE_SESSION_DROP_M4"
     assert drop.m3_pass is True
     assert drop.m4_keep is False
 
-    degraded = evaluate_gate1(
+    degraded = _evaluate_gate1_series(
         _canonical_evaluation_series(hgb_mae_by_tier=_hgb_errors(m3=(97.0, 97.0, 102.000001)))
     ).gate_decision
     assert degraded.m3_pass is False
     assert degraded.classification == "PASS_SIMPLE_STATE_ONLY"
 
-    exact_m4_boundary = evaluate_gate1(
+    exact_m4_boundary = _evaluate_gate1_series(
         _canonical_evaluation_series(
             hgb_mae_by_tier=_hgb_errors(
                 m1=(105.0, 105.0, 105.0),
@@ -611,7 +646,7 @@ def test_gate_exact_thresholds_and_active_session_classes() -> None:
 def test_gate_directional_ci_and_winning_day_boundaries() -> None:
     touching_pattern = np.zeros(14, dtype=np.float64)
     touching_pattern[:3] = 14.0
-    touching = evaluate_gate1(
+    touching = _evaluate_gate1_series(
         _canonical_evaluation_series(
             m3_daily_delta_by_horizon={
                 15: touching_pattern,
@@ -635,7 +670,7 @@ def test_gate_directional_ci_and_winning_day_boundaries() -> None:
 
     ten_wins = np.full(14, -30.0)
     ten_wins[:10] = 20.0
-    ten_days = evaluate_gate1(
+    ten_days = _evaluate_gate1_series(
         _canonical_evaluation_series(
             m3_daily_delta_by_horizon={
                 15: ten_wins,
@@ -650,7 +685,7 @@ def test_gate_directional_ci_and_winning_day_boundaries() -> None:
 
 
 def test_simple_state_is_sign_only_hgb_near_mean_and_ties_do_not_pass() -> None:
-    simple = evaluate_gate1(
+    simple = _evaluate_gate1_series(
         _canonical_evaluation_series(
             hgb_mae_by_tier=_hgb_errors(
                 m1=(100.0, 100.0, 100.0),
@@ -664,7 +699,7 @@ def test_simple_state_is_sign_only_hgb_near_mean_and_ties_do_not_pass() -> None:
     assert simple.m2_diagnostic_improves is True
     assert simple.classification == "PASS_SIMPLE_STATE_ONLY"
 
-    tied = evaluate_gate1(
+    tied = _evaluate_gate1_series(
         _canonical_evaluation_series(
             hgb_mae_by_tier=_hgb_errors(
                 m1=(100.0, 100.0, 100.0),
@@ -678,7 +713,7 @@ def test_simple_state_is_sign_only_hgb_near_mean_and_ties_do_not_pass() -> None:
     assert tied.m2_diagnostic_improves is False
     assert tied.classification == "FAIL_DIRECTION"
 
-    worse = evaluate_gate1(
+    worse = _evaluate_gate1_series(
         _canonical_evaluation_series(
             hgb_mae_by_tier=_hgb_errors(
                 m1=(99.0, 99.0, 99.0),
@@ -710,7 +745,7 @@ def test_execution_fail_has_precedence_and_nonpositive_parent_fails_closed() -> 
     assert incomplete.blocking_issues == ("INCOMPLETE_GATE_EVIDENCE",)
 
     with pytest.raises(ValueError, match="positive"):
-        evaluate_gate1(
+        _evaluate_gate1_series(
             _canonical_evaluation_series(hgb_mae_by_tier=_hgb_errors(m2=(0.0, 1.0, 1.0)))
         )
 

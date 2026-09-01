@@ -21,7 +21,15 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 
-from evcf.forecasting.acn_jpl_gate1_models import PersistencePrediction, PredictionBundle
+from evcf.forecasting.acn_jpl_gate1_data import Gate1Snapshot, verified_snapshot_provenance
+from evcf.forecasting.acn_jpl_gate1_models import (
+    FormalModelTaskResult,
+    Gate1TimeSplit,
+    PersistencePrediction,
+    PredictionBundle,
+    persistence_predictions,
+    verified_formal_model_task_provenance,
+)
 
 TIMEZONE_NAME = "America/Los_Angeles"
 NOMINAL_208V_KW_PER_AMP = 0.208
@@ -1240,6 +1248,12 @@ def _expected_series_keys() -> tuple[ModelKey, ...]:
 
 
 _EXPECTED_SERIES_KEYS = _expected_series_keys()
+_EXPECTED_LEARNED_TASK_KEYS = tuple(
+    (learner, tier, horizon)
+    for learner in LEARNER_ORDER
+    for tier in TIER_ORDER
+    for horizon in HORIZONS_MINUTES
+)
 _EXPECTED_COMPARISON_KEYS = tuple(
     (learner, parent_tier, child_tier, horizon)
     for learner in LEARNER_ORDER
@@ -1249,8 +1263,7 @@ _EXPECTED_COMPARISON_KEYS = tuple(
 
 
 def _normalize_evaluation_series(
-    records: Sequence[EvaluationSeries | PredictionBundle]
-    | Mapping[Any, EvaluationSeries | PredictionBundle],
+    records: Sequence[EvaluationSeries] | Mapping[Any, EvaluationSeries],
 ) -> tuple[EvaluationSeries, ...]:
     if isinstance(records, Mapping):
         raw_records = tuple(records.values())
@@ -1258,22 +1271,13 @@ def _normalize_evaluation_series(
         raw_records = tuple(records)
     else:
         raise TypeError("formal evaluation input must be a sequence or mapping of model records")
-    normalized: list[EvaluationSeries] = []
-    for record in raw_records:
-        if isinstance(record, EvaluationSeries):
-            normalized.append(record)
-        elif isinstance(record, PredictionBundle):
-            normalized.append(EvaluationSeries.from_prediction_bundle(record))
-        else:
-            raise TypeError(
-                "formal evaluation records must be EvaluationSeries or PredictionBundle objects"
-            )
-    return tuple(normalized)
+    if any(not isinstance(record, EvaluationSeries) for record in raw_records):
+        raise TypeError("internal evaluation records must be EvaluationSeries objects")
+    return tuple(raw_records)
 
 
 def _canonical_series_map(
-    records: Sequence[EvaluationSeries | PredictionBundle]
-    | Mapping[Any, EvaluationSeries | PredictionBundle],
+    records: Sequence[EvaluationSeries] | Mapping[Any, EvaluationSeries],
 ) -> tuple[tuple[EvaluationSeries, ...], Mapping[ModelKey, EvaluationSeries]]:
     normalized = _normalize_evaluation_series(records)
     by_key: dict[ModelKey, EvaluationSeries] = {}
@@ -1427,14 +1431,13 @@ class Gate1EvaluationResult:
             raise TypeError("Gate1EvaluationResult must be created by evaluate_gate1")
 
 
-def evaluate_gate1(
-    evaluation_records: Sequence[EvaluationSeries | PredictionBundle]
-    | Mapping[Any, EvaluationSeries | PredictionBundle],
+def _evaluate_gate1_series(
+    evaluation_records: Sequence[EvaluationSeries] | Mapping[Any, EvaluationSeries],
     *,
     bootstrap_plan: BootstrapPlan | None = None,
     execution_failures: Sequence[ExecutionFailureCode] = (),
 ) -> Gate1EvaluationResult:
-    """Evaluate the sole complete frozen Gate 1 cohort from canonical local records."""
+    """Pure-series evaluator retained only for focused metric tests and rebuild checks."""
 
     failures = _normalize_failure_codes(execution_failures)
     ordered_series, series_map = _canonical_series_map(evaluation_records)
@@ -1472,6 +1475,185 @@ def evaluate_gate1(
         gate_decision=decision,
         execution_failures=failures,
         _seal=_GATE_RESULT_SEAL,
+    )
+
+
+def _canonical_config_sha256(config: Mapping[str, Any]) -> str:
+    try:
+        payload = json.dumps(
+            config,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        ).encode("ascii")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("split config is not finite canonical JSON") from exc
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _snapshot_test_truth(
+    snapshot: Gate1Snapshot,
+    split: Gate1TimeSplit,
+    horizon: int,
+) -> np.ndarray:
+    horizons = np.asarray(snapshot.horizons)
+    labels = np.asarray(snapshot.labels)
+    positions = np.flatnonzero(horizons == horizon)
+    if positions.shape != (1,) or labels.shape != (len(split.issue_times), len(horizons)):
+        raise ValueError("snapshot labels do not contain one aligned column per frozen horizon")
+    truth = labels[split.test_rows, int(positions[0])]
+    if truth.shape != (len(split.test_rows),) or not np.isfinite(truth).all():
+        raise ValueError("snapshot test truth is incomplete or non-finite")
+    return np.asarray(truth, dtype=np.float64)
+
+
+def _verified_learning_series(
+    task_results: Sequence[FormalModelTaskResult],
+    snapshot: Gate1Snapshot,
+    split: Gate1TimeSplit,
+) -> tuple[tuple[EvaluationSeries, ...], Mapping[int, np.ndarray]]:
+    if not isinstance(task_results, Sequence) or isinstance(task_results, (str, bytes)):
+        raise TypeError("formal Gate 1 task_results must be a sequence")
+    results = tuple(task_results)
+    if len(results) != len(_EXPECTED_LEARNED_TASK_KEYS):
+        raise ValueError("formal Gate 1 evaluation requires exactly 40 model task results")
+    if any(type(result) is not FormalModelTaskResult for result in results):
+        raise TypeError("formal Gate 1 learning inputs must be FormalModelTaskResult objects")
+
+    for result in results:
+        try:
+            verified_formal_model_task_provenance(result)
+        except AttributeError as exc:
+            raise ValueError(
+                "formal model task is incomplete or lacks a valid execution seal"
+            ) from exc
+
+    if type(snapshot) is not Gate1Snapshot:
+        raise TypeError("formal Gate 1 snapshot must be an exact Gate1Snapshot")
+    snapshot_sha256 = verified_snapshot_provenance(snapshot)
+    if type(split) is not Gate1TimeSplit:
+        raise TypeError("formal Gate 1 split must be an exact Gate1TimeSplit")
+    split.__post_init__()
+    if not np.array_equal(snapshot.issue_times, split.issue_times):
+        raise ValueError("formal snapshot and split must share the exact issue-time index")
+    canonical_test_times = split.issue_times[split.test_rows]
+    if not np.array_equal(canonical_test_times, _CANONICAL_TEST_ISSUE_TIMES):
+        raise ValueError("formal split differs from the canonical 1,329-row test cohort")
+    split_config = split.config
+    if snapshot.data_snapshot_sha256 != split_config["data_snapshot_sha256"]:
+        raise ValueError("formal snapshot differs from the split's frozen data snapshot")
+    config_sha256 = _canonical_config_sha256(split_config)
+
+    actual_keys: list[tuple[str, str, int]] = []
+    series: list[EvaluationSeries] = []
+    target_sha256_by_horizon: dict[int, str] = {}
+    truth_by_horizon = {
+        horizon: _snapshot_test_truth(snapshot, split, horizon) for horizon in HORIZONS_MINUTES
+    }
+    implementation_sha256: str | None = None
+    for result in results:
+        record = result.selection_record
+        bundle = result.prediction_bundle
+        key = (record.learner, record.tier, record.horizon_minutes)
+        actual_keys.append(key)
+        if (bundle.learner, bundle.tier, bundle.horizon_minutes) != key:
+            raise ValueError("formal selection and prediction task identities differ")
+        if result.snapshot_provenance_sha256 != snapshot_sha256:
+            raise ValueError("formal task snapshot provenance differs from the supplied snapshot")
+        if result.split_provenance_sha256 != split.frozen_provenance_sha256:
+            raise ValueError("formal task split provenance differs from the supplied split")
+        if result.config_sha256 != config_sha256:
+            raise ValueError("formal task config provenance differs from the supplied split")
+        if implementation_sha256 is None:
+            implementation_sha256 = result.implementation_sha256
+        elif result.implementation_sha256 != implementation_sha256:
+            raise ValueError("formal model tasks do not share one implementation provenance")
+        if record.data_snapshot_sha256 != snapshot.data_snapshot_sha256:
+            raise ValueError("formal selection differs from the supplied data snapshot")
+        if not np.array_equal(bundle.issue_times, canonical_test_times):
+            raise ValueError("formal prediction differs from the canonical test-row identity")
+        if not np.array_equal(bundle.y_true, truth_by_horizon[record.horizon_minutes]):
+            raise ValueError("formal prediction truth differs from the snapshot-bound target")
+        previous_target_sha256 = target_sha256_by_horizon.setdefault(
+            record.horizon_minutes, result.target_sha256
+        )
+        if previous_target_sha256 != result.target_sha256:
+            raise ValueError("formal tasks disagree on target provenance within one horizon")
+        series.append(EvaluationSeries.from_prediction_bundle(bundle))
+
+    if tuple(actual_keys) != _EXPECTED_LEARNED_TASK_KEYS:
+        raise ValueError("formal Gate 1 evaluation requires all 40 tasks in canonical order")
+    return tuple(series), MappingProxyType(truth_by_horizon)
+
+
+def _verified_persistence_series(
+    persistence_by_horizon: Mapping[int, Mapping[str, PersistencePrediction]],
+    snapshot: Gate1Snapshot,
+    split: Gate1TimeSplit,
+    truth_by_horizon: Mapping[int, np.ndarray],
+) -> tuple[EvaluationSeries, ...]:
+    if not isinstance(persistence_by_horizon, Mapping):
+        raise TypeError("formal persistence inputs must be a horizon mapping")
+    horizon_items = tuple(persistence_by_horizon.items())
+    if tuple(key for key, _value in horizon_items) != HORIZONS_MINUTES:
+        raise ValueError("formal persistence inputs require all horizons in canonical order")
+
+    by_key: dict[tuple[str, int], EvaluationSeries] = {}
+    for horizon, per_horizon in horizon_items:
+        if not isinstance(per_horizon, Mapping):
+            raise TypeError("each persistence horizon must contain a baseline mapping")
+        baseline_items = tuple(per_horizon.items())
+        if tuple(key for key, _value in baseline_items) != PERSISTENCE_ORDER:
+            raise ValueError("formal persistence inputs require all baselines in canonical order")
+        recomputed = persistence_predictions(snapshot, split.test_rows, horizon_minutes=horizon)
+        for baseline, actual in baseline_items:
+            if type(actual) is not PersistencePrediction:
+                raise TypeError("formal persistence inputs must be PersistencePrediction objects")
+            expected = recomputed[baseline]
+            if actual.name != baseline or actual.horizon_minutes != horizon:
+                raise ValueError("persistence result identity differs from its canonical key")
+            for field_name in ("issue_times", "availability", "reference_times"):
+                if not np.array_equal(getattr(actual, field_name), getattr(expected, field_name)):
+                    raise ValueError(
+                        f"persistence {baseline} {field_name} differs from recomputation"
+                    )
+            if not np.array_equal(actual.predictions, expected.predictions, equal_nan=True):
+                raise ValueError(f"persistence {baseline} predictions differ from recomputation")
+            by_key[(baseline, horizon)] = EvaluationSeries.from_persistence_prediction(
+                actual,
+                y_true=truth_by_horizon[horizon],
+                day_start_utc_s=_CANONICAL_TEST_DAY_STARTS,
+            )
+    return tuple(
+        by_key[(baseline, horizon)]
+        for baseline in PERSISTENCE_ORDER
+        for horizon in HORIZONS_MINUTES
+    )
+
+
+def evaluate_gate1(
+    *,
+    task_results: Sequence[FormalModelTaskResult],
+    persistence_by_horizon: Mapping[int, Mapping[str, PersistencePrediction]],
+    snapshot: Gate1Snapshot,
+    split: Gate1TimeSplit,
+    bootstrap_plan: BootstrapPlan | None = None,
+    execution_failures: Sequence[ExecutionFailureCode] = (),
+) -> Gate1EvaluationResult:
+    """Evaluate Gate 1 only from sealed formal tasks and recomputable persistence."""
+
+    learned, truth_by_horizon = _verified_learning_series(task_results, snapshot, split)
+    persistence = _verified_persistence_series(
+        persistence_by_horizon,
+        snapshot,
+        split,
+        truth_by_horizon,
+    )
+    return _evaluate_gate1_series(
+        learned + persistence,
+        bootstrap_plan=bootstrap_plan,
+        execution_failures=execution_failures,
     )
 
 
@@ -1514,7 +1696,7 @@ def _result_validation_payload(result: Gate1EvaluationResult) -> dict[str, Any]:
 def _verified_same_source_result(result: Gate1EvaluationResult) -> Gate1EvaluationResult:
     try:
         submitted = _result_validation_payload(result)
-        regenerated = evaluate_gate1(
+        regenerated = _evaluate_gate1_series(
             result.evaluation_series,
             bootstrap_plan=result.bootstrap_plan,
             execution_failures=result.execution_failures,

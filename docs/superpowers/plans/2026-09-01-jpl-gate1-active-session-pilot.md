@@ -247,6 +247,6 @@ git diff --check
 ```
 
 - [x] **Step 2: Audit tracked paths, public privacy, file sizes, SHA256SUMS, ignored predictions/data/models, original worktree state, and branch**
-- [ ] **Step 3: Push only `experiments/gate1-active-session-pilot` and create the requested PR against `main`**
-- [ ] **Step 4: Wait for Python 3.11 CI; do not merge**
-- [ ] **Step 5: Report the exact frozen final classification and stop without seasonal acquisition, probability models, GPU work, or scheduling**
+- [x] **Step 3: Push only `experiments/gate1-active-session-pilot` and create the requested PR against `main`**
+- [x] **Step 4: Wait for Python 3.11 CI; do not merge**
+- [x] **Step 5: Report the exact frozen final classification and stop without seasonal acquisition, probability models, GPU work, or scheduling**

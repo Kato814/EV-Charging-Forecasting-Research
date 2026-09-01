@@ -22,6 +22,7 @@ from evcf.forecasting.acn_jpl_gate1_features import (
     encode_m1,
     encode_m2,
     encode_m3,
+    encode_m4,
     feature_encoding_manifest,
     fixed_pool,
 )
@@ -355,6 +356,28 @@ def test_m4_next_sample_caps_hold_and_single_point_slope_is_missing() -> None:
     assert np.isnan(singleton[4])
 
 
+def test_m4_weighted_population_std_is_numerically_stable() -> None:
+    constant = causal_session_trajectory_statistics(
+        _series(
+            1,
+            current_times=[700, 705, 712],
+            current_values=[14.2102464, 14.2102464, 14.2102464],
+        ),
+        1_000,
+    )[0]
+    assert constant[3] == pytest.approx(0.0, abs=1e-12)
+
+    large_offset = causal_session_trajectory_statistics(
+        _series(
+            1,
+            current_times=[700, 712],
+            current_values=[100_000_000.0, 100_000_001.0],
+        ),
+        1_000,
+    )[0]
+    assert large_offset[3] == pytest.approx(0.5, abs=1e-12)
+
+
 @pytest.mark.parametrize(("window_position", "window_minutes"), tuple(enumerate((5, 15, 30, 60))))
 def test_m4_all_frozen_window_boundaries(window_position: int, window_minutes: int) -> None:
     issue = 10_000
@@ -485,6 +508,61 @@ def test_m4_legacy_active_reference_audit_is_exact_and_threshold_is_strict() -> 
         second.encode(wrong)
 
 
+def test_m4_cached_encoding_reaudits_connected_set_and_snapshot_provenance() -> None:
+    snapshot = _snapshot()
+    accumulator = M4FeatureAccumulator(issue_count=3)
+    _consume_snapshot(accumulator, snapshot)
+    first = accumulator.encode(snapshot)
+    np.testing.assert_allclose(accumulator.encode(snapshot), first, equal_nan=True)
+
+    reduced_groups = (
+        snapshot.m3_by_issue_time[0],
+        snapshot.m3_by_issue_time[1][:-1],
+        snapshot.m3_by_issue_time[2],
+    )
+    reduced = replace(
+        snapshot,
+        m3_by_issue_time=reduced_groups,
+        m3_rows=tuple(row for group in reduced_groups for row in group),
+    )
+    with pytest.raises(ValueError, match="connected"):
+        accumulator.encode(reduced)
+
+    second = M4FeatureAccumulator(issue_count=3)
+    _consume_snapshot(second, snapshot)
+    second.encode(snapshot)
+    with pytest.raises(ValueError, match="provenance"):
+        second.encode(replace(snapshot, data_snapshot_sha256="b" * 64))
+
+
+def _changed_block(block: FeatureBlock, *, column: int = 0) -> FeatureBlock:
+    values = block.values.copy()
+    values[0, column] += 1.0
+    return FeatureBlock(block.issue_times, values, block.feature_names, block.nullable_mask)
+
+
+def test_custom_parent_blocks_cannot_bypass_snapshot_source_contracts() -> None:
+    snapshot = _snapshot()
+    m1 = encode_m1(snapshot)
+    with pytest.raises(ValueError, match="M1"):
+        encode_m2(snapshot, _changed_block(m1))
+
+    m2 = encode_m2(snapshot, validate_against_m3=True)
+    with pytest.raises(ValueError, match="M2"):
+        encode_m3(snapshot, _changed_block(m2))
+
+    drifted_state = snapshot.m2_current_state.copy()
+    drifted_state[1, 1] = 2.0
+    with pytest.raises(ValueError, match="active"):
+        encode_m3(replace(snapshot, m2_current_state=drifted_state), m2)
+
+    m3 = encode_m3(snapshot, m2)
+    accumulator = M4FeatureAccumulator(issue_count=3)
+    _consume_snapshot(accumulator, snapshot)
+    with pytest.raises(ValueError, match="M3"):
+        encode_m4(snapshot, accumulator, _changed_block(m3))
+
+
 def test_manifest_is_json_safe_path_free_and_records_all_dimensions() -> None:
     snapshot = _snapshot()
     accumulator = M4FeatureAccumulator(issue_count=3)
@@ -612,6 +690,63 @@ def test_manifest_freezes_pooling_trajectory_ordering_and_privacy_semantics() ->
     }
     assert "current_nonzero_fraction" in manifest["m4_session_statistic_order"]
     assert not any("gt_0_1a" in item["name"] for item in manifest["tiers"]["M4"]["features"])
+
+
+def test_manifest_rejects_fake_schema_index_mask_and_nonprefix_blocks() -> None:
+    snapshot = _snapshot()
+    accumulator = M4FeatureAccumulator(issue_count=3)
+    _consume_snapshot(accumulator, snapshot)
+    canonical = dict(build_feature_blocks(snapshot, accumulator))
+
+    m1 = canonical["M1"]
+    extra_values = np.column_stack((m1.values, np.zeros(len(m1.issue_times))))
+    extra = FeatureBlock(
+        m1.issue_times,
+        extra_values,
+        m1.feature_names + ("fake_column",),
+        np.append(m1.nullable_mask, False),
+    )
+    bad_width = dict(canonical)
+    bad_width["M1"] = extra
+
+    m2 = canonical["M2"]
+    swapped_names = list(m2.feature_names)
+    swapped_names[-1], swapped_names[-2] = swapped_names[-2], swapped_names[-1]
+    bad_order = dict(canonical)
+    bad_order["M2"] = FeatureBlock(
+        m2.issue_times, m2.values, tuple(swapped_names), m2.nullable_mask
+    )
+
+    wrong_mask = m2.nullable_mask.copy()
+    wrong_mask[-1] = False
+    bad_mask = dict(canonical)
+    bad_mask["M2"] = FeatureBlock(m2.issue_times, m2.values, m2.feature_names, wrong_mask)
+
+    m3 = canonical["M3"]
+    bad_index = dict(canonical)
+    bad_index["M3"] = FeatureBlock(
+        m3.issue_times + 1, m3.values, m3.feature_names, m3.nullable_mask
+    )
+
+    bad_prefix = dict(canonical)
+    bad_prefix["M4"] = _changed_block(canonical["M4"])
+
+    wrong_tier_order = {
+        "M2": canonical["M2"],
+        "M1": canonical["M1"],
+        "M3": canonical["M3"],
+        "M4": canonical["M4"],
+    }
+    for malformed in (
+        bad_width,
+        bad_order,
+        bad_mask,
+        bad_index,
+        bad_prefix,
+        wrong_tier_order,
+    ):
+        with pytest.raises(ValueError):
+            feature_encoding_manifest(malformed)
 
 
 def test_real_jpl_feature_encoding_is_complete_when_present() -> None:

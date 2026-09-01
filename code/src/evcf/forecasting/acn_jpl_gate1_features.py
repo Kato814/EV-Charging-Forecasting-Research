@@ -12,6 +12,7 @@ import hashlib
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from itertools import pairwise
 from numbers import Integral, Real
 from types import MappingProxyType
 from typing import Any
@@ -80,6 +81,52 @@ _M3_RAW_DIMENSION = 311
 _M4_RAW_DIMENSION = 671
 _HOLD_CAP_SECONDS = 12
 _ACTIVE_THRESHOLD_A = 0.1
+
+_M1_FEATURE_NAMES = (
+    tuple(f"history_station_current_mean_a_lag_{lag:03d}" for lag in range(96, 0, -1))
+    + tuple(f"history_observed_mask_lag_{lag:03d}" for lag in range(96, 0, -1))
+    + ("quarter_hour_index", "day_of_week", "is_weekend")
+)
+_M2_FEATURE_NAMES = _M1_FEATURE_NAMES + M2_STATE_FEATURE_NAMES
+_M3_FEATURE_NAMES = _M2_FEATURE_NAMES + tuple(
+    f"m3_{field}_{stat}" for field in M3_SESSION_FIELDS for stat in FIXED_POOL_STAT_NAMES
+)
+_M4_FEATURE_NAMES = _M3_FEATURE_NAMES + tuple(
+    f"m4_window_{window:02d}m_{stat}_{pool}"
+    for window in M4_WINDOWS_MINUTES
+    for stat in M4_SESSION_STAT_NAMES
+    for pool in FIXED_POOL_STAT_NAMES
+)
+_EXPECTED_FEATURE_NAMES: Mapping[str, tuple[str, ...]] = MappingProxyType(
+    {
+        "M1": _M1_FEATURE_NAMES,
+        "M2": _M2_FEATURE_NAMES,
+        "M3": _M3_FEATURE_NAMES,
+        "M4": _M4_FEATURE_NAMES,
+    }
+)
+_M1_NULLABLE_MASK = (False,) * _M1_RAW_DIMENSION
+_M2_NULLABLE_MASK = _M1_NULLABLE_MASK + tuple(bool(value) for value in _M2_NULLABLE)
+_M3_NULLABLE_MASK = _M2_NULLABLE_MASK + tuple(
+    bool(value) for value in np.tile(_POOL_NULLABLE, len(M3_SESSION_FIELDS))
+)
+_M4_NULLABLE_MASK = _M3_NULLABLE_MASK + tuple(bool(value) for value in np.tile(_POOL_NULLABLE, 36))
+_EXPECTED_NULLABLE_MASKS: Mapping[str, tuple[bool, ...]] = MappingProxyType(
+    {
+        "M1": _M1_NULLABLE_MASK,
+        "M2": _M2_NULLABLE_MASK,
+        "M3": _M3_NULLABLE_MASK,
+        "M4": _M4_NULLABLE_MASK,
+    }
+)
+_EXPECTED_RAW_DIMENSIONS: Mapping[str, int] = MappingProxyType(
+    {
+        "M1": _M1_RAW_DIMENSION,
+        "M2": _M2_RAW_DIMENSION,
+        "M3": _M3_RAW_DIMENSION,
+        "M4": _M4_RAW_DIMENSION,
+    }
+)
 
 
 def _immutable(array: np.ndarray, *, dtype: np.dtype[Any] | None = None) -> np.ndarray:
@@ -214,6 +261,23 @@ def _require_prefix(parent: FeatureBlock, child_times: np.ndarray, width: int) -
         raise ValueError("feature block indexes do not match the canonical index")
 
 
+def _require_exact_block(
+    candidate: FeatureBlock,
+    expected: FeatureBlock,
+    context: str,
+) -> None:
+    if not isinstance(candidate, FeatureBlock):
+        raise TypeError(f"{context} parent must be a FeatureBlock")
+    if not np.array_equal(candidate.issue_times, expected.issue_times):
+        raise ValueError(f"{context} parent index differs from the snapshot source")
+    if candidate.feature_names != expected.feature_names:
+        raise ValueError(f"{context} parent feature names differ from the snapshot source")
+    if not np.array_equal(candidate.nullable_mask, expected.nullable_mask):
+        raise ValueError(f"{context} parent nullable mask differs from the snapshot source")
+    if not np.array_equal(candidate.values, expected.values, equal_nan=True):
+        raise ValueError(f"{context} parent values differ from the snapshot source")
+
+
 def encode_m1(snapshot: Gate1Snapshot) -> FeatureBlock:
     """Encode 96 oldest-to-newest history values, masks, and calendar fields."""
 
@@ -240,17 +304,17 @@ def encode_m1(snapshot: Gate1Snapshot) -> FeatureBlock:
         raise ValueError("is_weekend must be zero or one")
     if not np.array_equal(calendar[:, 2].astype(np.bool_), calendar[:, 1] >= 5):
         raise ValueError("is_weekend must agree with day_of_week")
-    names = (
-        tuple(f"history_station_current_mean_a_lag_{lag:03d}" for lag in range(96, 0, -1))
-        + tuple(f"history_observed_mask_lag_{lag:03d}" for lag in range(96, 0, -1))
-        + ("quarter_hour_index", "day_of_week", "is_weekend")
-    )
     values = np.concatenate(
         (history.astype(np.float64), mask.astype(np.float64), calendar.astype(np.float64)), axis=1
     )
     if values.shape[1] != _M1_RAW_DIMENSION:
         raise AssertionError("internal M1 dimension drift")
-    return FeatureBlock(times, values, names, np.zeros(_M1_RAW_DIMENSION, dtype=np.bool_))
+    return FeatureBlock(
+        times,
+        values,
+        _M1_FEATURE_NAMES,
+        np.asarray(_M1_NULLABLE_MASK, dtype=np.bool_),
+    )
 
 
 def _validate_m2_against_m3(snapshot: Gate1Snapshot, state: np.ndarray) -> None:
@@ -303,7 +367,10 @@ def encode_m2(
 ) -> FeatureBlock:
     """Append the six frozen aggregate state columns to M1."""
 
-    base = encode_m1(snapshot) if m1 is None else m1
+    canonical_m1 = encode_m1(snapshot)
+    if m1 is not None:
+        _require_exact_block(m1, canonical_m1, "M1")
+    base = canonical_m1 if m1 is None else m1
     times = _validate_issue_times(snapshot.issue_times, "M2")
     _require_prefix(base, times, _M1_RAW_DIMENSION)
     state = np.asarray(snapshot.m2_current_state)
@@ -329,12 +396,11 @@ def encode_m2(
     if validate_against_m3:
         _validate_m2_against_m3(snapshot, state.astype(np.float64))
     values = np.concatenate((base.values, state.astype(np.float64)), axis=1)
-    nullable = np.concatenate((base.nullable_mask, _M2_NULLABLE))
     return FeatureBlock(
         times,
         values,
-        base.feature_names + M2_STATE_FEATURE_NAMES,
-        nullable,
+        _M2_FEATURE_NAMES,
+        np.asarray(_M2_NULLABLE_MASK, dtype=np.bool_),
     )
 
 
@@ -344,7 +410,10 @@ def encode_m3(
 ) -> FeatureBlock:
     """Pool the eleven frozen online fields over every connected session."""
 
-    base = encode_m2(snapshot, validate_against_m3=True) if m2 is None else m2
+    canonical_m2 = encode_m2(snapshot, validate_against_m3=True)
+    if m2 is not None:
+        _require_exact_block(m2, canonical_m2, "M2")
+    base = canonical_m2 if m2 is None else m2
     times = _validate_issue_times(snapshot.issue_times, "M3")
     _require_prefix(base, times, _M2_RAW_DIMENSION)
     groups = snapshot.m3_by_issue_time
@@ -366,18 +435,14 @@ def encode_m3(
             values = [row[field] for row in rows]
             start = field_position * 10
             extension[position, start : start + 10] = fixed_pool(values, total_count=len(rows))
-    names = tuple(
-        f"m3_{field}_{stat}" for field in M3_SESSION_FIELDS for stat in FIXED_POOL_STAT_NAMES
-    )
-    nullable_extension = np.tile(_POOL_NULLABLE, len(M3_SESSION_FIELDS))
     values = np.concatenate((base.values, extension), axis=1)
     if values.shape[1] != _M3_RAW_DIMENSION:
         raise AssertionError("internal M3 dimension drift")
     return FeatureBlock(
         times,
         values,
-        base.feature_names + names,
-        np.concatenate((base.nullable_mask, nullable_extension)),
+        _M3_FEATURE_NAMES,
+        np.asarray(_M3_NULLABLE_MASK, dtype=np.bool_),
     )
 
 
@@ -499,7 +564,7 @@ def _causal_session_multiwindow_statistics(
         covered = float(np.sum(durations))
         if covered:
             mean = float(np.sum(durations * values) / covered)
-            variance = float(np.sum(durations * np.square(values)) / covered - mean * mean)
+            variance = float(np.sum(durations * np.square(values - mean)) / covered)
             variance = max(variance, 0.0)
             current_starts, current_ends, current_raw_values = current
             overlaps = (
@@ -574,6 +639,7 @@ class M4FeatureAccumulator:
         self._peak_temporary_session_count = 0
         self._sealed = False
         self._encoded: np.ndarray | None = None
+        self._snapshot_provenance: tuple[str, tuple[tuple[str, str], ...]] | None = None
 
     @property
     def computed_pair_count(self) -> int:
@@ -677,13 +743,24 @@ class M4FeatureAccumulator:
                     "legacy active-only M4 references do not equal the strict >0.1 A M3 subset"
                 )
 
-    def encode(self, snapshot: Gate1Snapshot) -> np.ndarray:
-        """Seal, audit against the returned snapshot, and return the 360 columns."""
+    @staticmethod
+    def _provenance(
+        snapshot: Gate1Snapshot,
+    ) -> tuple[str, tuple[tuple[str, str], ...]]:
+        data_snapshot = snapshot.data_snapshot_sha256
+        if not isinstance(data_snapshot, str) or not data_snapshot:
+            raise ValueError("M4 snapshot provenance is invalid")
+        artifacts: list[tuple[str, str]] = []
+        for name, digest in snapshot.artifact_sha256.items():
+            if not isinstance(name, str) or not isinstance(digest, str):
+                raise TypeError("M4 artifact provenance is invalid")
+            artifacts.append((name, digest))
+        return data_snapshot, tuple(sorted(artifacts))
 
-        if self._encoded is not None:
-            return self._encoded
-        self._finalize_group()
-        self._sealed = True
+    def _audit_snapshot(self, snapshot: Gate1Snapshot) -> None:
+        provenance = self._provenance(snapshot)
+        if self._snapshot_provenance is not None and provenance != self._snapshot_provenance:
+            raise ValueError("M4 accumulator snapshot provenance differs from its first encoding")
         times = _validate_issue_times(snapshot.issue_times, "M4")
         if len(times) != self._issue_count or len(snapshot.m3_by_issue_time) != len(times):
             raise ValueError("M4 accumulator row universe does not match the snapshot")
@@ -714,8 +791,19 @@ class M4FeatureAccumulator:
         if self._computed_pair_count != expected_pairs:
             raise ValueError("M4 consumer pair count does not match M3")
         self._validate_legacy_active_refs(snapshot)
-        self._encoded = _immutable(self._values)
-        self._values = np.empty((0, 0), dtype=np.float64)
+        if self._snapshot_provenance is None:
+            self._snapshot_provenance = provenance
+
+    def encode(self, snapshot: Gate1Snapshot) -> np.ndarray:
+        """Seal, audit against the returned snapshot, and return the 360 columns."""
+
+        if self._encoded is None:
+            self._finalize_group()
+            self._sealed = True
+        self._audit_snapshot(snapshot)
+        if self._encoded is None:
+            self._encoded = _immutable(self._values)
+            self._values = np.empty((0, 0), dtype=np.float64)
         return self._encoded
 
 
@@ -728,27 +816,23 @@ def encode_m4(
 
     if not isinstance(accumulator, M4FeatureAccumulator):
         raise TypeError("M4 encoding requires an M4FeatureAccumulator")
-    base = encode_m3(snapshot) if m3 is None else m3
+    canonical_m3 = encode_m3(snapshot)
+    if m3 is not None:
+        _require_exact_block(m3, canonical_m3, "M3")
+    base = canonical_m3 if m3 is None else m3
     times = _validate_issue_times(snapshot.issue_times, "M4")
     _require_prefix(base, times, _M3_RAW_DIMENSION)
     extension = accumulator.encode(snapshot)
     if extension.shape != (len(times), 360):
         raise ValueError("M4 accumulator extension must have width 360")
-    names = tuple(
-        f"m4_window_{window:02d}m_{stat}_{pool}"
-        for window in M4_WINDOWS_MINUTES
-        for stat in M4_SESSION_STAT_NAMES
-        for pool in FIXED_POOL_STAT_NAMES
-    )
     values = np.concatenate((base.values, extension), axis=1)
-    nullable_extension = np.tile(_POOL_NULLABLE, 36)
     if values.shape[1] != _M4_RAW_DIMENSION:
         raise AssertionError("internal M4 dimension drift")
     return FeatureBlock(
         times,
         values,
-        base.feature_names + names,
-        np.concatenate((base.nullable_mask, nullable_extension)),
+        _M4_FEATURE_NAMES,
+        np.asarray(_M4_NULLABLE_MASK, dtype=np.bool_),
     )
 
 
@@ -845,13 +929,45 @@ def _feature_description(name: str) -> tuple[str, str]:
     raise ValueError(f"feature metadata is missing for {name}")
 
 
+def _validate_feature_blocks(blocks: Mapping[str, FeatureBlock]) -> None:
+    tier_order = ("M1", "M2", "M3", "M4")
+    if tuple(blocks) != tier_order:
+        raise ValueError("feature blocks must use the declared M1 through M4 order")
+    canonical_times: np.ndarray | None = None
+    for tier in tier_order:
+        block = blocks[tier]
+        if not isinstance(block, FeatureBlock):
+            raise TypeError(f"{tier} must be a FeatureBlock")
+        expected_dimension = _EXPECTED_RAW_DIMENSIONS[tier]
+        if block.values.shape[1] != expected_dimension:
+            raise ValueError(f"{tier} raw dimension differs from the frozen contract")
+        if block.feature_names != _EXPECTED_FEATURE_NAMES[tier]:
+            raise ValueError(f"{tier} feature names or order differ from the frozen contract")
+        expected_nullable = np.asarray(_EXPECTED_NULLABLE_MASKS[tier], dtype=np.bool_)
+        if not np.array_equal(block.nullable_mask, expected_nullable):
+            raise ValueError(f"{tier} nullable mask differs from the frozen contract")
+        if canonical_times is None:
+            canonical_times = block.issue_times
+        elif not np.array_equal(block.issue_times, canonical_times):
+            raise ValueError("feature tier indexes do not share one ordered canonical index")
+    for parent_tier, child_tier in pairwise(tier_order):
+        parent = blocks[parent_tier]
+        child = blocks[child_tier]
+        width = parent.values.shape[1]
+        if child.feature_names[:width] != parent.feature_names:
+            raise ValueError(f"{child_tier} feature-name prefix differs from {parent_tier}")
+        if not np.array_equal(child.nullable_mask[:width], parent.nullable_mask):
+            raise ValueError(f"{child_tier} nullable prefix differs from {parent_tier}")
+        if not np.array_equal(child.values[:, :width], parent.values, equal_nan=True):
+            raise ValueError(f"{child_tier} value prefix differs from {parent_tier}")
+
+
 def feature_encoding_manifest(
     blocks: Mapping[str, FeatureBlock],
 ) -> dict[str, Any]:
     """Return a JSON-safe, path-free declaration of feature order and dimensions."""
 
-    if tuple(blocks) != ("M1", "M2", "M3", "M4"):
-        raise ValueError("feature blocks must use the declared M1 through M4 order")
+    _validate_feature_blocks(blocks)
     tiers: dict[str, Any] = {}
     for tier, block in blocks.items():
         features: list[dict[str, Any]] = []

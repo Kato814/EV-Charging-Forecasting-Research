@@ -446,6 +446,81 @@ def test_daily_manifest_hash_json_and_remote_mismatches_fail(
     assert "2019-05-02" in failed_csv
 
 
+@pytest.mark.parametrize(
+    ("field", "tampered_value"),
+    [
+        ("source", None),
+        ("source", "untrusted mirror"),
+        ("dataset_id", "D9999"),
+        ("output_file", "forged.jsonl.gz"),
+        ("downloaded_at_utc", None),
+        ("downloaded_at_utc", "2026-01-01T00:00:00"),
+        ("downloaded_at_utc", "2026-01-01T08:00:00+08:00"),
+        ("downloaded_at_utc", "not-a-timestamp"),
+        ("downloaded_at_utc", True),
+    ],
+)
+def test_daily_provenance_manifest_mismatch_fails_full_qa(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    tampered_value: object,
+) -> None:
+    metadata_root, raw_root, output_root, acquisition = _pass_layout(tmp_path, monkeypatch)
+    _, manifest_path, _ = _read_day_records(raw_root, "2019-05-02")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if tampered_value is None:
+        manifest.pop(field)
+    else:
+        manifest[field] = tampered_value
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = _run_qa(metadata_root, raw_root, output_root, acquisition)
+
+    assert result.gate_status == "FAIL"
+    assert result.qa["integrity"]["daily_chunks"]["valid"] == 30
+
+
+@pytest.mark.parametrize(
+    ("field", "tampered_value"),
+    [
+        ("source", None),
+        ("source", "untrusted mirror"),
+        ("dataset_id", "D9999"),
+        ("output_file", "forged.jsonl.gz"),
+        ("timezone", "UTC"),
+        ("local_start_inclusive", "2019-04-30T17:31:00-07:00"),
+        ("local_end_exclusive", "2019-05-01T00:01:00-07:00"),
+        ("utc_start_inclusive", "2019-05-01T00:31:00+00:00"),
+        ("utc_end_exclusive", "2019-05-01T07:01:00+00:00"),
+        ("downloaded_at_utc", None),
+        ("downloaded_at_utc", "2026-01-01T00:00:00"),
+        ("downloaded_at_utc", "2026-01-01T08:00:00+08:00"),
+        ("downloaded_at_utc", "not-a-timestamp"),
+        ("downloaded_at_utc", True),
+    ],
+)
+def test_carry_in_manifest_contract_mismatch_fails_full_qa(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    tampered_value: object,
+) -> None:
+    metadata_root, raw_root, output_root, acquisition = _pass_layout(tmp_path, monkeypatch)
+    manifest_path = raw_root / "manifests" / "carry_in" / "carry_in.manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if tampered_value is None:
+        manifest.pop(field)
+    else:
+        manifest[field] = tampered_value
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = _run_qa(metadata_root, raw_root, output_root, acquisition)
+
+    assert result.gate_status == "FAIL"
+    assert result.qa["integrity"]["carry_in"]["status"] == "FAIL"
+
+
 @pytest.mark.parametrize("field", ["chargingCurrent", "pilotSignal"])
 def test_invalid_container_rate_above_limit_fails_gate(
     tmp_path: Path,

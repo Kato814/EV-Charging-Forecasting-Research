@@ -32,13 +32,20 @@ from .acn_jpl_full_month_ts import (
     EXPECTED_CARRY_IN_SESSION_COUNT,
     EXPECTED_UTC_MONTH_SESSION_COUNT,
     FullMonthMetadataError,
+    _carry_in_manifest_context,
     _carry_in_paths,
-    _carry_in_query,
     _load_metadata_scope,
     _PrivateMetadataScope,
     _PrivateSession,
 )
-from .acn_jpl_gate0 import JPL_TIMEZONE, chunk_paths, jpl_analysis_windows
+from .acn_jpl_gate0 import (
+    ACN_OFFICIAL_SOURCE,
+    JPL_DAILY_DATASET_ID,
+    JPL_TIMEZONE,
+    chunk_paths,
+    is_valid_utc_timestamp,
+    jpl_analysis_windows,
+)
 
 EXPECTED_TOTAL_SESSION_COUNT = EXPECTED_ANALYSIS_SESSION_COUNT + EXPECTED_CARRY_IN_SESSION_COUNT
 INVALID_CHARGING_CURRENT_RATE_LIMIT = 0.10
@@ -563,6 +570,8 @@ def _scan_daily_chunk(raw_root: Path, window: Any) -> _ChunkScan:
     )
     expected_context = {
         "schema_version": "acn-jpl-daily-chunk/v1",
+        "dataset_id": JPL_DAILY_DATASET_ID,
+        "source": ACN_OFFICIAL_SOURCE,
         "site": "jpl",
         "timezone": JPL_TIMEZONE,
         "local_start_inclusive": window.local_start.isoformat(),
@@ -571,6 +580,7 @@ def _scan_daily_chunk(raw_root: Path, window: Any) -> _ChunkScan:
         "utc_end_exclusive": window.utc_end.isoformat(),
         "query_condition": expected_query.condition,
         "endpoint": expected_query.endpoint,
+        "output_file": data_path.name,
     }
     manifest_record_count = manifest.get("record_count") if manifest is not None else None
     remote_total = manifest.get("remote_total_reported") if manifest is not None else None
@@ -579,6 +589,7 @@ def _scan_daily_chunk(raw_root: Path, window: Any) -> _ChunkScan:
         and all(manifest.get(key) == value for key, value in expected_context.items())
         and manifest.get("complete_for_query") is True
         and manifest.get("token_stored") is False
+        and is_valid_utc_timestamp(manifest.get("downloaded_at_utc"))
         and _is_nonnegative_int(manifest_record_count)
         and _is_nonnegative_int(remote_total)
     )
@@ -685,15 +696,7 @@ def _scan_carry_in(
 
     expected_context: dict[str, Any] = {}
     if expected is not None:
-        query = _carry_in_query(expected)
-        expected_context = {
-            "schema_version": "acn-jpl-full-month-carry-in/v1",
-            "endpoint": query.endpoint,
-            "site": "jpl",
-            "_id": expected.object_id,
-            "sessionID": expected.session_id,
-            "query_condition": query.condition,
-        }
+        expected_context = _carry_in_manifest_context(expected, output_file=data_path.name)
     manifest_count = manifest.get("record_count") if manifest is not None else None
     remote_total = manifest.get("remote_total_reported") if manifest is not None else None
     contract_valid = bool(
@@ -702,6 +705,7 @@ def _scan_carry_in(
         and all(manifest.get(key) == value for key, value in expected_context.items())
         and manifest.get("complete_for_query") is True
         and manifest.get("token_stored") is False
+        and is_valid_utc_timestamp(manifest.get("downloaded_at_utc"))
         and _is_nonnegative_int(manifest_count)
         and manifest_count == 1
         and _is_nonnegative_int(remote_total)

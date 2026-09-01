@@ -18,19 +18,23 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
 import requests
 
 from .acn_api import ACNClient, ACNDataError, ACNQuery, ACNSchemaError
 from .acn_audit import parse_acn_datetime
 from .acn_jpl_gate0 import (
+    ACN_OFFICIAL_SOURCE,
     JPL_ANALYSIS_END,
     JPL_ANALYSIS_START,
+    JPL_TIMEZONE,
     IncompleteChunkError,
     LocalDayWindow,
     _ChunkIdentityInventory,
     _PrivateChunkIdentityCapture,
     chunk_paths,
+    is_valid_utc_timestamp,
     jpl_analysis_windows,
     run_daily_chunks,
     validate_chunk,
@@ -44,6 +48,7 @@ EXPECTED_CARRY_IN_SESSION_COUNT = 1
 EXPECTED_COMPLETE_METADATA_INVENTORY_DIGEST = (
     "bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a"
 )
+FULL_MONTH_DATASET_ID = "D0001-jpl-2019-05-full-ts"
 
 _UTC_MONTH_START = datetime(2019, 5, 1, tzinfo=timezone.utc)
 _UTC_MONTH_END = datetime(2019, 6, 1, tzinfo=timezone.utc)
@@ -356,6 +361,31 @@ def _carry_in_query(session: _PrivateSession) -> ACNQuery:
     )
 
 
+def _carry_in_manifest_context(
+    session: _PrivateSession,
+    *,
+    output_file: str,
+) -> dict[str, Any]:
+    query = _carry_in_query(session)
+    local_zone = ZoneInfo(JPL_TIMEZONE)
+    return {
+        "schema_version": "acn-jpl-full-month-carry-in/v1",
+        "dataset_id": FULL_MONTH_DATASET_ID,
+        "source": ACN_OFFICIAL_SOURCE,
+        "endpoint": query.endpoint,
+        "site": "jpl",
+        "timezone": JPL_TIMEZONE,
+        "local_start_inclusive": query.start_utc.astimezone(local_zone).isoformat(),
+        "local_end_exclusive": query.end_utc.astimezone(local_zone).isoformat(),
+        "utc_start_inclusive": query.start_utc.isoformat(),
+        "utc_end_exclusive": query.end_utc.isoformat(),
+        "_id": session.object_id,
+        "sessionID": session.session_id,
+        "query_condition": query.condition,
+        "output_file": output_file,
+    }
+
+
 def _read_single_gzip_record(path: Path) -> tuple[int, tuple[str, str] | None]:
     count = 0
     pair: tuple[str, str] | None = None
@@ -390,15 +420,7 @@ def _validated_carry_in(
         ACNSchemaError,
     ):
         return None
-    query = _carry_in_query(session)
-    expected = {
-        "schema_version": "acn-jpl-full-month-carry-in/v1",
-        "endpoint": query.endpoint,
-        "site": "jpl",
-        "_id": session.object_id,
-        "sessionID": session.session_id,
-        "query_condition": query.condition,
-    }
+    expected = _carry_in_manifest_context(session, output_file=data_path.name)
     if not isinstance(manifest, dict) or any(
         manifest.get(key) != value for key, value in expected.items()
     ):
@@ -412,6 +434,7 @@ def _validated_carry_in(
         or manifest.get("remote_total_reported") != 1
         or manifest.get("complete_for_query") is not True
         or manifest.get("token_stored") is not False
+        or not is_valid_utc_timestamp(manifest.get("downloaded_at_utc"))
     ):
         return None
     if manifest.get("sha256") != _sha256_file(data_path):
@@ -503,21 +526,13 @@ def _download_carry_in(
         raise
 
     manifest = {
-        "schema_version": "acn-jpl-full-month-carry-in/v1",
-        "dataset_id": "D0001-jpl-2019-05-full-ts",
-        "source": "ACN-Data official REST API",
-        "endpoint": query.endpoint,
-        "site": "jpl",
-        "_id": session.object_id,
-        "sessionID": session.session_id,
-        "query_condition": query.condition,
+        **_carry_in_manifest_context(session, output_file=data_path.name),
         "record_count": record_count,
         "remote_total_reported": remote_total_reported,
         "complete_for_query": True,
         "downloaded_at_utc": downloaded_at_utc.astimezone(timezone.utc).isoformat(),
         "sha256": digest,
         "token_stored": False,
-        "output_file": data_path.name,
     }
     _atomic_write_json(manifest_path, manifest)
     return _CarryInTransfer(

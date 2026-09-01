@@ -20,6 +20,8 @@ from .acn_api import ACNClient, ACNDataError, ACNQuery, ACNSchemaError
 from .acn_audit import parse_acn_datetime
 
 JPL_TIMEZONE = "America/Los_Angeles"
+ACN_OFFICIAL_SOURCE = "ACN-Data official REST API"
+JPL_DAILY_DATASET_ID = "D0001"
 _JPL_ZONE = ZoneInfo(JPL_TIMEZONE)
 JPL_ACQUISITION_START = datetime.combine(date(2019, 4, 24), time.min, _JPL_ZONE)
 JPL_ACQUISITION_END = datetime.combine(date(2019, 6, 1), time.min, _JPL_ZONE)
@@ -278,6 +280,25 @@ def _identity_inventory(
     )
 
 
+def is_valid_utc_timestamp(value: Any) -> bool:
+    """Return whether ``value`` is an aware ISO-8601 instant at UTC offset zero."""
+
+    if not isinstance(value, str) or not value.strip():
+        return False
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return False
+    return (
+        parsed.tzinfo is not None
+        and parsed.utcoffset() is not None
+        and parsed.utcoffset() == timedelta(0)
+    )
+
+
 def validate_chunk(
     data_path: str | Path,
     manifest_path: str | Path,
@@ -311,6 +332,8 @@ def validate_chunk(
     )
     expected_context = {
         "schema_version": "acn-jpl-daily-chunk/v1",
+        "dataset_id": JPL_DAILY_DATASET_ID,
+        "source": ACN_OFFICIAL_SOURCE,
         "site": "jpl",
         "timezone": JPL_TIMEZONE,
         "local_start_inclusive": window.local_start.isoformat(),
@@ -319,6 +342,7 @@ def validate_chunk(
         "utc_end_exclusive": window.utc_end.isoformat(),
         "query_condition": expected_query.condition,
         "endpoint": expected_query.endpoint,
+        "output_file": data.name,
     }
     for field_name, expected_value in expected_context.items():
         if manifest.get(field_name) != expected_value:
@@ -326,6 +350,8 @@ def validate_chunk(
                 False,
                 f"manifest {field_name} does not match expected query",
             )
+    if not is_valid_utc_timestamp(manifest.get("downloaded_at_utc")):
+        return ChunkValidation(False, "manifest downloaded_at_utc is not a valid UTC timestamp")
     if manifest.get("complete_for_query") is not True:
         return ChunkValidation(False, "manifest is not complete for query")
     if manifest.get("token_stored") is not False:
@@ -504,8 +530,8 @@ def download_day_chunk(
 
     manifest = {
         "schema_version": "acn-jpl-daily-chunk/v1",
-        "dataset_id": "D0001",
-        "source": "ACN-Data official REST API",
+        "dataset_id": JPL_DAILY_DATASET_ID,
+        "source": ACN_OFFICIAL_SOURCE,
         "endpoint": query.endpoint,
         "site": "jpl",
         "timezone": JPL_TIMEZONE,

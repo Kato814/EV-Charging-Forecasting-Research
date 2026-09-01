@@ -377,6 +377,85 @@ def test_validate_chunk_rejects_manifest_for_wrong_window_or_endpoint(
     assert validation.reason == f"manifest {field} does not match expected query"
 
 
+@pytest.mark.parametrize(
+    ("field", "tampered_value"),
+    [
+        ("source", None),
+        ("source", "untrusted mirror"),
+        ("dataset_id", "D9999"),
+        ("output_file", "forged.jsonl.gz"),
+        ("downloaded_at_utc", None),
+        ("downloaded_at_utc", "2026-01-01T00:00:00"),
+        ("downloaded_at_utc", "2026-01-01T08:00:00+08:00"),
+        ("downloaded_at_utc", "not-a-timestamp"),
+        ("downloaded_at_utc", True),
+    ],
+)
+def test_validate_chunk_rejects_invalid_provenance_manifest_fields(
+    tmp_path: Path,
+    field: str,
+    tampered_value: object,
+) -> None:
+    window = next(jpl_analysis_windows())
+    result = download_day_chunk(
+        FakeClient([[page([{"_id": "id-1", "sessionID": "session-1"}], total=1)]]),
+        tmp_path,
+        window,
+        endpoint="timeseries",
+    )
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    if tampered_value is None:
+        manifest.pop(field)
+    else:
+        manifest[field] = tampered_value
+    result.manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    validation = validate_chunk(
+        result.data_path,
+        result.manifest_path,
+        window=window,
+        endpoint="timeseries",
+    )
+
+    assert not validation.valid
+
+
+def test_resume_redownloads_only_daily_chunk_with_invalid_provenance(
+    tmp_path: Path,
+) -> None:
+    windows = list(jpl_analysis_windows())[:2]
+    initial_client = FakeClient(
+        [
+            [page([{"_id": "id-1", "sessionID": "session-1"}], total=1)],
+            [page([{"_id": "id-2", "sessionID": "session-2"}], total=1)],
+        ]
+    )
+    initial = run_daily_chunks(
+        initial_client,
+        tmp_path,
+        windows,
+        endpoint="timeseries",
+    )
+    assert initial["completed_days"] == [window.day_key for window in windows]
+
+    _, first_manifest_path = chunk_paths(tmp_path, "timeseries", windows[0])
+    first_manifest = json.loads(first_manifest_path.read_text(encoding="utf-8"))
+    first_manifest.pop("source")
+    first_manifest_path.write_text(json.dumps(first_manifest), encoding="utf-8")
+
+    repair_client = FakeClient([[page([{"_id": "id-1", "sessionID": "session-1"}], total=1)]])
+    repaired = run_daily_chunks(
+        repair_client,
+        tmp_path,
+        windows,
+        endpoint="timeseries",
+    )
+
+    assert repaired["completed_days"] == [window.day_key for window in windows]
+    assert len(repair_client.queries) == 1
+    assert repair_client.queries[0].start_utc == windows[0].utc_start
+
+
 def test_progress_tracks_failure_and_resume_without_storing_error_secrets(
     tmp_path: Path,
 ) -> None:

@@ -741,6 +741,15 @@ def test_full_run_uses_31_daily_queries_exact_carry_query_and_private_resume(
     carry_manifest = json.loads(carry_manifest_text)
     assert carry_manifest["sessionID"] == carry["sessionID"]
     assert carry_manifest["_id"] == carry["_id"]
+    assert carry_manifest["dataset_id"] == "D0001-jpl-2019-05-full-ts"
+    assert carry_manifest["source"] == "ACN-Data official REST API"
+    assert carry_manifest["timezone"] == "America/Los_Angeles"
+    assert carry_manifest["local_start_inclusive"] == "2019-04-30T17:30:00-07:00"
+    assert carry_manifest["local_end_exclusive"] == "2019-05-01T00:00:00-07:00"
+    assert carry_manifest["utc_start_inclusive"] == "2019-05-01T00:30:00+00:00"
+    assert carry_manifest["utc_end_exclusive"] == "2019-05-01T07:00:00+00:00"
+    assert carry_manifest["downloaded_at_utc"] == "2026-01-01T00:00:00+00:00"
+    assert carry_manifest["output_file"] == "carry_in.jsonl.gz"
     assert carry_manifest["token_stored"] is False
     assert TOKEN not in carry_manifest_text
     assert not list(raw_root.rglob("*.partial"))
@@ -768,6 +777,61 @@ def test_full_run_uses_31_daily_queries_exact_carry_query_and_private_resume(
     assert len(repair_client.queries) == 1
     assert repair_client.queries[0].session_id == carry["sessionID"]
     assert not list(raw_root.rglob("*.partial"))
+
+
+@pytest.mark.parametrize(
+    ("field", "tampered_value"),
+    [
+        ("source", None),
+        ("source", "untrusted mirror"),
+        ("dataset_id", "D9999"),
+        ("output_file", "forged.jsonl.gz"),
+        ("timezone", "UTC"),
+        ("local_start_inclusive", "2019-04-30T17:31:00-07:00"),
+        ("local_end_exclusive", "2019-05-01T00:01:00-07:00"),
+        ("utc_start_inclusive", "2019-05-01T00:31:00+00:00"),
+        ("utc_end_exclusive", "2019-05-01T07:01:00+00:00"),
+        ("downloaded_at_utc", None),
+        ("downloaded_at_utc", "2026-01-01T00:00:00"),
+        ("downloaded_at_utc", "2026-01-01T08:00:00+08:00"),
+        ("downloaded_at_utc", "not-a-timestamp"),
+        ("downloaded_at_utc", True),
+    ],
+)
+def test_carry_in_resume_validation_rejects_invalid_manifest_contract(
+    tmp_path: Path,
+    field: str,
+    tampered_value: object,
+) -> None:
+    carry = {
+        "_id": "private-carry-object",
+        "sessionID": "private-carry-session",
+        "connectionTime": "Wed, 01 May 2019 00:30:00 GMT",
+        "disconnectTime": "Wed, 01 May 2019 08:00:00 GMT",
+    }
+    session = full_ts_module._PrivateSession(
+        object_id=carry["_id"],
+        session_id=carry["sessionID"],
+        connection=datetime(2019, 5, 1, 0, 30, tzinfo=timezone.utc),
+        disconnect=datetime(2019, 5, 1, 8, 0, tzinfo=timezone.utc),
+    )
+    raw_root = tmp_path / "raw"
+    transfer = full_ts_module._download_carry_in(
+        FullRunClient(carry),
+        raw_root,
+        session,
+        datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    assert transfer.status == "DOWNLOADED"
+    data_path, manifest_path = full_ts_module._carry_in_paths(raw_root)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if tampered_value is None:
+        manifest.pop(field)
+    else:
+        manifest[field] = tampered_value
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    assert full_ts_module._validated_carry_in(data_path, manifest_path, session) is None
 
 
 @pytest.mark.parametrize("tamper", ["count", "float-count", "query", "json", "token"])

@@ -48,6 +48,7 @@ _SEASONAL_SCHEMA = "acn-jpl-seasonal-ts-run/v1"
 _SAFE_FAILURE_CODES = frozenset(
     {
         "SCOPE_NOT_VERIFIED",
+        "MONTH_NOT_SEASONAL",
         "OFFICIAL_PROBE_FAILED",
         "OFFICIAL_PROBE_NOT_LIVE",
         "OFFICIAL_TOTAL_MISMATCH",
@@ -56,6 +57,7 @@ _SAFE_FAILURE_CODES = frozenset(
         "CARRY_INCOMPLETE",
         "COMBINED_LINKAGE_FAIL",
         "PARTIAL_FILES_PRESENT",
+        "RAW_LAYOUT_INVALID",
         "ACN_DATA_ERROR",
         "NETWORK_ERROR",
         "INCOMPLETE_RESPONSE",
@@ -557,6 +559,60 @@ def _raw_inventory(root: Path) -> tuple[int, int, str | None]:
     return len(files), partial_count, digest.hexdigest()
 
 
+def _expected_raw_paths(config: JPLMonthConfig, carry_count: int) -> frozenset[str]:
+    paths = {
+        *(f"timeseries/{window.day_key}.jsonl.gz" for window in config.day_windows),
+        *(f"manifests/timeseries/{window.day_key}.manifest.json" for window in config.day_windows),
+        *(
+            f"timeseries/carry_in/carry-{ordinal:04d}.jsonl.gz"
+            for ordinal in range(1, carry_count + 1)
+        ),
+        *(
+            f"manifests/carry_in/carry-{ordinal:04d}.manifest.json"
+            for ordinal in range(1, carry_count + 1)
+        ),
+    }
+    return frozenset(paths)
+
+
+def _raw_layout_exact(root: Path, config: JPLMonthConfig, carry_count: int) -> bool:
+    """Require the recursive raw-content allowlist and isolated JSON state files."""
+
+    if not root.is_dir():
+        return False
+    expected_files = _expected_raw_paths(config, carry_count)
+    expected_directories = {
+        str(Path(relative).parent).replace("\\", "/") for relative in expected_files
+    }
+    expected_directories.update({"timeseries", "manifests", "state"})
+    actual_content: set[str] = set()
+    for path in root.rglob("*"):
+        relative = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            return False
+        if path.is_dir():
+            if relative not in expected_directories:
+                return False
+            continue
+        if not path.is_file():
+            return False
+        if relative in expected_files:
+            actual_content.add(relative)
+            continue
+        # Probe references and the daily progress document are not raw content.
+        # They must remain flat, JSON-only state and cannot masquerade as a raw
+        # data file, manifest, partial, log, or nested artifact.
+        if (
+            relative.startswith("state/")
+            and relative.count("/") == 1
+            and path.suffix == ".json"
+            and not path.name.endswith(".manifest.json")
+        ):
+            continue
+        return False
+    return actual_content == expected_files
+
+
 def _carry_layout_exact(root: Path, count: int) -> bool:
     expected_data = {f"carry-{ordinal:04d}.jsonl.gz" for ordinal in range(1, count + 1)}
     expected_manifests = {f"carry-{ordinal:04d}.manifest.json" for ordinal in range(1, count + 1)}
@@ -583,6 +639,16 @@ def acquire_jpl_month(
 
     if authorized is not True:
         raise SeasonalAuthorizationError("seasonal acquisition requires explicit authorization")
+    if not isinstance(config, JPLMonthConfig) or config.month not in SEASONAL_MONTHS:
+        month = config.month if isinstance(config, JPLMonthConfig) else "UNKNOWN"
+        return MonthAcquisitionResult(
+            month=month,
+            status="METADATA_GATE_FAIL",
+            local_session_count=0,
+            official_total=None,
+            carry_in_count=0,
+            reason_codes=("MONTH_NOT_SEASONAL",),
+        )
     if (
         not isinstance(concurrency, int)
         or isinstance(concurrency, bool)
@@ -654,7 +720,7 @@ def acquire_jpl_month(
             reason_codes=("UNEXPECTED_ERROR",),
         )
     root = Path(raw_root)
-    sink: dict[str, _ChunkIdentityInventory] = {}
+    runner_sink: dict[str, _ChunkIdentityInventory] = {}
     try:
         if _runner_supports_sink(daily_runner):
             progress = daily_runner(
@@ -662,11 +728,10 @@ def acquire_jpl_month(
                 root,
                 config.day_windows,
                 endpoint="timeseries",
-                _private_validation_sink=sink,
+                _private_validation_sink=runner_sink,
             )
         else:
             progress = daily_runner(client, root, config.day_windows, endpoint="timeseries")
-            sink = _load_daily_sink(root, config)
     except ACNDataError:
         return _result(
             config,
@@ -695,6 +760,9 @@ def acquire_jpl_month(
             reason_codes=("UNEXPECTED_ERROR",),
         )
 
+    # The runner is injectable for testing and orchestration, so its private sink
+    # is advisory only.  Re-read every expected final file and manifest from disk.
+    sink = _load_daily_sink(root, config)
     expected_daily = _expected_pairs(scope.local_month_records)
     valid_days, failed_days, daily_linkage, daily_exact = _daily_summary(
         progress, config, sink, expected_daily
@@ -817,6 +885,15 @@ def acquire_jpl_month(
             status="INCOMPLETE",
             official_total=official.total,
             reason_codes=("PARTIAL_FILES_PRESENT",),
+            **final_counts,
+        )
+    if not _raw_layout_exact(root, config, len(ordered_carry)):
+        return _result(
+            config,
+            scope,
+            status="INCOMPLETE",
+            official_total=official.total,
+            reason_codes=("RAW_LAYOUT_INVALID",),
             **final_counts,
         )
     return _result(

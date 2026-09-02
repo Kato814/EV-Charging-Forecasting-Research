@@ -16,6 +16,7 @@ from evcf.data.acn_audit import parse_acn_datetime
 from evcf.data.acn_jpl_gate0 import _ChunkIdentityInventory
 from evcf.data.acn_jpl_month_config import (
     EXPECTED_COMPLETE_METADATA_FILE_COUNT,
+    MAY_2019,
     SEASONAL_MONTHS,
     CompleteMetadataScope,
     jpl_month_config,
@@ -243,6 +244,34 @@ def test_authorization_stops_before_scope_probe_factory_or_directories(tmp_path:
     assert not raw_root.exists()
 
 
+def test_may_is_rejected_before_scope_probe_factory_or_directories(tmp_path: Path) -> None:
+    touched: list[str] = []
+
+    class _ForbiddenScope:
+        def is_verified_for(self, config: Any) -> bool:
+            touched.append("scope")
+            raise AssertionError("May must stop before scope verification")
+
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        touched.append("called")
+        raise AssertionError("May must stop before acquisition side effects")
+
+    raw_root = tmp_path / "may-must-not-exist"
+    result = acquire_jpl_month(
+        authorized=True,
+        config=MAY_2019,
+        scope=_ForbiddenScope(),  # type: ignore[arg-type]
+        official_probe=forbidden,
+        raw_root=raw_root,
+        ts_client_factory=forbidden,
+    )
+
+    assert result.status == "METADATA_GATE_FAIL"
+    assert result.reason_codes == ("MONTH_NOT_SEASONAL",)
+    assert touched == []
+    assert not raw_root.exists()
+
+
 def test_unverified_scope_is_rejected_before_live_probe_or_ts_factory(tmp_path: Path) -> None:
     config = jpl_month_config("2019-02")
     unverified = summarize_complete_metadata([], config)
@@ -431,8 +460,7 @@ def test_dynamic_day_windows_and_zero_one_many_carry_use_stable_ordinals(
     )
     root = tmp_path / month
     probe = _LiveProbe(root / "state" / "official_local_month_total.json", 3)
-    observed: dict[str, Any] = {}
-    client = _CarryClient(scope)
+    client = _FullClient(scope)
 
     result = acquire_jpl_month(
         authorized=True,
@@ -441,7 +469,6 @@ def test_dynamic_day_windows_and_zero_one_many_carry_use_stable_ordinals(
         official_probe=probe,
         raw_root=root,
         ts_client_factory=lambda: client,
-        daily_runner=_daily_runner(scope, observed),
         downloaded_at_utc=datetime(2026, 9, 2, tzinfo=timezone.utc),
     )
 
@@ -452,8 +479,10 @@ def test_dynamic_day_windows_and_zero_one_many_carry_use_stable_ordinals(
     assert result.carry_in_count == carry_count
     assert result.carry_in_completed == carry_count
     assert result.combined_record_count == 3 + carry_count
-    assert tuple(observed["windows"]) == config.day_windows
-    assert len(client.queries) == carry_count
+    assert len(client.queries) == config.day_count + carry_count
+    assert tuple(query.start_utc for query in client.queries[: config.day_count]) == tuple(
+        window.utc_start for window in config.day_windows
+    )
     carry_data = sorted((root / "timeseries" / "carry_in").glob("*.jsonl.gz"))
     carry_manifests = sorted((root / "manifests" / "carry_in").glob("*.manifest.json"))
     assert [path.name for path in carry_data] == [
@@ -464,6 +493,73 @@ def test_dynamic_day_windows_and_zero_one_many_carry_use_stable_ordinals(
     ]
     assert result.raw_inventory_sha256 is not None
     assert "private" not in repr(result).lower()
+
+
+def test_sink_only_runner_with_no_daily_files_cannot_report_complete(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = jpl_month_config("2019-02")
+    scope = _verified_scope(tmp_path / "metadata", monkeypatch, month=config.month)
+    root = tmp_path / config.month
+
+    result = acquire_jpl_month(
+        authorized=True,
+        config=config,
+        scope=scope,
+        official_probe=_LiveProbe(root / "state" / "official.json", 3),
+        raw_root=root,
+        ts_client_factory=lambda: _CarryClient(scope),
+        daily_runner=_daily_runner(scope, {}),
+    )
+
+    assert result.status == "INCOMPLETE"
+    assert result.reason_codes == ("DAILY_INCOMPLETE",)
+    assert result.valid_daily_chunks == 0
+    assert not list((root / "timeseries").glob("*.jsonl.gz"))
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "timeseries/orphan.jsonl.gz",
+        "timeseries/nested/orphan.jsonl.gz",
+        "manifests/timeseries/orphan.wrong-extension",
+        "orphan.jsonl.gz",
+    ],
+)
+def test_recursive_raw_allowlist_rejects_extra_nested_and_wrong_extension_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    relative_path: str,
+) -> None:
+    config = jpl_month_config("2019-02")
+    scope = _verified_scope(tmp_path / "metadata", monkeypatch, month=config.month)
+    root = tmp_path / config.month
+    first = acquire_jpl_month(
+        authorized=True,
+        config=config,
+        scope=scope,
+        official_probe=_LiveProbe(root / "state" / "official-first.json", 3),
+        raw_root=root,
+        ts_client_factory=lambda: _FullClient(scope),
+    )
+    assert first.status == "COMPLETE"
+    extra = root / relative_path
+    extra.parent.mkdir(parents=True, exist_ok=True)
+    extra.write_bytes(b"must-not-be-ignored")
+
+    second = acquire_jpl_month(
+        authorized=True,
+        config=config,
+        scope=scope,
+        official_probe=_LiveProbe(root / "state" / "official-second.json", 3),
+        raw_root=root,
+        ts_client_factory=lambda: _FullClient(scope),
+    )
+
+    assert second.status == "INCOMPLETE"
+    assert second.reason_codes == ("RAW_LAYOUT_INVALID",)
 
 
 def test_default_daily_chunks_and_carry_resume_without_network_or_byte_changes(

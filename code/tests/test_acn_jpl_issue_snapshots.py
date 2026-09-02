@@ -80,6 +80,17 @@ def test_issue_grid_excludes_first_24_hours_and_last_4_hours() -> None:
     assert issues[-1] == end - timedelta(hours=4)
 
 
+def test_snapshot_policy_defaults_to_legacy_tiers_and_accepts_seasonal_prefix() -> None:
+    assert SnapshotPolicy().tiers == ("M1", "M2", "M3", "M4")
+    assert SnapshotPolicy(tiers=("M1", "M2", "M3")).tiers == ("M1", "M2", "M3")
+
+    for invalid in ((), ("M1", "M3"), ("M1", "M2", "M3", "M3"), ("M2",)):
+        with pytest.raises(ValueError, match="tiers"):
+            SnapshotPolicy(tiers=invalid)
+    with pytest.raises(TypeError, match="tiers"):
+        SnapshotPolicy(tiers=["M1", "M2", "M3"])  # type: ignore[arg-type]
+
+
 def test_future_samples_and_late_user_inputs_are_not_visible() -> None:
     start = datetime(2019, 5, 1, 7, tzinfo=timezone.utc)
     end = start + timedelta(hours=28)
@@ -284,6 +295,10 @@ def test_snapshot_hash_and_shapes_are_reproducible() -> None:
     )
 
     assert first.snapshot_sha256 == second.snapshot_sha256
+    assert (
+        first.snapshot_sha256 == "c3d93f48ee8bbd3bb447cc15473d084ccef70da47677241bf1abbc29f1bc3be8"
+    )
+    assert tuple(first.tier_rows) == ("M1", "M2", "M3", "M4")
     assert first.qa["issue_times"] == 1
     assert first.qa["samples"] == {"M1": 1, "M2": 1, "M3": 1, "M4": 1}
     assert first.qa["ragged_rows"]["M3"] == 1

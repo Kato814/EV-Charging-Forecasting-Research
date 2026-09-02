@@ -13,6 +13,7 @@ from bisect import bisect_right
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from types import MappingProxyType
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -57,6 +58,15 @@ _LOCAL_STRUCTURAL_FIELDS = {
     "min_visible_timestamp_utc_s",
     "max_visible_timestamp_utc_s",
 }
+_TIER_ORDER = ("M1", "M2", "M3", "M4")
+
+
+def _validate_tiers(tiers: object) -> tuple[str, ...]:
+    if not isinstance(tiers, tuple):
+        raise TypeError("tiers must be a tuple")
+    if not tiers or tiers != _TIER_ORDER[: len(tiers)]:
+        raise ValueError("tiers must be a nonempty cumulative M1 through M4 prefix")
+    return tiers
 
 
 @dataclass(frozen=True)
@@ -68,8 +78,10 @@ class SnapshotPolicy:
     issue_step_minutes: int = 15
     max_hold_seconds: int = 12
     active_threshold_a: float = 0.1
+    tiers: tuple[str, ...] = _TIER_ORDER
 
     def __post_init__(self) -> None:
+        _validate_tiers(self.tiers)
         if self.lookback_minutes <= 0 or self.lookback_minutes % BIN_MINUTES:
             raise ValueError("lookback must be a positive multiple of 15 minutes")
         if self.issue_step_minutes != BIN_MINUTES:
@@ -98,6 +110,19 @@ class IssueSnapshotResult:
     qa: dict[str, Any]
     snapshot_sha256: str
 
+    @property
+    def tier_rows(self) -> Mapping[str, tuple[dict[str, Any], ...]]:
+        """Return an immutable view containing only the requested tier tables."""
+
+        all_rows = {
+            "M1": self.m1_rows,
+            "M2": self.m2_rows,
+            "M3": self.m3_rows,
+            "M4": self.m4_rows,
+        }
+        requested = _validate_tiers(tuple(self.qa["samples"]))
+        return MappingProxyType({tier: all_rows[tier] for tier in requested})
+
 
 def _utc(value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
@@ -123,8 +148,12 @@ def issue_time_grid(
     return tuple(first + index * step for index in range(count))
 
 
-def feature_whitelist_document() -> dict[str, Any]:
-    """Machine-readable, cumulative M1-M4 feature allowlist."""
+def feature_whitelist_document(
+    tiers: tuple[str, ...] = _TIER_ORDER,
+) -> dict[str, Any]:
+    """Machine-readable cumulative feature allowlist for requested tiers."""
+
+    requested = _validate_tiers(tiers)
 
     m1 = (
         "issue_time_utc_s",
@@ -159,14 +188,17 @@ def feature_whitelist_document() -> dict[str, Any]:
         "partial_current_trajectory_ref",
         "partial_pilot_trajectory_ref",
     )
+    notes = {
+        "anonymous_indexes": "local storage references only; never model features or Git data",
+        "issue_time_rule": "all observations and user-input modifications are at or before issue time",
+    }
+    if "M4" in requested:
+        notes["trajectory_window"] = "M4 references at most the frozen 24-hour lookback"
+    all_tiers = {"M1": m1, "M2": m2, "M3": m3, "M4": m4}
     return {
         "schema_version": "acn-jpl-feature-whitelist/v1",
-        "tiers": {"M1": list(m1), "M2": list(m2), "M3": list(m3), "M4": list(m4)},
-        "notes": {
-            "anonymous_indexes": "local storage references only; never model features or Git data",
-            "issue_time_rule": "all observations and user-input modifications are at or before issue time",
-            "trajectory_window": "M4 references at most the frozen 24-hour lookback",
-        },
+        "tiers": {tier: list(all_tiers[tier]) for tier in requested},
+        "notes": notes,
     }
 
 
@@ -430,8 +462,9 @@ def _unexpected_feature_keys(
     rows: Sequence[Mapping[str, Any]],
     *,
     tier: str,
+    tiers: tuple[str, ...] = _TIER_ORDER,
 ) -> set[str]:
-    allowed = set(feature_whitelist_document()["tiers"][tier]) | _LOCAL_STRUCTURAL_FIELDS
+    allowed = set(feature_whitelist_document(tiers)["tiers"][tier]) | _LOCAL_STRUCTURAL_FIELDS
     return {key for row in rows for key in row if key not in allowed}
 
 
@@ -475,14 +508,17 @@ def _validate_station_grid(
 
 
 def _canonical_hash(*tables: Sequence[Mapping[str, Any]], policy: SnapshotPolicy) -> str:
+    policy_payload: dict[str, Any] = {
+        "lookback_minutes": policy.lookback_minutes,
+        "horizons_minutes": policy.horizons_minutes,
+        "issue_step_minutes": policy.issue_step_minutes,
+        "max_hold_seconds": policy.max_hold_seconds,
+        "active_threshold_a": policy.active_threshold_a,
+    }
+    if policy.tiers != _TIER_ORDER:
+        policy_payload["tiers"] = policy.tiers
     payload = {
-        "policy": {
-            "lookback_minutes": policy.lookback_minutes,
-            "horizons_minutes": policy.horizons_minutes,
-            "issue_step_minutes": policy.issue_step_minutes,
-            "max_hold_seconds": policy.max_hold_seconds,
-            "active_threshold_a": policy.active_threshold_a,
-        },
+        "policy": policy_payload,
         "tables": tables,
     }
     encoded = json.dumps(
@@ -539,6 +575,9 @@ def build_issue_snapshots(
     start_epoch = int(start.timestamp())
     lookback_bins = policy.lookback_minutes // BIN_MINUTES
     local_zone = ZoneInfo(JPL_TIMEZONE)
+    include_m2 = "M2" in policy.tiers
+    include_m3 = "M3" in policy.tiers
+    include_m4 = "M4" in policy.tiers
 
     prepared_sessions: list[dict[str, Any]] = []
     seen_indexes: set[int] = set()
@@ -619,6 +658,8 @@ def build_issue_snapshots(
             ],
         }
         m1_rows.append(m1)
+        if not include_m2:
+            continue
 
         connected_sessions = [
             session
@@ -673,6 +714,8 @@ def build_issue_snapshots(
             ),
         }
         m2_rows.append(m2)
+        if not include_m3:
+            continue
 
         for session in connected_sessions:
             recent = _prepared_window_statistics(
@@ -743,7 +786,11 @@ def build_issue_snapshots(
             )
 
             current_value = session_current[session["anonymous_index"]]
-            if current_value is not None and current_value > policy.active_threshold_a:
+            if (
+                include_m4
+                and current_value is not None
+                and current_value > policy.active_threshold_a
+            ):
                 lookback_start_epoch = issue_epoch - policy.lookback_minutes * 60
                 current_start = _trajectory_start_offset(
                     session["current_times"],
@@ -795,14 +842,24 @@ def build_issue_snapshots(
                     }
                 )
 
+    tier_tables: dict[str, list[dict[str, Any]]] = {
+        "M1": m1_rows,
+        "M2": m2_rows,
+        "M3": m3_rows,
+        "M4": m4_rows,
+    }
     future_fields: set[str] = set()
-    for table in (m1_rows, m2_rows, m3_rows, m4_rows):
-        _find_forbidden_keys(table, future_fields)
+    for tier in policy.tiers:
+        _find_forbidden_keys(tier_tables[tier], future_fields)
     unexpected_feature_keys = set().union(
-        _unexpected_feature_keys(m1_rows, tier="M1"),
-        _unexpected_feature_keys(m2_rows, tier="M2"),
-        _unexpected_feature_keys(m3_rows, tier="M3"),
-        _unexpected_feature_keys(m4_rows, tier="M4"),
+        *(
+            _unexpected_feature_keys(
+                tier_tables[tier],
+                tier=tier,
+                tiers=policy.tiers,
+            )
+            for tier in policy.tiers
+        )
     )
     late_user_input_rows = sum(
         row["user_input_modified_utc_s"] is not None
@@ -820,7 +877,9 @@ def build_issue_snapshots(
         < row["issue_time_utc_s"] - policy.lookback_minutes * 60 - policy.max_hold_seconds
         for row in m4_rows
     )
-    temporal_violations = late_user_input_rows + future_trajectory_rows + overlong_trajectory_rows
+    temporal_violations = late_user_input_rows
+    if include_m4:
+        temporal_violations += future_trajectory_rows + overlong_trajectory_rows
     leakage_status = (
         "PASS"
         if not future_fields and not unexpected_feature_keys and temporal_violations == 0
@@ -828,6 +887,60 @@ def build_issue_snapshots(
     )
     history_values = [value for row in m1_rows for value in row["history_station_current_mean_a"]]
     history_missing = sum(value is None for value in history_values)
+    ragged_rows: dict[str, int] = {}
+    if include_m3:
+        ragged_rows["M3"] = len(m3_rows)
+    if include_m4:
+        ragged_rows["M4"] = len(m4_rows)
+    shapes: dict[str, Any] = {"M1_history": [len(m1_rows), lookback_bins]}
+    if include_m2:
+        shapes["M2_dense"] = [len(m2_rows), 6]
+    if include_m3:
+        shapes.update(
+            {
+                "M3_ragged_rows": len(m3_rows),
+                "M3_session_feature_width": 11,
+            }
+        )
+    if include_m4:
+        shapes.update(
+            {
+                "M4_ragged_rows": len(m4_rows),
+                "M4_reference_width": 2,
+            }
+        )
+    shapes["labels"] = [len(label_rows), len(policy.horizons_minutes)]
+    missing_rates: dict[str, float | None] = {
+        "M1_history": round(history_missing / len(history_values), 8) if history_values else None
+    }
+    if include_m2:
+        missing_rates.update(
+            {
+                "M2_station_current": (
+                    round(
+                        sum(row["station_current_a"] is None for row in m2_rows) / len(m2_rows),
+                        8,
+                    )
+                    if m2_rows
+                    else None
+                ),
+                "M2_pilot_sum": _missing_rate(m2_rows, "pilot_sum_a"),
+                "M2_pilot_mean": _missing_rate(m2_rows, "pilot_mean_a"),
+            }
+        )
+    if include_m3:
+        missing_rates.update(
+            {
+                "M3_current_current": _missing_rate(m3_rows, "current_current_a"),
+                "M3_recent_current_mean": _missing_rate(m3_rows, "recent_current_mean_a"),
+                "M3_recent_current_peak": _missing_rate(m3_rows, "recent_current_peak_a"),
+                "M3_current_pilot": _missing_rate(m3_rows, "current_pilot_a"),
+                "M3_known_requested_departure": _missing_rate(
+                    m3_rows, "requested_departure_minutes_from_issue"
+                ),
+                "M3_known_requested_energy": _missing_rate(m3_rows, "known_kwh_requested"),
+            }
+        )
     qa = {
         "schema_version": "acn-jpl-issue-snapshot-qa/v1",
         "lookback_minutes": policy.lookback_minutes,
@@ -835,42 +948,34 @@ def build_issue_snapshots(
         "issue_times": len(issues),
         "formal_issue_times": len(m1_rows),
         "incomplete_label_issue_times": incomplete_label_issue_times,
-        "samples": {tier: len(m1_rows) for tier in ("M1", "M2", "M3", "M4")},
-        "ragged_rows": {"M3": len(m3_rows), "M4": len(m4_rows)},
+        "samples": {tier: len(m1_rows) for tier in policy.tiers},
+        "ragged_rows": ragged_rows,
         "valid_labels_by_horizon": valid_labels,
-        "shapes": {
-            "M1_history": [len(m1_rows), lookback_bins],
-            "M2_dense": [len(m2_rows), 6],
-            "M3_ragged_rows": len(m3_rows),
-            "M3_session_feature_width": 11,
-            "M4_ragged_rows": len(m4_rows),
-            "M4_reference_width": 2,
-            "labels": [len(label_rows), len(policy.horizons_minutes)],
+        "shapes": shapes,
+        "missing_rates": missing_rates,
+        "leakage_audit": leakage_status,
+        "future_fields_found": sorted(future_fields),
+        "unexpected_feature_keys": sorted(unexpected_feature_keys),
+        "temporal_violations": {"total": temporal_violations},
+        "feature_whitelist_enforcement": {
+            "status": "PASS" if not unexpected_feature_keys else "FAIL",
+            "unexpected_key_count": len(unexpected_feature_keys),
         },
-        "missing_rates": {
-            "M1_history": (
-                round(history_missing / len(history_values), 8) if history_values else None
-            ),
-            "M2_station_current": (
-                round(
-                    sum(row["station_current_a"] is None for row in m2_rows) / len(m2_rows),
-                    8,
-                )
-                if m2_rows
-                else None
-            ),
-            "M2_pilot_sum": _missing_rate(m2_rows, "pilot_sum_a"),
-            "M2_pilot_mean": _missing_rate(m2_rows, "pilot_mean_a"),
-            "M3_current_current": _missing_rate(m3_rows, "current_current_a"),
-            "M3_recent_current_mean": _missing_rate(m3_rows, "recent_current_mean_a"),
-            "M3_recent_current_peak": _missing_rate(m3_rows, "recent_current_peak_a"),
-            "M3_current_pilot": _missing_rate(m3_rows, "current_pilot_a"),
-            "M3_known_requested_departure": _missing_rate(
-                m3_rows, "requested_departure_minutes_from_issue"
-            ),
-            "M3_known_requested_energy": _missing_rate(m3_rows, "known_kwh_requested"),
+        "occupancy_rate": {
+            "status": "NOT_CONSTRUCTED",
+            "reason": "Issue #17 supplies no frozen JPL capacity denominator",
         },
-        "M4_prefix_length_distribution": {
+    }
+    if include_m3:
+        qa["temporal_violations"]["late_user_input_rows"] = late_user_input_rows
+        qa["user_inputs_issue_time_truncation"] = {
+            "status": "PASS" if late_user_input_rows == 0 else "FAIL",
+            "connected_session_rows": user_input_rows,
+            "rows_with_known_input": known_user_input_rows,
+            "rule": "last modifiedAt at or before issue time",
+        }
+    if include_m4:
+        qa["M4_prefix_length_distribution"] = {
             "current": _integer_distribution(
                 [
                     int(row["current_end_offset_exclusive"])
@@ -885,38 +990,18 @@ def build_issue_snapshots(
                     for row in m4_rows
                 ]
             ),
-        },
-        "leakage_audit": leakage_status,
-        "future_fields_found": sorted(future_fields),
-        "unexpected_feature_keys": sorted(unexpected_feature_keys),
-        "temporal_violations": {
-            "late_user_input_rows": late_user_input_rows,
-            "future_trajectory_rows": future_trajectory_rows,
-            "overlong_trajectory_rows": overlong_trajectory_rows,
-            "total": temporal_violations,
-        },
-        "user_inputs_issue_time_truncation": {
-            "status": "PASS" if late_user_input_rows == 0 else "FAIL",
-            "connected_session_rows": user_input_rows,
-            "rows_with_known_input": known_user_input_rows,
-            "rule": "last modifiedAt at or before issue time",
-        },
-        "feature_whitelist_enforcement": {
-            "status": "PASS" if not unexpected_feature_keys else "FAIL",
-            "unexpected_key_count": len(unexpected_feature_keys),
-        },
-        "occupancy_rate": {
-            "status": "NOT_CONSTRUCTED",
-            "reason": "Issue #17 supplies no frozen JPL capacity denominator",
-        },
-    }
-    tables: tuple[Sequence[Mapping[str, Any]], ...] = (
-        m1_rows,
-        m2_rows,
-        m3_rows,
-        m4_rows,
-        label_rows,
-    )
+        }
+        qa["temporal_violations"].update(
+            {
+                "future_trajectory_rows": future_trajectory_rows,
+                "overlong_trajectory_rows": overlong_trajectory_rows,
+            }
+        )
+    else:
+        qa["m4_generated"] = False
+    tables: tuple[Sequence[Mapping[str, Any]], ...] = tuple(
+        tier_tables[tier] for tier in policy.tiers
+    ) + (label_rows,)
     snapshot_hash = _canonical_hash(*tables, policy=policy)
     return IssueSnapshotResult(
         m1_rows=tuple(m1_rows),

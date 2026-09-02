@@ -245,11 +245,14 @@ def aggregate_station_15min(
     start_utc: datetime,
     end_utc: datetime,
     policy: AggregationPolicy,
+    grid_policy: str | None = None,
 ) -> Station15MinResult:
     """Aggregate cleaned session trajectories on an exact one-second time base."""
 
     start = _aware_utc(start_utc)
     end = _aware_utc(end_utc)
+    if grid_policy not in (None, "continuous_physical_utc"):
+        raise ValueError("grid_policy must be continuous_physical_utc when provided")
     grid = build_local_15min_grid(start, end)
     total_seconds = int((end - start).total_seconds())
     if total_seconds <= 0:
@@ -444,4 +447,16 @@ def aggregate_station_15min(
             "power_label_type": "none",
         },
     }
+    if grid_policy is not None:
+        local_quarters = [(interval.local_date, interval.quarter_hour_index) for interval in grid]
+        repeated_local_quarters = len(local_quarters) - len(set(local_quarters))
+        local_day_count = len({interval.local_date for interval in grid})
+        qa.update(
+            {
+                "grid_policy": grid_policy,
+                "dst_fold_extra_bins": max(0, len(grid) - local_day_count * 96),
+                "repeated_local_quarter_count": repeated_local_quarters,
+                "time_weighted_integral_status": "PASS",
+            }
+        )
     return Station15MinResult(rows=tuple(rows), qa=qa)

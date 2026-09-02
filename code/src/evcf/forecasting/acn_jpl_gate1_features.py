@@ -65,6 +65,7 @@ M3_SESSION_FIELDS = (
     "known_kwh_requested",
 )
 M4_WINDOWS_MINUTES = (5, 15, 30, 60)
+_TIER_ORDER = ("M1", "M2", "M3", "M4")
 _FEATURE_ENCODING_SCHEMA = "acn-jpl-gate1-verified-feature-block/v1"
 M4_SESSION_STAT_NAMES = (
     "current_mean_a",
@@ -145,6 +146,14 @@ _EXPECTED_RAW_DIMENSIONS: Mapping[str, int] = MappingProxyType(
         "M4": _M4_RAW_DIMENSION,
     }
 )
+
+
+def _validate_tiers(tiers: object) -> tuple[str, ...]:
+    if not isinstance(tiers, tuple):
+        raise TypeError("tiers must be a tuple")
+    if not tiers or tiers != _TIER_ORDER[: len(tiers)]:
+        raise ValueError("tiers must be a nonempty cumulative M1 through M4 prefix")
+    return tiers
 
 
 def _immutable(array: np.ndarray, *, dtype: np.dtype[Any] | None = None) -> np.ndarray:
@@ -1068,15 +1077,32 @@ def encode_m4(
 
 def build_feature_blocks(
     snapshot: Gate1Snapshot,
-    m4_accumulator: M4FeatureAccumulator,
+    m4_accumulator: M4FeatureAccumulator | None = None,
+    *,
+    tiers: tuple[str, ...] = _TIER_ORDER,
 ) -> Mapping[str, FeatureBlock]:
-    """Build the four cumulative tiers, validating every prefix and cohort."""
+    """Build the requested cumulative tier prefix and validate each cohort."""
+
+    requested = _validate_tiers(tiers)
+    if "M4" in requested and type(m4_accumulator) is not M4FeatureAccumulator:
+        raise TypeError("M4 encoding requires an exact M4FeatureAccumulator")
 
     m1 = encode_m1(snapshot)
+    blocks: dict[str, FeatureBlock] = {"M1": m1}
+    if "M2" not in requested:
+        return MappingProxyType(blocks)
     m2 = encode_m2(snapshot, m1, validate_against_m3=True)
+    blocks["M2"] = m2
+    if "M3" not in requested:
+        return MappingProxyType(blocks)
     m3 = encode_m3(snapshot, m2)
+    blocks["M3"] = m3
+    if "M4" not in requested:
+        return MappingProxyType(blocks)
+    assert m4_accumulator is not None
     m4 = encode_m4(snapshot, m4_accumulator, m3)
-    return MappingProxyType({"M1": m1, "M2": m2, "M3": m3, "M4": m4})
+    blocks["M4"] = m4
+    return MappingProxyType(blocks)
 
 
 _BASE_UNITS = {
@@ -1160,9 +1186,7 @@ def _feature_description(name: str) -> tuple[str, str]:
 
 
 def _validate_feature_blocks(blocks: Mapping[str, FeatureBlock]) -> None:
-    tier_order = ("M1", "M2", "M3", "M4")
-    if tuple(blocks) != tier_order:
-        raise ValueError("feature blocks must use the declared M1 through M4 order")
+    tier_order = _validate_tiers(tuple(blocks))
     canonical_times: np.ndarray | None = None
     for tier in tier_order:
         block = blocks[tier]
@@ -1226,9 +1250,9 @@ def feature_encoding_manifest(
             "missing_indicators": indicators,
             "missing_indicator_names": [item["name"] for item in indicators],
         }
-    return {
+    manifest = {
         "schema_version": "acn-jpl-gate1-feature-encoding/v1",
-        "tier_order": ["M1", "M2", "M3", "M4"],
+        "tier_order": list(blocks),
         "pool_statistic_order": list(FIXED_POOL_STAT_NAMES),
         "m3_session_field_order": list(M3_SESSION_FIELDS),
         "m4_window_minutes_order": list(M4_WINDOWS_MINUTES),
@@ -1312,10 +1336,13 @@ def feature_encoding_manifest(
             },
         },
         "ordering_contract": {
-            "M1": "history oldest-to-newest, masks oldest-to-newest, calendar",
-            "M2": "M1 then aggregate state",
-            "M3": "M2 then field then pool statistic",
-            "M4": "M3 then window then session statistic then pool statistic",
+            tier: {
+                "M1": "history oldest-to-newest, masks oldest-to-newest, calendar",
+                "M2": "M1 then aggregate state",
+                "M3": "M2 then field then pool statistic",
+                "M4": "M3 then window then session statistic then pool statistic",
+            }[tier]
+            for tier in blocks
         },
         "privacy_audit": {
             "status": "PASS",
@@ -1333,3 +1360,13 @@ def feature_encoding_manifest(
         },
         "tiers": tiers,
     }
+    if "M3" not in blocks:
+        manifest.pop("pool_statistic_order")
+        manifest.pop("m3_session_field_order")
+        manifest.pop("pooling_contract")
+    if "M4" not in blocks:
+        manifest.pop("m4_window_minutes_order")
+        manifest.pop("m4_session_statistic_order")
+        manifest.pop("trajectory_contract")
+        manifest.pop("legacy_active_reference_audit")
+    return manifest

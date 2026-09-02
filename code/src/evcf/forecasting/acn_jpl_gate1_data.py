@@ -1167,7 +1167,7 @@ def verified_snapshot_provenance(snapshot: Gate1Snapshot) -> str:
         raise TypeError("verified snapshot provenance requires a Gate1Snapshot")
     verification = snapshot._verification
     if not _is_issued_snapshot_verification(verification):
-        raise ValueError("snapshot has no issued loader verification")
+        raise ValueError("snapshot has no issued verified loader seal")
     if type(verification) is _SeasonalSnapshotVerification:
         return _verified_seasonal_snapshot_provenance(snapshot, verification)
     if type(verification) is not _SnapshotVerification:

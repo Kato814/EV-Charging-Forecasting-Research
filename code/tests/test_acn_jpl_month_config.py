@@ -436,6 +436,50 @@ def test_verified_scope_rejects_copy_deepcopy_pickle_and_manual_instances(
         object.__setattr__(verified, "is_verified_for", lambda _config: True)
 
 
+def test_external_helpers_cannot_register_hand_built_metadata_provenance() -> None:
+    evidence = CompleteMetadataSourceEvidence(
+        file_count=EXPECTED_COMPLETE_METADATA_FILE_COUNT,
+        valid_manifest_count=EXPECTED_COMPLETE_METADATA_FILE_COUNT,
+        record_count=EXPECTED_COMPLETE_METADATA_RECORD_COUNT,
+        source_inventory_sha256=EXPECTED_COMPLETE_METADATA_INVENTORY_SHA256,
+    )
+    object.__setattr__(
+        evidence,
+        "_verification_seal",
+        month_config_module._VERIFIED_SOURCE_EVIDENCE_SEAL,
+    )
+    forged = replace(
+        summarize_complete_metadata([], MAY_2019),
+        local_month_session_count=1_644,
+        utc_month_session_count=1_645,
+        left_boundary_count=1,
+        carry_in_session_count=1,
+        record_inventory_sha256="0" * 64,
+        source_evidence=evidence,
+    )
+    object.__setattr__(
+        forged,
+        "_verified_scope_binding",
+        month_config_module._scope_binding(forged),
+    )
+    object.__setattr__(forged, "_verification_seal", month_config_module._VERIFIED_SCOPE_SEAL)
+
+    source_registrar = getattr(
+        month_config_module,
+        "_register_verified_source_evidence",
+        None,
+    )
+    scope_registrar = getattr(month_config_module, "_register_verified_scope", None)
+    if callable(source_registrar) and callable(scope_registrar):
+        source_registrar(evidence)
+        scope_registrar(forged)
+
+    assert source_registrar is None
+    assert scope_registrar is None
+    assert month_config_module.verify_complete_metadata_source_evidence(evidence) is False
+    assert month_config_module.verify_complete_metadata_scope(forged, MAY_2019) is False
+
+
 def test_production_loader_rejects_replaced_month_config_before_source_scan(
     tmp_path: Path,
 ) -> None:

@@ -42,18 +42,6 @@ _APPROVED_MONTHS = ("2019-02", "2019-05", "2019-08", "2019-11")
 _CANONICAL_MONTH_CONFIG_SEAL = object()
 _VERIFIED_SOURCE_EVIDENCE_SEAL = object()
 _VERIFIED_SCOPE_SEAL = object()
-_VERIFIED_SOURCE_EVIDENCE_IDENTITIES: dict[
-    int,
-    tuple[weakref.ReferenceType[CompleteMetadataSourceEvidence], str],
-] = {}
-_VERIFIED_SCOPE_IDENTITIES: dict[
-    int,
-    tuple[
-        weakref.ReferenceType[CompleteMetadataScope],
-        weakref.ReferenceType[CompleteMetadataSourceEvidence],
-        str,
-    ],
-] = {}
 
 
 class CompleteMetadataError(ValueError):
@@ -150,7 +138,11 @@ class CompleteMetadataScope:
     def source_inventory_verified(self) -> bool:
         """Whether the source evidence matches the one frozen published inventory."""
 
-        return _verified_scope_identity_valid(self)
+        try:
+            config = jpl_month_config(self.month)
+        except (TypeError, ValueError):
+            return False
+        return verify_complete_metadata_scope(self, config)
 
     def is_verified_for(self, config: JPLMonthConfig) -> bool:
         """Return whether this production scope is bound to ``config`` exactly."""
@@ -369,108 +361,6 @@ def _source_evidence_binding(evidence: CompleteMetadataSourceEvidence) -> str:
     ).hexdigest()
 
 
-def _register_verified_source_evidence(evidence: CompleteMetadataSourceEvidence) -> None:
-    identity = id(evidence)
-
-    def discard(dead: weakref.ReferenceType[CompleteMetadataSourceEvidence]) -> None:
-        current = _VERIFIED_SOURCE_EVIDENCE_IDENTITIES.get(identity)
-        if current is not None and current[0] is dead:
-            _VERIFIED_SOURCE_EVIDENCE_IDENTITIES.pop(identity, None)
-
-    reference = weakref.ref(evidence, discard)
-    _VERIFIED_SOURCE_EVIDENCE_IDENTITIES[identity] = (
-        reference,
-        _source_evidence_binding(evidence),
-    )
-
-
-def verify_complete_metadata_source_evidence(evidence: object) -> bool:
-    """Verify builder identity and content for frozen complete-source evidence."""
-
-    if type(evidence) is not CompleteMetadataSourceEvidence:
-        return False
-    registered = _VERIFIED_SOURCE_EVIDENCE_IDENTITIES.get(id(evidence))
-    if registered is None or registered[0]() is not evidence:
-        return False
-    try:
-        return (
-            evidence._verification_seal is _VERIFIED_SOURCE_EVIDENCE_SEAL
-            and evidence.file_count == EXPECTED_COMPLETE_METADATA_FILE_COUNT
-            and evidence.valid_manifest_count == EXPECTED_COMPLETE_METADATA_FILE_COUNT
-            and evidence.record_count == EXPECTED_COMPLETE_METADATA_RECORD_COUNT
-            and evidence.source_inventory_sha256 == EXPECTED_COMPLETE_METADATA_INVENTORY_SHA256
-            and evidence.inventory_algorithm == SOURCE_INVENTORY_DIGEST_ALGORITHM
-            and registered[1] == _source_evidence_binding(evidence)
-        )
-    except (AttributeError, TypeError, ValueError):
-        return False
-
-
-def _register_verified_scope(scope: CompleteMetadataScope) -> None:
-    evidence = scope.source_evidence
-    if evidence is None or not verify_complete_metadata_source_evidence(evidence):
-        raise CompleteMetadataError("complete metadata source evidence is not verified")
-    identity = id(scope)
-
-    def discard(dead: weakref.ReferenceType[CompleteMetadataScope]) -> None:
-        current = _VERIFIED_SCOPE_IDENTITIES.get(identity)
-        if current is not None and current[0] is dead:
-            _VERIFIED_SCOPE_IDENTITIES.pop(identity, None)
-
-    scope_reference = weakref.ref(scope, discard)
-    _VERIFIED_SCOPE_IDENTITIES[identity] = (
-        scope_reference,
-        weakref.ref(evidence),
-        _scope_binding(scope),
-    )
-
-
-def _verified_scope_identity_valid(scope: object) -> bool:
-    if type(scope) is not CompleteMetadataScope:
-        return False
-    registered = _VERIFIED_SCOPE_IDENTITIES.get(id(scope))
-    evidence = scope.source_evidence
-    if (
-        registered is None
-        or registered[0]() is not scope
-        or evidence is None
-        or registered[1]() is not evidence
-        or not verify_complete_metadata_source_evidence(evidence)
-    ):
-        return False
-    try:
-        return (
-            scope._verification_seal is _VERIFIED_SCOPE_SEAL
-            and scope._verified_scope_binding == registered[2]
-            and registered[2] == _scope_binding(scope)
-        )
-    except (AttributeError, TypeError, ValueError):
-        return False
-
-
-def verify_complete_metadata_scope(
-    scope: object,
-    config: JPLMonthConfig,
-) -> bool:
-    """Verify exact loader identity, content, and canonical month binding."""
-
-    if not _verified_scope_identity_valid(scope) or not is_canonical_jpl_month_config(config):
-        return False
-    assert type(scope) is CompleteMetadataScope
-    try:
-        return (
-            scope.month == config.month
-            and scope.timezone_name == config.timezone_name
-            and scope.local_start_inclusive == config.local_start.isoformat()
-            and scope.local_end_exclusive == config.local_end.isoformat()
-            and scope.utc_start_inclusive == config.utc_start.isoformat()
-            and scope.utc_end_exclusive == config.utc_end.isoformat()
-            and scope.config_fingerprint == _month_config_binding(config)
-        )
-    except (AttributeError, TypeError, ValueError):
-        return False
-
-
 def _utc_calendar_bounds(config: JPLMonthConfig) -> tuple[datetime, datetime]:
     year, month_number = _parse_month(config.month)
     next_year, next_month = _following_month(year, month_number)
@@ -586,11 +476,11 @@ def _legacy_manifest_valid(
     )
 
 
-def load_verified_complete_metadata(
+def _load_complete_metadata_candidate(
     metadata_root: str | Path,
     config: JPLMonthConfig,
-) -> CompleteMetadataScope:
-    """Load only the frozen 42-file complete source and return a verified scope."""
+) -> tuple[CompleteMetadataSourceEvidence, CompleteMetadataScope]:
+    """Validate the frozen source and build an as-yet-unissued scope."""
 
     if not is_canonical_jpl_month_config(config):
         raise CompleteMetadataError("full metadata requires a canonical approved JPL month config")
@@ -658,18 +548,129 @@ def load_verified_complete_metadata(
         raise CompleteMetadataError(
             "complete metadata inventory digest does not match frozen input"
         )
-    object.__setattr__(
-        evidence,
-        "_verification_seal",
-        _VERIFIED_SOURCE_EVIDENCE_SEAL,
-    )
-    _register_verified_source_evidence(evidence)
-
     scope = summarize_complete_metadata(records, config)
-    verified = replace(scope, source_evidence=evidence)
-    object.__setattr__(verified, "_verified_scope_binding", _scope_binding(verified))
-    object.__setattr__(verified, "_verification_seal", _VERIFIED_SCOPE_SEAL)
-    _register_verified_scope(verified)
-    if not verify_complete_metadata_scope(verified, config):
-        raise CompleteMetadataError("complete metadata source evidence is not verified")
-    return verified
+    return evidence, replace(scope, source_evidence=evidence)
+
+
+def _make_verified_metadata_api():  # type: ignore[no-untyped-def]
+    evidence_identities: dict[
+        int,
+        tuple[weakref.ReferenceType[CompleteMetadataSourceEvidence], str],
+    ] = {}
+    scope_identities: dict[
+        int,
+        tuple[
+            weakref.ReferenceType[CompleteMetadataScope],
+            weakref.ReferenceType[CompleteMetadataSourceEvidence],
+            str,
+        ],
+    ] = {}
+
+    def verify_source_evidence(evidence: object) -> bool:
+        if type(evidence) is not CompleteMetadataSourceEvidence:
+            return False
+        registered = evidence_identities.get(id(evidence))
+        if registered is None or registered[0]() is not evidence:
+            return False
+        try:
+            return (
+                evidence._verification_seal is _VERIFIED_SOURCE_EVIDENCE_SEAL
+                and evidence.file_count == EXPECTED_COMPLETE_METADATA_FILE_COUNT
+                and evidence.valid_manifest_count == EXPECTED_COMPLETE_METADATA_FILE_COUNT
+                and evidence.record_count == EXPECTED_COMPLETE_METADATA_RECORD_COUNT
+                and evidence.source_inventory_sha256
+                == EXPECTED_COMPLETE_METADATA_INVENTORY_SHA256
+                and evidence.inventory_algorithm == SOURCE_INVENTORY_DIGEST_ALGORITHM
+                and registered[1] == _source_evidence_binding(evidence)
+            )
+        except (AttributeError, TypeError, ValueError):
+            return False
+
+    def verify_scope(scope: object, config: JPLMonthConfig) -> bool:
+        if type(scope) is not CompleteMetadataScope or not is_canonical_jpl_month_config(config):
+            return False
+        registered = scope_identities.get(id(scope))
+        evidence = scope.source_evidence
+        if (
+            registered is None
+            or registered[0]() is not scope
+            or evidence is None
+            or registered[1]() is not evidence
+            or not verify_source_evidence(evidence)
+        ):
+            return False
+        try:
+            return (
+                scope._verification_seal is _VERIFIED_SCOPE_SEAL
+                and scope._verified_scope_binding == registered[2]
+                and registered[2] == _scope_binding(scope)
+                and scope.month == config.month
+                and scope.timezone_name == config.timezone_name
+                and scope.local_start_inclusive == config.local_start.isoformat()
+                and scope.local_end_exclusive == config.local_end.isoformat()
+                and scope.utc_start_inclusive == config.utc_start.isoformat()
+                and scope.utc_end_exclusive == config.utc_end.isoformat()
+                and scope.config_fingerprint == _month_config_binding(config)
+            )
+        except (AttributeError, TypeError, ValueError):
+            return False
+
+    def load_verified(
+        metadata_root: str | Path,
+        config: JPLMonthConfig,
+    ) -> CompleteMetadataScope:
+        evidence, scope = _load_complete_metadata_candidate(metadata_root, config)
+        object.__setattr__(
+            evidence,
+            "_verification_seal",
+            _VERIFIED_SOURCE_EVIDENCE_SEAL,
+        )
+        evidence_id = id(evidence)
+
+        def discard_evidence(
+            dead: weakref.ReferenceType[CompleteMetadataSourceEvidence],
+        ) -> None:
+            current = evidence_identities.get(evidence_id)
+            if current is not None and current[0] is dead:
+                evidence_identities.pop(evidence_id, None)
+
+        evidence_reference = weakref.ref(evidence, discard_evidence)
+        evidence_identities[evidence_id] = (
+            evidence_reference,
+            _source_evidence_binding(evidence),
+        )
+        if not verify_source_evidence(evidence):
+            raise CompleteMetadataError("complete metadata source evidence is not verified")
+
+        binding = _scope_binding(scope)
+        object.__setattr__(scope, "_verified_scope_binding", binding)
+        object.__setattr__(scope, "_verification_seal", _VERIFIED_SCOPE_SEAL)
+        scope_id = id(scope)
+
+        def discard_scope(dead: weakref.ReferenceType[CompleteMetadataScope]) -> None:
+            current = scope_identities.get(scope_id)
+            if current is not None and current[0] is dead:
+                scope_identities.pop(scope_id, None)
+
+        scope_reference = weakref.ref(scope, discard_scope)
+        scope_identities[scope_id] = (
+            scope_reference,
+            weakref.ref(evidence),
+            binding,
+        )
+        if not verify_scope(scope, config):
+            raise CompleteMetadataError("complete metadata source evidence is not verified")
+        return scope
+
+    load_verified.__name__ = "load_verified_complete_metadata"
+    verify_source_evidence.__name__ = "verify_complete_metadata_source_evidence"
+    verify_scope.__name__ = "verify_complete_metadata_scope"
+    return load_verified, verify_source_evidence, verify_scope
+
+
+(
+    load_verified_complete_metadata,
+    verify_complete_metadata_source_evidence,
+    verify_complete_metadata_scope,
+) = _make_verified_metadata_api()
+del _make_verified_metadata_api

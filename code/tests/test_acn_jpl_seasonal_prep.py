@@ -621,7 +621,7 @@ def test_full_publisher_restores_existing_release_when_install_and_cleanup_fail_
     assert not tuple(tmp_path.glob(".release.backup-*"))
 
 
-def test_full_publisher_rolls_back_when_backup_cleanup_fails_once(
+def test_full_publisher_restores_old_release_when_installed_tree_fails_verification(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -629,6 +629,40 @@ def test_full_publisher_rolls_back_when_backup_cleanup_fails_once(
     destination = tmp_path / "release"
     publish_month_release(results[0], destination)
     before = _recursive_file_bytes(destination)
+    real_verify = prep_module.verify_seasonal_release
+    rejected_installed_tree = False
+
+    def reject_first_valid_destination(path):  # type: ignore[no-untyped-def]
+        nonlocal rejected_installed_tree
+        valid = real_verify(path)
+        if Path(path) == destination and valid and not rejected_installed_tree:
+            rejected_installed_tree = True
+            return False
+        return valid
+
+    monkeypatch.setattr(
+        prep_module,
+        "verify_seasonal_release",
+        reject_first_valid_destination,
+    )
+
+    with pytest.raises(SeasonalPreparationError, match="PUBLIC_INSTALL_INVALID"):
+        publish_seasonal_release(results, destination)
+
+    assert rejected_installed_tree
+    assert destination.is_dir()
+    assert _recursive_file_bytes(destination) == before
+    assert not tuple(tmp_path.glob(".release.staging-*"))
+    assert not tuple(tmp_path.glob(".release.backup-*"))
+
+
+def test_full_publisher_commits_verified_new_tree_when_backup_cleanup_fails_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    results = tuple(_month_result(month) for month in SEASONAL_MONTHS)
+    destination = tmp_path / "release"
+    publish_month_release(results[0], destination)
     real_remove = prep_module._safe_remove_generated
     cleanup_failed = False
 
@@ -645,11 +679,49 @@ def test_full_publisher_rolls_back_when_backup_cleanup_fails_once(
 
     monkeypatch.setattr(prep_module, "_safe_remove_generated", fail_first_backup_cleanup)
 
-    with pytest.raises(OSError, match="injected backup cleanup failure"):
-        publish_seasonal_release(results, destination)
+    published = publish_seasonal_release(results, destination)
 
-    assert destination.is_dir()
-    assert _recursive_file_bytes(destination) == before
+    assert published.months == results
+    assert verify_seasonal_release(destination)
+    assert release_paths(destination) == EXPECTED_RELEASE_PATHS
+    assert not tuple(tmp_path.glob(".release.staging-*"))
+    assert not tuple(tmp_path.glob(".release.backup-*"))
+
+
+def test_full_publisher_never_restores_partially_deleted_backup_after_install(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    results = tuple(_month_result(month) for month in SEASONAL_MONTHS)
+    destination = tmp_path / "release"
+    publish_month_release(results[0], destination)
+    real_remove = prep_module._safe_remove_generated
+    cleanup_failed = False
+
+    def partially_delete_backup_then_fail(path, *, parent):  # type: ignore[no-untyped-def]
+        nonlocal cleanup_failed
+        candidate = Path(path)
+        if (
+            candidate.name.startswith(".release.backup-")
+            and candidate.exists()
+            and not cleanup_failed
+        ):
+            cleanup_failed = True
+            (candidate / "2019-02" / "run_manifest.json").unlink()
+            raise OSError("injected partial backup cleanup failure")
+        return real_remove(candidate, parent=parent)
+
+    monkeypatch.setattr(
+        prep_module,
+        "_safe_remove_generated",
+        partially_delete_backup_then_fail,
+    )
+
+    published = publish_seasonal_release(results, destination)
+
+    assert published.months == results
+    assert verify_seasonal_release(destination)
+    assert release_paths(destination) == EXPECTED_RELEASE_PATHS
     assert not tuple(tmp_path.glob(".release.staging-*"))
     assert not tuple(tmp_path.glob(".release.backup-*"))
 
@@ -824,12 +896,18 @@ def test_implementation_binding_covers_dependencies_and_detects_each_drift(
 ) -> None:
     repo_root = Path(__file__).resolve().parents[2]
     required = {
+        "environment-gate1-pilot.yml",
+        "pyproject.toml",
+        "code/src/evcf/__init__.py",
+        "code/src/evcf/data/__init__.py",
+        "code/src/evcf/data/acn_coverage.py",
         "code/src/evcf/data/acn_api.py",
         "code/src/evcf/data/acn_audit.py",
         "code/src/evcf/data/acn_jpl_gate0.py",
         "code/src/evcf/data/acn_jpl_preparation.py",
         "code/src/evcf/data/acn_jpl_official_reference.py",
         "code/src/evcf/data/acn_jpl_full_month_ts.py",
+        "code/src/evcf/forecasting/__init__.py",
     }
     assert set(prep_module.IMPLEMENTATION_PATHS) >= required
 

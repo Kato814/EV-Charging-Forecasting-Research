@@ -85,7 +85,12 @@ _SNAPSHOT_MISSING_RATE_NAMES = (
 )
 DEFAULT_SEASONAL_PROTOCOL_PATH = Path("code/configs/acn_jpl_seasonal_prep_2019.yaml")
 IMPLEMENTATION_PATHS = (
+    "environment-gate1-pilot.yml",
+    "pyproject.toml",
     "code/configs/acn_jpl_seasonal_prep_2019.yaml",
+    "code/src/evcf/__init__.py",
+    "code/src/evcf/data/__init__.py",
+    "code/src/evcf/data/acn_coverage.py",
     "code/src/evcf/data/acn_api.py",
     "code/src/evcf/data/acn_audit.py",
     "code/src/evcf/data/acn_jpl_gate0.py",
@@ -102,6 +107,7 @@ IMPLEMENTATION_PATHS = (
     "code/src/evcf/data/acn_jpl_issue_snapshots.py",
     "code/src/evcf/data/acn_jpl_seasonal_reporting.py",
     "code/src/evcf/data/acn_jpl_seasonal_prep.py",
+    "code/src/evcf/forecasting/__init__.py",
     "code/src/evcf/forecasting/acn_jpl_gate1_data.py",
     "code/src/evcf/forecasting/acn_jpl_gate1_features.py",
     "scripts/prepare_jpl_seasonal_data.py",
@@ -2352,7 +2358,8 @@ def publish_seasonal_release(
     staging = Path(tempfile.mkdtemp(prefix=f".{destination.name}.staging-", dir=destination.parent))
     backup: Path | None = None
     old_moved = False
-    installed = False
+    tree_installed = False
+    committed = False
     try:
         _write_staged_tree(staging, contents)
         if not verify_seasonal_release(staging):
@@ -2363,22 +2370,41 @@ def publish_seasonal_release(
             os.replace(destination, backup)
             old_moved = True
         os.replace(staging, destination)
-        installed = True
+        tree_installed = True
+        if not verify_seasonal_release(destination):
+            raise SeasonalPreparationError("PUBLIC_INSTALL_INVALID")
+        committed = True
         if backup is not None:
             _safe_remove_generated(backup, parent=destination.parent)
-            # Commit point: after this succeeds, no fallible operation remains.
+            # The verified destination was committed before backup cleanup.
     except BaseException:
-        if old_moved and installed and backup is not None and not backup.exists():
-            # Cleanup removed the sole backup before reporting an error.  The
-            # new tree is already committed, so do not report a false failure.
+        if committed:
+            backup_cleaned = backup is None or _retry_remove_generated(
+                backup,
+                parent=destination.parent,
+            )
+            staging_cleaned = _retry_remove_generated(
+                staging,
+                parent=destination.parent,
+            )
+            if not verify_seasonal_release(destination):
+                raise SeasonalPreparationError("PUBLIC_COMMITTED_TREE_INVALID") from None
+            if not backup_cleaned or not staging_cleaned:
+                raise SeasonalPreparationError("PUBLIC_COMMITTED_CLEANUP_FAILED") from None
             return result
-        restored = not old_moved
+        displaced_installed_tree = not tree_installed or not destination.exists()
+        if tree_installed and destination.exists():
+            try:
+                os.replace(destination, staging)
+                displaced_installed_tree = True
+            except OSError:
+                displaced_installed_tree = False
+        restored = not old_moved and displaced_installed_tree
         if old_moved and backup is not None and backup.exists():
             try:
-                if installed and destination.exists():
-                    os.replace(destination, staging)
-                os.replace(backup, destination)
-                restored = True
+                if displaced_installed_tree:
+                    os.replace(backup, destination)
+                    restored = True
             except OSError:
                 restored = False
         cleaned = _retry_remove_generated(staging, parent=destination.parent)

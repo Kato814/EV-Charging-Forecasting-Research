@@ -145,6 +145,10 @@ def _mutable_tree(value: object) -> object:
     return value
 
 
+def _unchecked_gate1_state(snapshot: gate1_data.Gate1Snapshot) -> tuple[object, ...]:
+    return tuple(object.__getattribute__(snapshot, name) for name in snapshot.__slots__)
+
+
 def test_seasonal_snapshots_emit_only_m1_to_m3_and_one_negative_m4_qa_flag() -> None:
     start = datetime(2019, 11, 1, 7, tzinfo=timezone.utc)
     end = start + timedelta(hours=28)
@@ -278,12 +282,55 @@ def test_seasonal_adapter_builds_a_sealed_readonly_m1_to_m3_snapshot() -> None:
     with pytest.raises(TypeError):
         snapshot.m3_rows[0]["current_current_a"] = 10.0
 
-    restored = pickle.loads(pickle.dumps(snapshot))
-    assert gate1_data.verified_snapshot_provenance(restored) == (
-        gate1_data.verified_snapshot_provenance(snapshot)
-    )
-    assert tuple(restored.artifact_sha256) == gate1_data.SEASONAL_ARTIFACT_ROOTS
-    assert restored.m4_rows == restored.m4_by_issue_time == ()
+
+@pytest.mark.parametrize(
+    "checkpoint_operation",
+    (
+        lambda snapshot: pickle.loads(pickle.dumps(snapshot)),
+        copy.copy,
+        copy.deepcopy,
+    ),
+    ids=("pickle", "copy", "deepcopy"),
+)
+def test_seasonal_gate1_snapshot_checkpointing_is_explicitly_unsupported(
+    checkpoint_operation: Any,
+) -> None:
+    config, station_rows, result = _seasonal_adapter_inputs()
+    snapshot = gate1_data.build_seasonal_gate1_snapshot(result, station_rows, config=config)
+
+    with pytest.raises(
+        ValueError,
+        match="^seasonal Gate1 snapshots cannot be checkpointed$",
+    ):
+        checkpoint_operation(snapshot)
+
+
+def test_seasonal_verification_has_no_restore_signing_entrypoint() -> None:
+    assert not hasattr(gate1_data, "_restore_seasonal_snapshot_verification")
+
+
+def test_seasonal_gate1_snapshot_rejects_direct_state_restore() -> None:
+    config, station_rows, result = _seasonal_adapter_inputs()
+    snapshot = gate1_data.build_seasonal_gate1_snapshot(result, station_rows, config=config)
+    forged = object.__new__(gate1_data.Gate1Snapshot)
+
+    with pytest.raises(
+        ValueError,
+        match="^snapshot checkpoint verification failed$",
+    ):
+        forged.__setstate__(_unchecked_gate1_state(snapshot))
+
+
+def test_seasonal_verification_cannot_itself_be_pickled() -> None:
+    config, station_rows, result = _seasonal_adapter_inputs()
+    snapshot = gate1_data.build_seasonal_gate1_snapshot(result, station_rows, config=config)
+    verification = object.__getattribute__(snapshot, "_verification")
+
+    with pytest.raises(
+        ValueError,
+        match="^seasonal Gate1 snapshots cannot be checkpointed$",
+    ):
+        pickle.dumps(verification)
 
 
 def test_seasonal_result_and_snapshot_reject_dynamic_verifier_injection() -> None:
@@ -387,7 +434,7 @@ def test_seasonal_adapter_rejects_recursive_qa_schema_attacks(attack: str) -> No
 def test_seasonal_gate1_checkpoint_tamper_has_explicit_verification_error() -> None:
     config, station_rows, result = _seasonal_adapter_inputs()
     snapshot = gate1_data.build_seasonal_gate1_snapshot(result, station_rows, config=config)
-    state = list(snapshot.__getstate__())
+    state = list(_unchecked_gate1_state(snapshot))
     artifact_position = snapshot.__slots__.index("artifact_sha256")
     state[artifact_position] = dict(snapshot.artifact_sha256)
     forged = object.__new__(gate1_data.Gate1Snapshot)
@@ -405,7 +452,7 @@ def test_gate1_checkpoint_requires_an_issued_exact_verification(
 ) -> None:
     config, station_rows, result = _seasonal_adapter_inputs()
     snapshot = gate1_data.build_seasonal_gate1_snapshot(result, station_rows, config=config)
-    state = list(snapshot.__getstate__())
+    state = list(_unchecked_gate1_state(snapshot))
     verification_position = snapshot.__slots__.index("_verification")
     verification = state[verification_position]
     assert verification is not None

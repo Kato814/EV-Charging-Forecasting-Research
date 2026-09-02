@@ -54,6 +54,7 @@ CAUSAL_MAX_WINDOW_SECONDS = 60 * 60
 CAUSAL_HOLD_CAP_SECONDS = 12
 _SNAPSHOT_VERIFICATION_SCHEMA = "acn-jpl-gate1-verified-snapshot/v1"
 _SEASONAL_SNAPSHOT_VERIFICATION_SCHEMA = "acn-jpl-seasonal-gate1-verified-snapshot/v1"
+_SEASONAL_CHECKPOINT_ERROR = "seasonal Gate1 snapshots cannot be checkpointed"
 
 SEASONAL_ARTIFACT_ROOTS = (
     "station_15min.jsonl.gz",
@@ -147,17 +148,13 @@ class _SeasonalSnapshotVerification:
     seal_sha256: str
 
     def __copy__(self) -> _SeasonalSnapshotVerification:
-        return _SeasonalSnapshotVerification(*_seasonal_snapshot_verification_values(self))
+        raise ValueError(_SEASONAL_CHECKPOINT_ERROR)
 
     def __deepcopy__(self, _memo: dict[int, Any]) -> _SeasonalSnapshotVerification:
-        return _SeasonalSnapshotVerification(*_seasonal_snapshot_verification_values(self))
+        raise ValueError(_SEASONAL_CHECKPOINT_ERROR)
 
     def __reduce__(self) -> tuple[Any, tuple[tuple[Any, ...]]]:
-        if not _is_issued_snapshot_verification(self):
-            raise ValueError("unissued snapshot verification cannot be checkpointed")
-        return _restore_seasonal_snapshot_verification, (
-            _seasonal_snapshot_verification_values(self),
-        )
+        raise ValueError(_SEASONAL_CHECKPOINT_ERROR)
 
 
 _SnapshotVerificationType = _SnapshotVerification | _SeasonalSnapshotVerification
@@ -173,28 +170,6 @@ def _snapshot_verification_values(value: _SnapshotVerification) -> tuple[Any, ..
         value.target_source_sha256,
         value.feature_source_sha256,
         value.causal_prefix_source_sha256,
-        value.seal_sha256,
-    )
-
-
-def _seasonal_snapshot_verification_values(
-    value: _SeasonalSnapshotVerification,
-) -> tuple[Any, ...]:
-    return (
-        value.schema_version,
-        value.month,
-        value.timezone_name,
-        value.utc_start_utc_s,
-        value.utc_end_utc_s,
-        value.expected_bins,
-        value.expected_issue_count,
-        value.tiers,
-        value.issue_snapshot_sha256,
-        value.data_snapshot_sha256,
-        value.artifact_sha256,
-        value.adapter_implementation_sha256,
-        value.target_source_sha256,
-        value.feature_source_sha256,
         value.seal_sha256,
     )
 
@@ -225,16 +200,6 @@ def _restore_snapshot_verification(values: tuple[Any, ...]) -> _SnapshotVerifica
     if type(values) is not tuple or len(values) != 8:
         raise ValueError("snapshot checkpoint verification failed")
     restored = _SnapshotVerification(*values)
-    _register_snapshot_verification(restored)
-    return restored
-
-
-def _restore_seasonal_snapshot_verification(
-    values: tuple[Any, ...],
-) -> _SeasonalSnapshotVerification:
-    if type(values) is not tuple or len(values) != 15:
-        raise ValueError("snapshot checkpoint verification failed")
-    restored = _SeasonalSnapshotVerification(*values)
     _register_snapshot_verification(restored)
     return restored
 
@@ -624,11 +589,16 @@ class Gate1Snapshot:
     )
 
     def __getstate__(self) -> tuple[Any, ...]:
+        if type(self._verification) is _SeasonalSnapshotVerification:
+            raise ValueError(_SEASONAL_CHECKPOINT_ERROR)
         return tuple(getattr(self, name) for name in self.__slots__)
 
     def __setstate__(self, state: tuple[Any, ...]) -> None:
         if len(state) != len(self.__slots__):
             raise ValueError("snapshot checkpoint field count is invalid")
+        verification_position = self.__slots__.index("_verification")
+        if type(state[verification_position]) is _SeasonalSnapshotVerification:
+            raise ValueError("snapshot checkpoint verification failed")
         for name, value in zip(self.__slots__, state, strict=True):
             restored = _readonly(np.asarray(value)) if isinstance(value, np.ndarray) else value
             object.__setattr__(self, name, restored)

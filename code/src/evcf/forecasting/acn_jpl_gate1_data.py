@@ -80,22 +80,28 @@ ARTIFACT_ROOTS: Mapping[str, str] = MappingProxyType(
 class _FrozenMapping(Mapping[str, Any]):
     """Small picklable read-only mapping used by cross-process snapshots."""
 
-    __slots__ = ("__data",)
+    __slots__ = ("__items",)
 
     def __init__(self, value: Mapping[str, Any]) -> None:
-        self.__data = dict(value)
+        object.__setattr__(self, "_FrozenMapping__items", tuple(value.items()))
+
+    def __setattr__(self, _name: str, _value: Any) -> None:
+        raise TypeError("frozen snapshot mappings cannot be modified")
 
     def __getitem__(self, key: str) -> Any:
-        return self.__data[key]
+        for name, value in self.__items:
+            if name == key:
+                return value
+        raise KeyError(key)
 
     def __iter__(self) -> Iterator[str]:
-        return iter(self.__data)
+        return (name for name, _value in self.__items)
 
     def __len__(self) -> int:
-        return len(self.__data)
+        return len(self.__items)
 
     def __reduce__(self) -> tuple[Any, tuple[dict[str, Any]]]:
-        return type(self), (dict(self.__data),)
+        return type(self), (dict(self.__items),)
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,6 +263,20 @@ _SEASONAL_ISSUE_QA_KEYS = {
     "occupancy_rate",
     "user_inputs_issue_time_truncation",
     "m4_generated",
+}
+_SEASONAL_MISSING_RATE_FIELDS = {
+    "M2_station_current": ("m2_rows", "station_current_a"),
+    "M2_pilot_sum": ("m2_rows", "pilot_sum_a"),
+    "M2_pilot_mean": ("m2_rows", "pilot_mean_a"),
+    "M3_current_current": ("m3_rows", "current_current_a"),
+    "M3_recent_current_mean": ("m3_rows", "recent_current_mean_a"),
+    "M3_recent_current_peak": ("m3_rows", "recent_current_peak_a"),
+    "M3_current_pilot": ("m3_rows", "current_pilot_a"),
+    "M3_known_requested_departure": (
+        "m3_rows",
+        "requested_departure_minutes_from_issue",
+    ),
+    "M3_known_requested_energy": ("m3_rows", "known_kwh_requested"),
 }
 _STATION_COLUMNS = (
     "timestamp_utc",
@@ -509,7 +529,11 @@ class Gate1Snapshot:
             restored = _readonly(np.asarray(value)) if isinstance(value, np.ndarray) else value
             object.__setattr__(self, name, restored)
         if self._verification is not None:
-            verified_snapshot_provenance(self)
+            try:
+                verified_snapshot_provenance(self)
+            except (AttributeError, KeyError, TypeError, ValueError) as exc:
+                object.__setattr__(self, "_verification", None)
+                raise ValueError("snapshot checkpoint verification failed") from exc
 
 
 CausalPrefixConsumer = Callable[[int, int, CausalSessionSeries], None]
@@ -717,8 +741,15 @@ def _seasonal_snapshot_feature_source_sha256(snapshot: Gate1Snapshot) -> str:
 
 
 def _canonical_json_sha256(value: Any) -> str:
+    def materialize(item: Any) -> Any:
+        if isinstance(item, Mapping):
+            return {str(key): materialize(nested) for key, nested in item.items()}
+        if isinstance(item, (list, tuple)):
+            return [materialize(nested) for nested in item]
+        return item
+
     encoded = json.dumps(
-        value,
+        materialize(value),
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=True,
@@ -1805,7 +1836,19 @@ def _validate_seasonal_issue_qa(
     qa = result.qa
     _require_exact_keys(qa, _SEASONAL_ISSUE_QA_KEYS, "seasonal issue snapshot QA")
     issue_count = config.expected_scheduled_issue_times
+    for name in (
+        "issue_times",
+        "formal_issue_times",
+        "incomplete_label_issue_times",
+    ):
+        _as_nonnegative_int(qa[name], f"seasonal issue snapshot QA {name}")
     expected_samples = {tier: issue_count for tier in config.tiers}
+    samples = qa["samples"]
+    if not isinstance(samples, Mapping):
+        raise TypeError("seasonal issue snapshot QA samples must be a mapping")
+    _require_exact_keys(samples, set(config.tiers), "seasonal issue snapshot QA samples")
+    for tier in config.tiers:
+        _as_nonnegative_int(samples[tier], f"seasonal issue snapshot QA {tier} samples")
     expected_shapes = {
         "M1_history": [issue_count, 96],
         "M2_dense": [issue_count, 6],
@@ -1814,6 +1857,117 @@ def _validate_seasonal_issue_qa(
         "labels": [issue_count, len(result.policy.horizons_minutes)],
     }
     expected_labels = {str(horizon): issue_count for horizon in result.policy.horizons_minutes}
+    ragged = qa["ragged_rows"]
+    labels_by_horizon = qa["valid_labels_by_horizon"]
+    shapes = qa["shapes"]
+    temporal = qa["temporal_violations"]
+    whitelist = qa["feature_whitelist_enforcement"]
+    occupancy = qa["occupancy_rate"]
+    user_inputs = qa["user_inputs_issue_time_truncation"]
+    for name, value, keys in (
+        ("ragged_rows", ragged, {"M3"}),
+        ("valid_labels_by_horizon", labels_by_horizon, set(expected_labels)),
+        ("shapes", shapes, set(expected_shapes)),
+        ("temporal_violations", temporal, {"total", "late_user_input_rows"}),
+        ("feature_whitelist_enforcement", whitelist, {"status", "unexpected_key_count"}),
+        ("occupancy_rate", occupancy, {"status", "reason"}),
+        (
+            "user_inputs_issue_time_truncation",
+            user_inputs,
+            {"status", "connected_session_rows", "rows_with_known_input", "rule"},
+        ),
+    ):
+        if not isinstance(value, Mapping):
+            raise TypeError(f"seasonal issue snapshot QA {name} must be a mapping")
+        _require_exact_keys(value, keys, f"seasonal issue snapshot QA {name}")
+    for horizon in expected_labels:
+        _as_nonnegative_int(
+            labels_by_horizon[horizon],
+            f"seasonal issue snapshot QA horizon {horizon}",
+        )
+    for name in ("M3",):
+        _as_nonnegative_int(ragged[name], f"seasonal issue snapshot QA ragged {name}")
+    for name in ("total", "late_user_input_rows"):
+        _as_nonnegative_int(temporal[name], f"seasonal issue snapshot QA temporal {name}")
+    _as_nonnegative_int(
+        whitelist["unexpected_key_count"],
+        "seasonal issue snapshot QA unexpected key count",
+    )
+    connected_rows = _as_nonnegative_int(
+        user_inputs["connected_session_rows"],
+        "seasonal issue snapshot QA connected user-input rows",
+    )
+    known_rows = _as_nonnegative_int(
+        user_inputs["rows_with_known_input"],
+        "seasonal issue snapshot QA known user-input rows",
+    )
+    if known_rows > connected_rows:
+        raise ValueError("seasonal issue snapshot QA known-input count exceeds connected rows")
+    for name in ("M1_history", "M2_dense", "labels"):
+        shape = shapes[name]
+        if not isinstance(shape, (list, tuple)) or len(shape) != 2:
+            raise ValueError(f"seasonal issue snapshot QA {name} shape must have two integers")
+        for value in shape:
+            _as_nonnegative_int(value, f"seasonal issue snapshot QA {name} shape")
+    for name in ("M3_ragged_rows", "M3_session_feature_width"):
+        _as_nonnegative_int(shapes[name], f"seasonal issue snapshot QA {name}")
+    horizons = qa["horizons_minutes"]
+    if not isinstance(horizons, (list, tuple)):
+        raise TypeError("seasonal issue snapshot QA horizons must be a sequence")
+    for value in horizons:
+        _as_nonnegative_int(value, "seasonal issue snapshot QA horizon")
+    for name in ("future_fields_found", "unexpected_feature_keys"):
+        value = qa[name]
+        if not isinstance(value, (list, tuple)) or value:
+            raise ValueError(f"seasonal issue snapshot QA {name} must be an empty sequence")
+
+    missing_rates = qa["missing_rates"]
+    if not isinstance(missing_rates, Mapping):
+        raise TypeError("seasonal issue snapshot QA missing_rates must be a mapping")
+    expected_missing_rate_keys = {"M1_history", *_SEASONAL_MISSING_RATE_FIELDS}
+    _require_exact_keys(
+        missing_rates,
+        expected_missing_rate_keys,
+        "seasonal issue snapshot QA missing_rates",
+    )
+    history_values = [
+        value for row in result.m1_rows for value in row["history_station_current_mean_a"]
+    ]
+    expected_missing_rates: dict[str, float | None] = {
+        "M1_history": (
+            round(sum(value is None for value in history_values) / len(history_values), 8)
+            if history_values
+            else None
+        )
+    }
+    for name, (rows_name, field_name) in _SEASONAL_MISSING_RATE_FIELDS.items():
+        rows = getattr(result, rows_name)
+        expected_missing_rates[name] = (
+            round(sum(row[field_name] is None for row in rows) / len(rows), 8) if rows else None
+        )
+    for name, expected in expected_missing_rates.items():
+        actual = missing_rates[name]
+        if expected is None:
+            if actual is not None:
+                raise ValueError(f"seasonal issue snapshot QA {name} missing rate must be null")
+            continue
+        parsed = _as_finite(actual, f"seasonal issue snapshot QA {name} missing rate")
+        if not 0.0 <= parsed <= 1.0 or not math.isclose(
+            parsed, expected, rel_tol=0.0, abs_tol=1e-8
+        ):
+            raise ValueError(f"seasonal issue snapshot QA {name} missing rate is inconsistent")
+
+    inferred_known_rows = sum(
+        any(
+            row[name] is not None
+            for name in (
+                "user_input_modified_utc_s",
+                "requested_departure_minutes_from_issue",
+                "known_kwh_requested",
+            )
+        )
+        for row in result.m3_rows
+    )
     if (
         qa["schema_version"] != "acn-jpl-issue-snapshot-qa/v1"
         or qa["lookback_minutes"] != result.policy.lookback_minutes
@@ -1828,9 +1982,17 @@ def _validate_seasonal_issue_qa(
         or qa["leakage_audit"] != "PASS"
         or qa["future_fields_found"] != []
         or qa["unexpected_feature_keys"] != []
-        or qa["temporal_violations"] != {"total": 0, "late_user_input_rows": 0}
-        or qa["feature_whitelist_enforcement"].get("status") != "PASS"
-        or qa["feature_whitelist_enforcement"].get("unexpected_key_count") != 0
+        or temporal != {"total": 0, "late_user_input_rows": 0}
+        or whitelist != {"status": "PASS", "unexpected_key_count": 0}
+        or occupancy
+        != {
+            "status": "NOT_CONSTRUCTED",
+            "reason": "Issue #17 supplies no frozen JPL capacity denominator",
+        }
+        or user_inputs["status"] != "PASS"
+        or connected_rows != m3_row_count
+        or not inferred_known_rows <= known_rows <= m3_row_count
+        or user_inputs["rule"] != "last modifiedAt at or before issue time"
         or qa["m4_generated"] is not False
     ):
         raise ValueError("seasonal issue snapshot QA is inconsistent with its tables")
@@ -1923,8 +2085,8 @@ def _validate_seasonal_dense_rows(
             raise ValueError("seasonal M1 calendar does not match issue time")
         history_raw = m1["history_station_current_mean_a"]
         mask_raw = m1["history_observed_mask"]
-        if not isinstance(history_raw, list) or not isinstance(mask_raw, list):
-            raise TypeError("seasonal M1 history and mask must be lists")
+        if not isinstance(history_raw, (list, tuple)) or not isinstance(mask_raw, (list, tuple)):
+            raise TypeError("seasonal M1 history and mask must be sequences")
         if len(history_raw) != 96 or len(mask_raw) != 96:
             raise ValueError("seasonal M1 history and mask must each have 96 values")
         history = [
@@ -2044,6 +2206,33 @@ def _validate_seasonal_m3_rows(
     return rows, groups
 
 
+def _require_canonical_seasonal_policy(
+    policy: object,
+    *,
+    config: JPLMonthConfig,
+) -> SnapshotPolicy:
+    if type(policy) is not SnapshotPolicy:
+        raise TypeError("seasonal snapshot policy must be an exact SnapshotPolicy")
+    if (
+        type(policy.lookback_minutes) is not int
+        or policy.lookback_minutes != 1_440
+        or type(policy.horizons_minutes) is not tuple
+        or policy.horizons_minutes != EXPECTED_HORIZONS_MINUTES
+        or any(type(value) is not int for value in policy.horizons_minutes)
+        or type(policy.issue_step_minutes) is not int
+        or policy.issue_step_minutes != 15
+        or type(policy.max_hold_seconds) is not int
+        or policy.max_hold_seconds != 12
+        or type(policy.active_threshold_a) is not float
+        or policy.active_threshold_a != 0.1
+        or type(policy.tiers) is not tuple
+        or policy.tiers != ("M1", "M2", "M3")
+        or policy.tiers != config.tiers
+    ):
+        raise ValueError("seasonal snapshot policy fields differ from the canonical protocol")
+    return policy
+
+
 def build_seasonal_gate1_snapshot(
     result: IssueSnapshotResult,
     station_rows: Sequence[Mapping[str, Any]],
@@ -2061,12 +2250,14 @@ def build_seasonal_gate1_snapshot(
         raise ValueError("seasonal snapshot requires a canonical seasonal month config")
     if type(result) is not IssueSnapshotResult:
         raise TypeError("seasonal snapshot requires an IssueSnapshotResult")
-    expected_policy = SnapshotPolicy(tiers=config.tiers)
-    if result.policy != expected_policy:
-        raise ValueError("seasonal snapshot policy does not match the canonical config")
+    _require_canonical_seasonal_policy(result.policy, config=config)
     if result.m4_rows:
         raise ValueError("seasonal snapshots cannot contain M4 material")
     _validate_seasonal_table_schemas(result)
+    try:
+        _validate_seasonal_issue_qa(result, config=config, m3_row_count=len(result.m3_rows))
+    except TypeError as exc:
+        raise ValueError("seasonal issue snapshot QA schema is invalid") from exc
     issue_snapshot_sha256 = verified_issue_snapshot_sha256(result)
     materialized_station, station_times, station_current, station_valid = (
         _validate_seasonal_station_rows(station_rows, config=config)
@@ -2090,7 +2281,6 @@ def build_seasonal_gate1_snapshot(
         issue_times=issue_times,
         current_states=current_state,
     )
-    _validate_seasonal_issue_qa(result, config=config, m3_row_count=len(m3_rows))
     artifact_values: Mapping[str, Any] = {
         "station_15min.jsonl.gz": materialized_station,
         "m1.jsonl.gz": result.m1_rows,

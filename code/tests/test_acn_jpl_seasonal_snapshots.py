@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import pickle
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -15,6 +17,7 @@ from evcf.data.acn_jpl_issue_snapshots import (
     SnapshotPolicy,
     build_issue_snapshots,
     feature_whitelist_document,
+    verified_issue_snapshot_sha256,
 )
 from evcf.data.acn_jpl_month_config import JPLMonthConfig, jpl_month_config
 from evcf.forecasting.acn_jpl_gate1_features import (
@@ -120,7 +123,7 @@ def _seasonal_adapter_inputs() -> tuple[
 
 def _m4_mentions(value: object, path: tuple[str, ...] = ()) -> list[tuple[str, Any]]:
     found: list[tuple[str, Any]] = []
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         for key, nested in value.items():
             child_path = (*path, str(key))
             if "m4" in str(key).lower():
@@ -132,6 +135,14 @@ def _m4_mentions(value: object, path: tuple[str, ...] = ()) -> list[tuple[str, A
     elif isinstance(value, str) and "m4" in value.lower():
         found.append((".".join(path), value))
     return found
+
+
+def _mutable_tree(value: object) -> object:
+    if isinstance(value, Mapping):
+        return {key: _mutable_tree(nested) for key, nested in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_mutable_tree(nested) for nested in value]
+    return value
 
 
 def test_seasonal_snapshots_emit_only_m1_to_m3_and_one_negative_m4_qa_flag() -> None:
@@ -208,7 +219,7 @@ def test_seasonal_snapshot_hash_has_only_requested_tier_material() -> None:
     }
     expected = hashlib.sha256(
         json.dumps(
-            payload,
+            _mutable_tree(payload),
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
@@ -285,6 +296,114 @@ def test_seasonal_result_and_snapshot_reject_dynamic_verifier_injection() -> Non
         object.__setattr__(snapshot, "verified_snapshot_provenance", lambda: "0" * 64)
 
 
+def test_issue_snapshot_nested_material_has_no_base_mutator_escape_hatch() -> None:
+    _config, _station_rows, result = _seasonal_adapter_inputs()
+    row = result.m1_rows[0]
+    history = row["history_station_current_mean_a"]
+    samples = result.qa["samples"]
+
+    assert isinstance(row, Mapping) and not isinstance(row, dict)
+    assert isinstance(samples, Mapping) and not isinstance(samples, dict)
+    assert isinstance(history, tuple) and not isinstance(history, list)
+    with pytest.raises(TypeError):
+        dict.__setitem__(row, "issue_index", 999)
+    with pytest.raises(TypeError):
+        list.__setitem__(history, 0, 999.0)
+    with pytest.raises(TypeError):
+        dict.__setitem__(samples, "M4", 1)
+
+
+def test_only_builder_registered_issue_snapshot_identity_is_verified() -> None:
+    _config, _station_rows, result = _seasonal_adapter_inputs()
+    assert verified_issue_snapshot_sha256(result) == result.snapshot_sha256
+    manual = IssueSnapshotResult(
+        m1_rows=result.m1_rows,
+        m2_rows=result.m2_rows,
+        m3_rows=result.m3_rows,
+        m4_rows=result.m4_rows,
+        label_rows=result.label_rows,
+        qa=result.qa,
+        snapshot_sha256=result.snapshot_sha256,
+        _policy=result.policy,
+    )
+
+    for unregistered in (
+        manual,
+        replace(result),
+        copy.copy(result),
+        copy.deepcopy(result),
+        pickle.loads(pickle.dumps(result)),
+    ):
+        assert unregistered is not result
+        with pytest.raises(ValueError, match="process|registered|seal"):
+            verified_issue_snapshot_sha256(unregistered)
+
+
+def test_seasonal_adapter_rejects_policy_subclass_with_malicious_equality() -> None:
+    class AlwaysEqualPolicy(SnapshotPolicy):
+        def __eq__(self, _other: object) -> bool:
+            return True
+
+    config, station_rows, result = _seasonal_adapter_inputs()
+    object.__setattr__(result, "_policy", AlwaysEqualPolicy(tiers=config.tiers))
+
+    with pytest.raises((TypeError, ValueError), match="policy|exact|seal"):
+        gate1_data.build_seasonal_gate1_snapshot(result, station_rows, config=config)
+
+
+@pytest.mark.parametrize(
+    "attack",
+    (
+        "missing_rates_extra",
+        "missing_rates_nan",
+        "occupancy_missing",
+        "occupancy_extra",
+        "user_inputs_infinite",
+        "user_inputs_extra",
+    ),
+)
+def test_seasonal_adapter_rejects_recursive_qa_schema_attacks(attack: str) -> None:
+    config, station_rows, result = _seasonal_adapter_inputs()
+    qa = _mutable_tree(result.qa)
+    assert isinstance(qa, dict)
+    if attack == "missing_rates_extra":
+        qa["missing_rates"]["extra"] = 0.0
+    elif attack == "missing_rates_nan":
+        qa["missing_rates"]["M1_history"] = float("nan")
+    elif attack == "occupancy_missing":
+        qa["occupancy_rate"].pop("reason")
+    elif attack == "occupancy_extra":
+        qa["occupancy_rate"]["extra"] = "ignored"
+    elif attack == "user_inputs_infinite":
+        qa["user_inputs_issue_time_truncation"]["connected_session_rows"] = float("inf")
+    else:
+        qa["user_inputs_issue_time_truncation"]["extra"] = 0
+    object.__setattr__(result, "qa", qa)
+
+    with pytest.raises(ValueError, match="QA|qa|finite|rate|schema|seal"):
+        gate1_data.build_seasonal_gate1_snapshot(result, station_rows, config=config)
+
+
+def test_seasonal_gate1_checkpoint_tamper_has_explicit_verification_error() -> None:
+    config, station_rows, result = _seasonal_adapter_inputs()
+    snapshot = gate1_data.build_seasonal_gate1_snapshot(result, station_rows, config=config)
+    state = list(snapshot.__getstate__())
+    artifact_position = snapshot.__slots__.index("artifact_sha256")
+    state[artifact_position] = dict(snapshot.artifact_sha256)
+    forged = object.__new__(gate1_data.Gate1Snapshot)
+
+    with pytest.raises(ValueError, match="checkpoint verification failed"):
+        forged.__setstate__(tuple(state))
+
+
+def test_gate1_frozen_mapping_has_no_reachable_mutable_backing_dict() -> None:
+    config, station_rows, result = _seasonal_adapter_inputs()
+    snapshot = gate1_data.build_seasonal_gate1_snapshot(result, station_rows, config=config)
+
+    assert not hasattr(snapshot.artifact_sha256, "_FrozenMapping__data")
+    assert not hasattr(snapshot.m3_rows[0], "_FrozenMapping__data")
+
+
 def test_seasonal_adapter_recomputes_and_rejects_snapshot_hash_tampering() -> None:
     config, station_rows, result = _seasonal_adapter_inputs()
     changed_rows = [dict(row) for row in result.m1_rows]
@@ -297,7 +416,7 @@ def test_seasonal_adapter_recomputes_and_rejects_snapshot_hash_tampering() -> No
         replace(result, snapshot_sha256="0" * 64),
         replace(result, m1_rows=tuple(changed_rows)),
     ):
-        with pytest.raises(ValueError, match="snapshot.*hash|SHA"):
+        with pytest.raises(ValueError, match="snapshot.*hash|SHA|process|registered|seal"):
             gate1_data.build_seasonal_gate1_snapshot(
                 tampered,
                 station_rows,
@@ -377,7 +496,8 @@ def test_seasonal_adapter_rejects_station_grid_length_time_and_schema_drift() ->
 
 def test_seasonal_result_binds_requested_tiers_outside_mutable_qa() -> None:
     _config, _station_rows, result = _seasonal_adapter_inputs()
-    changed_qa = json.loads(json.dumps(result.qa))
+    changed_qa = _mutable_tree(result.qa)
+    assert isinstance(changed_qa, dict)
     changed_qa["samples"]["M4"] = 1
 
     with pytest.raises(ValueError, match="tiers|samples"):

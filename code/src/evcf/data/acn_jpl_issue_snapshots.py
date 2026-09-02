@@ -9,12 +9,13 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import weakref
 from bisect import bisect_right
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from types import MappingProxyType
-from typing import Any
+from typing import Any, Self
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -61,55 +62,85 @@ _LOCAL_STRUCTURAL_FIELDS = {
 _TIER_ORDER = ("M1", "M2", "M3", "M4")
 
 
-class _FrozenDict(dict[str, Any]):
-    """JSON-compatible recursively frozen dictionary."""
+class _FrozenTuple(tuple[Any, ...]):
+    """Immutable tuple retaining value equality with legacy JSON lists."""
 
     __slots__ = ()
+    __hash__ = None
 
-    @staticmethod
-    def _immutable(*_args: object, **_kwargs: object) -> None:
+    def __new__(cls, values: Iterable[Any] = ()) -> Self:
+        return super().__new__(cls, values)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, (list, tuple)):
+            return tuple(self) == tuple(other)
+        return False
+
+    def __ne__(self, other: object) -> bool:
+        return not self == other
+
+
+class _FrozenMapping(Mapping[str, Any]):
+    """Tuple-backed mapping with no mutable container reachable from the object."""
+
+    __slots__ = ("__items",)
+
+    def __init__(self, value: Mapping[str, Any]) -> None:
+        items: list[tuple[str, Any]] = []
+        keys: set[str] = set()
+        for key, item in value.items():
+            name = str(key)
+            if name in keys:
+                raise ValueError("frozen mapping keys collide after string normalization")
+            keys.add(name)
+            items.append((name, _deep_freeze(item)))
+        object.__setattr__(self, "_FrozenMapping__items", tuple(items))
+
+    def __setattr__(self, _name: str, _value: Any) -> None:
         raise TypeError("frozen snapshot mappings cannot be modified")
 
-    __delitem__ = _immutable
-    __ior__ = _immutable
-    __setitem__ = _immutable
-    clear = _immutable
-    pop = _immutable
-    popitem = _immutable
-    setdefault = _immutable
-    update = _immutable
+    def __getitem__(self, key: str) -> Any:
+        for name, value in self.__items:
+            if name == key:
+                return value
+        raise KeyError(key)
+
+    def __iter__(self) -> Iterator[str]:
+        return (name for name, _value in self.__items)
+
+    def __len__(self) -> int:
+        return len(self.__items)
+
+    def __repr__(self) -> str:
+        return repr(dict(self.__items))
+
+    def __copy__(self) -> _FrozenMapping:
+        return self
+
+    def __deepcopy__(self, _memo: dict[int, Any]) -> _FrozenMapping:
+        return self
+
+    def __reduce__(self) -> tuple[Any, tuple[tuple[tuple[str, Any], ...]]]:
+        return _frozen_mapping_from_items, (self.__items,)
 
 
-class _FrozenList(list[Any]):
-    """JSON-compatible recursively frozen list."""
-
-    __slots__ = ()
-
-    @staticmethod
-    def _immutable(*_args: object, **_kwargs: object) -> None:
-        raise TypeError("frozen snapshot sequences cannot be modified")
-
-    __delitem__ = _immutable
-    __iadd__ = _immutable
-    __imul__ = _immutable
-    __setitem__ = _immutable
-    append = _immutable
-    clear = _immutable
-    extend = _immutable
-    insert = _immutable
-    pop = _immutable
-    remove = _immutable
-    reverse = _immutable
-    sort = _immutable
+def _frozen_mapping_from_items(items: tuple[tuple[str, Any], ...]) -> _FrozenMapping:
+    return _FrozenMapping(dict(items))
 
 
 def _deep_freeze(value: Any) -> Any:
     if isinstance(value, Mapping):
-        return _FrozenDict({str(key): _deep_freeze(item) for key, item in value.items()})
-    if isinstance(value, list):
-        return _FrozenList(_deep_freeze(item) for item in value)
+        return _FrozenMapping(value)
+    if isinstance(value, (list, tuple)):
+        return _FrozenTuple(_deep_freeze(item) for item in value)
+    return value
+
+
+def _deep_thaw(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {str(key): _deep_thaw(item) for key, item in value.items()}
     if isinstance(value, tuple):
-        return tuple(_deep_freeze(item) for item in value)
+        return [_deep_thaw(item) for item in value]
     return value
 
 
@@ -150,16 +181,16 @@ class SnapshotPolicy:
             raise ValueError("active threshold must be finite")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class IssueSnapshotResult:
     """Local, anonymous snapshot tables plus aggregate QA."""
 
-    m1_rows: tuple[dict[str, Any], ...]
-    m2_rows: tuple[dict[str, Any], ...]
-    m3_rows: tuple[dict[str, Any], ...]
-    m4_rows: tuple[dict[str, Any], ...]
-    label_rows: tuple[dict[str, Any], ...]
-    qa: dict[str, Any]
+    m1_rows: tuple[Mapping[str, Any], ...]
+    m2_rows: tuple[Mapping[str, Any], ...]
+    m3_rows: tuple[Mapping[str, Any], ...]
+    m4_rows: tuple[Mapping[str, Any], ...]
+    label_rows: tuple[Mapping[str, Any], ...]
+    qa: Mapping[str, Any]
     snapshot_sha256: str
     _policy: SnapshotPolicy = field(default_factory=SnapshotPolicy, repr=False, compare=False)
 
@@ -185,7 +216,7 @@ class IssueSnapshotResult:
         return self._policy
 
     @property
-    def tier_rows(self) -> Mapping[str, tuple[dict[str, Any], ...]]:
+    def tier_rows(self) -> Mapping[str, tuple[Mapping[str, Any], ...]]:
         """Return an immutable view containing only the requested tier tables."""
 
         all_rows = {
@@ -196,6 +227,20 @@ class IssueSnapshotResult:
         }
         requested = self._policy.tiers
         return MappingProxyType({tier: all_rows[tier] for tier in requested})
+
+
+@dataclass(frozen=True, slots=True)
+class _IssueSnapshotRegistration:
+    binding_sha256: str
+    snapshot_sha256: str
+    process_seal: object
+
+
+_ISSUE_SNAPSHOT_REGISTRY: dict[
+    int,
+    tuple[weakref.ReferenceType[IssueSnapshotResult], _IssueSnapshotRegistration],
+] = {}
+_ISSUE_SNAPSHOT_PROCESS_SEAL = object()
 
 
 def _utc(value: datetime) -> datetime:
@@ -593,34 +638,143 @@ def _canonical_hash(*tables: Sequence[Mapping[str, Any]], policy: SnapshotPolicy
         policy_payload["tiers"] = policy.tiers
     payload = {
         "policy": policy_payload,
-        "tables": tables,
+        "tables": _deep_thaw(tables),
     }
     encoded = json.dumps(
         payload,
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
+        allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _issue_snapshot_tables(
+    result: IssueSnapshotResult,
+) -> tuple[Sequence[Mapping[str, Any]], ...]:
+    all_rows = {
+        "M1": result.m1_rows,
+        "M2": result.m2_rows,
+        "M3": result.m3_rows,
+        "M4": result.m4_rows,
+    }
+    return tuple(all_rows[tier] for tier in result._policy.tiers) + (result.label_rows,)
+
+
+def _require_deeply_frozen(value: Any, context: str) -> None:
+    if isinstance(value, Mapping):
+        if type(value) is not _FrozenMapping:
+            raise ValueError(f"{context} must use the sealed immutable mapping type")
+        for key, nested in value.items():
+            if not isinstance(key, str):
+                raise TypeError(f"{context} mapping keys must be strings")
+            _require_deeply_frozen(nested, context)
+        return
+    if isinstance(value, tuple):
+        if type(value) is not _FrozenTuple:
+            raise ValueError(f"{context} nested sequences must use the sealed tuple type")
+        for nested in value:
+            _require_deeply_frozen(nested, context)
+        return
+    if isinstance(value, (list, dict, set, np.ndarray)):
+        raise TypeError(f"{context} contains mutable nested material")
+    if value is not None and not isinstance(value, (str, int, float, bool)):
+        raise TypeError(f"{context} contains unsupported nested material")
+
+
+def _validate_issue_snapshot_object(result: IssueSnapshotResult) -> None:
+    if type(result._policy) is not SnapshotPolicy:
+        raise TypeError("issue snapshot policy must be an exact SnapshotPolicy")
+    _validate_tiers(result._policy.tiers)
+    for name in ("m1_rows", "m2_rows", "m3_rows", "m4_rows", "label_rows"):
+        rows = getattr(result, name)
+        if type(rows) is not tuple:
+            raise ValueError(f"issue snapshot {name} must use an immutable outer tuple")
+        for row in rows:
+            _require_deeply_frozen(row, f"issue snapshot {name}")
+    _require_deeply_frozen(result.qa, "issue snapshot QA")
+
+
+def _issue_snapshot_binding_sha256(result: IssueSnapshotResult) -> str:
+    policy = result._policy
+    payload = {
+        "schema_version": "acn-jpl-issue-snapshot-process-binding/v1",
+        "policy": {
+            "lookback_minutes": policy.lookback_minutes,
+            "horizons_minutes": list(policy.horizons_minutes),
+            "issue_step_minutes": policy.issue_step_minutes,
+            "max_hold_seconds": policy.max_hold_seconds,
+            "active_threshold_a": policy.active_threshold_a,
+            "tiers": list(policy.tiers),
+        },
+        "m1_rows": _deep_thaw(result.m1_rows),
+        "m2_rows": _deep_thaw(result.m2_rows),
+        "m3_rows": _deep_thaw(result.m3_rows),
+        "m4_rows": _deep_thaw(result.m4_rows),
+        "label_rows": _deep_thaw(result.label_rows),
+        "qa": _deep_thaw(result.qa),
+        "snapshot_sha256": result.snapshot_sha256,
+    }
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _register_issue_snapshot(result: IssueSnapshotResult) -> None:
+    _validate_issue_snapshot_object(result)
+    recomputed = _canonical_hash(*_issue_snapshot_tables(result), policy=result._policy)
+    if recomputed != result.snapshot_sha256:
+        raise ValueError("builder produced an inconsistent issue snapshot hash")
+    identity = id(result)
+    registration = _IssueSnapshotRegistration(
+        binding_sha256=_issue_snapshot_binding_sha256(result),
+        snapshot_sha256=result.snapshot_sha256,
+        process_seal=_ISSUE_SNAPSHOT_PROCESS_SEAL,
+    )
+
+    def discard(reference: weakref.ReferenceType[IssueSnapshotResult]) -> None:
+        current = _ISSUE_SNAPSHOT_REGISTRY.get(identity)
+        if current is not None and current[0] is reference:
+            _ISSUE_SNAPSHOT_REGISTRY.pop(identity, None)
+
+    reference = weakref.ref(result, discard)
+    _ISSUE_SNAPSHOT_REGISTRY[identity] = (reference, registration)
+
+
 def verified_issue_snapshot_sha256(result: IssueSnapshotResult) -> str:
-    """Recompute and verify the result hash using its directly bound tier policy."""
+    """Verify one live builder-issued result against its process-local identity seal."""
 
     if type(result) is not IssueSnapshotResult:
         raise TypeError("snapshot hash verification requires an IssueSnapshotResult")
+    entry = _ISSUE_SNAPSHOT_REGISTRY.get(id(result))
+    if (
+        entry is None
+        or entry[0]() is not result
+        or entry[1].process_seal is not _ISSUE_SNAPSHOT_PROCESS_SEAL
+    ):
+        raise ValueError("issue snapshot has no live builder process seal")
+    _validate_issue_snapshot_object(result)
     if (
         not isinstance(result.snapshot_sha256, str)
         or len(result.snapshot_sha256) != 64
         or any(character not in "0123456789abcdef" for character in result.snapshot_sha256)
     ):
         raise ValueError("issue snapshot SHA-256 is invalid")
-    tables: tuple[Sequence[Mapping[str, Any]], ...] = tuple(
-        result.tier_rows[tier] for tier in result.policy.tiers
-    ) + (result.label_rows,)
-    recomputed = _canonical_hash(*tables, policy=result.policy)
+    recomputed = _canonical_hash(*_issue_snapshot_tables(result), policy=result._policy)
     if recomputed != result.snapshot_sha256:
         raise ValueError("issue snapshot hash differs from its canonical tables")
+    registration = entry[1]
+    if (
+        registration.snapshot_sha256 != result.snapshot_sha256
+        or registration.binding_sha256 != _issue_snapshot_binding_sha256(result)
+    ):
+        raise ValueError("issue snapshot content differs from its builder process seal")
     return recomputed
 
 
@@ -1097,7 +1251,7 @@ def build_issue_snapshots(
         tier_tables[tier] for tier in policy.tiers
     ) + (label_rows,)
     snapshot_hash = _canonical_hash(*tables, policy=policy)
-    return IssueSnapshotResult(
+    result = IssueSnapshotResult(
         m1_rows=tuple(m1_rows),
         m2_rows=tuple(m2_rows),
         m3_rows=tuple(m3_rows),
@@ -1107,3 +1261,5 @@ def build_issue_snapshots(
         snapshot_sha256=snapshot_hash,
         _policy=policy,
     )
+    _register_issue_snapshot(result)
+    return result

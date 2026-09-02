@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import hmac
 import inspect
 import json
 import os
+import weakref
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -41,7 +43,11 @@ from .acn_jpl_month_config import (
     jpl_month_config,
 )
 from .acn_jpl_official_reference import OfficialLocalMonthTotalResult
-from .acn_jpl_preparation import canonical_seasonal_inventory, load_closed_json_object
+from .acn_jpl_preparation import (
+    InventorySnapshot,
+    canonical_seasonal_inventory,
+    load_closed_json_object,
+)
 
 _CARRY_SCHEMA = "acn-jpl-seasonal-carry-in/v1"
 _RUN_SCHEMA = "acn-jpl-seasonal-month-ts-run/v1"
@@ -173,6 +179,135 @@ class MonthAcquisitionResult:
             },
         }
 
+    def is_verified_for(
+        self,
+        *,
+        config: JPLMonthConfig,
+        scope: CompleteMetadataScope,
+        inventory: InventorySnapshot,
+    ) -> bool:
+        """Return whether this exact in-process result remains bound to disk evidence."""
+
+        return _month_result_is_verified(
+            self,
+            config=config,
+            scope=scope,
+            inventory=inventory,
+        )
+
+
+_VERIFIED_MONTH_RESULTS: dict[
+    int,
+    tuple[weakref.ReferenceType[MonthAcquisitionResult], str, int],
+] = {}
+
+
+def _month_result_binding(
+    result: MonthAcquisitionResult,
+    *,
+    config: JPLMonthConfig,
+    scope: CompleteMetadataScope,
+) -> str:
+    evidence = scope.source_evidence
+    payload = {
+        "result": result.public_dict(),
+        "config": {
+            "month": config.month,
+            "timezone_name": config.timezone_name,
+            "local_start": config.local_start.isoformat(),
+            "local_end": config.local_end.isoformat(),
+            "utc_start": config.utc_start.isoformat(),
+            "utc_end": config.utc_end.isoformat(),
+            "day_count": config.day_count,
+            "expected_bins": config.expected_bins,
+            "expected_scheduled_issue_times": config.expected_scheduled_issue_times,
+            "grid_policy": config.grid_policy,
+            "tiers": list(config.tiers),
+        },
+        "scope": {
+            "identity": id(scope),
+            "config_fingerprint": scope.config_fingerprint,
+            "record_inventory_sha256": scope.record_inventory_sha256,
+            "local_month_session_count": scope.local_month_session_count,
+            "utc_month_session_count": scope.utc_month_session_count,
+            "left_boundary_count": scope.left_boundary_count,
+            "right_boundary_count": scope.right_boundary_count,
+            "carry_in_session_count": scope.carry_in_session_count,
+            "source_evidence": (
+                {
+                    "file_count": evidence.file_count,
+                    "valid_manifest_count": evidence.valid_manifest_count,
+                    "record_count": evidence.record_count,
+                    "source_inventory_sha256": evidence.source_inventory_sha256,
+                    "inventory_algorithm": evidence.inventory_algorithm,
+                }
+                if evidence is not None
+                else None
+            ),
+        },
+    }
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _seal_month_result(
+    result: MonthAcquisitionResult,
+    *,
+    config: JPLMonthConfig,
+    scope: object,
+) -> MonthAcquisitionResult:
+    if not (
+        isinstance(scope, CompleteMetadataScope)
+        and is_canonical_jpl_month_config(config)
+        and scope.is_verified_for(config)
+    ):
+        return result
+    result_id = id(result)
+
+    def discard(reference: weakref.ReferenceType[MonthAcquisitionResult]) -> None:
+        current = _VERIFIED_MONTH_RESULTS.get(result_id)
+        if current is not None and current[0] is reference:
+            _VERIFIED_MONTH_RESULTS.pop(result_id, None)
+
+    reference = weakref.ref(result, discard)
+    _VERIFIED_MONTH_RESULTS[result_id] = (
+        reference,
+        _month_result_binding(result, config=config, scope=scope),
+        id(scope),
+    )
+    return result
+
+
+def _month_result_is_verified(
+    result: MonthAcquisitionResult,
+    *,
+    config: JPLMonthConfig,
+    scope: CompleteMetadataScope,
+    inventory: InventorySnapshot,
+) -> bool:
+    entry = _VERIFIED_MONTH_RESULTS.get(id(result))
+    if not (
+        entry is not None
+        and entry[0]() is result
+        and entry[2] == id(scope)
+        and is_canonical_jpl_month_config(config)
+        and scope.is_verified_for(config)
+        and isinstance(inventory, InventorySnapshot)
+        and result.raw_file_count == inventory.file_count
+        and result.raw_inventory_sha256 == inventory.digest
+    ):
+        return False
+    try:
+        expected = _month_result_binding(result, config=config, scope=scope)
+    except (AttributeError, TypeError, ValueError):
+        return False
+    return hmac.compare_digest(entry[1], expected)
+
 
 @dataclass(frozen=True)
 class _CarryTransfer:
@@ -231,7 +366,7 @@ def _result(
 ) -> MonthAcquisitionResult:
     local_count, carry_count = _safe_counts(scope)
     safe_reasons = tuple(code for code in reason_codes if code in _SAFE_FAILURE_CODES)
-    return MonthAcquisitionResult(
+    result = MonthAcquisitionResult(
         month=config.month,
         status=status,
         local_session_count=local_count,
@@ -240,6 +375,7 @@ def _result(
         reason_codes=safe_reasons,
         **counts,
     )
+    return _seal_month_result(result, config=config, scope=scope)
 
 
 def _sha256_file(path: Path) -> str:

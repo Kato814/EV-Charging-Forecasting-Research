@@ -1954,12 +1954,6 @@ def _seasonal_state_is_closed(
     return official.total == expected_total
 
 
-def _seasonal_acquisition_payload(result: object) -> Mapping[str, Any]:
-    if isinstance(result, MonthAcquisitionResult):
-        return result.public_dict()
-    return result if isinstance(result, Mapping) else {}
-
-
 def _seasonal_acquisition_matches(
     result: object,
     *,
@@ -1967,9 +1961,13 @@ def _seasonal_acquisition_matches(
     scope: CompleteMetadataScope,
     inventory: InventorySnapshot | None,
 ) -> bool:
-    payload = _seasonal_acquisition_payload(result)
-    if inventory is None:
+    if not (
+        isinstance(result, MonthAcquisitionResult)
+        and inventory is not None
+        and result.is_verified_for(config=config, scope=scope, inventory=inventory)
+    ):
         return False
+    payload = result.public_dict()
     expected_total = scope.local_month_session_count + scope.carry_in_session_count
     expected = {
         "month": config.month,
@@ -2065,7 +2063,7 @@ def generate_month_timeseries_qa(
     config: JPLMonthConfig,
     scope: CompleteMetadataScope,
     raw_root: str | Path,
-    acquisition_result: MonthAcquisitionResult | Mapping[str, Any] | None,
+    acquisition_result: MonthAcquisitionResult | None,
     sensitive_values: Iterable[str] = (),
 ) -> FullMonthQAResult:
     """Read-only, aggregate QA for one approved seasonal JPL local month."""

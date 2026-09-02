@@ -5,7 +5,9 @@ import gzip
 import hashlib
 import json
 import math
+import pickle
 import shutil
+from dataclasses import fields, replace
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
 from pathlib import Path
@@ -33,7 +35,7 @@ from evcf.data.acn_jpl_month_config import (
     load_verified_complete_metadata,
 )
 from evcf.data.acn_jpl_official_reference import probe_official_local_month_total
-from evcf.data.acn_jpl_seasonal_acquisition import acquire_jpl_month
+from evcf.data.acn_jpl_seasonal_acquisition import MonthAcquisitionResult, acquire_jpl_month
 
 ZONE = ZoneInfo("America/Los_Angeles")
 
@@ -1324,3 +1326,141 @@ def test_generic_month_qa_detects_raw_mutation_during_read_only_audit(
     assert result.gate_status == "FAIL"
     assert result.qa["integrity"]["raw_inventory"]["unchanged"] is False
     assert "RAW_SNAPSHOT_CHANGED" in result.qa["gate"]["reason_codes"]
+
+
+def _assert_seasonal_acquisition_rejected(
+    *,
+    config: Any,
+    scope: CompleteMetadataScope,
+    raw_root: Path,
+    acquisition_result: object,
+) -> None:
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition_result,  # type: ignore[arg-type]
+    )
+
+    assert result.gate_status == "FAIL"
+    assert result.qa["gate"]["checks"]["acquisition_complete_and_consistent"] is False
+    assert "ACQUISITION_INCOMPLETE" in result.qa["gate"]["reason_codes"]
+
+
+def test_generic_month_qa_accepts_only_the_internally_sealed_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    manual = MonthAcquisitionResult(
+        **{
+            item.name: getattr(acquisition, item.name)
+            for item in fields(MonthAcquisitionResult)
+            if item.init
+        }
+    )
+    forged = (
+        acquisition.public_dict(),
+        manual,
+        replace(acquisition),
+        copy.copy(acquisition),
+        copy.deepcopy(acquisition),
+        pickle.loads(pickle.dumps(acquisition)),
+    )
+
+    genuine = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+    assert genuine.gate_status == "PASS"
+    for candidate in forged:
+        _assert_seasonal_acquisition_rejected(
+            config=config,
+            scope=scope,
+            raw_root=raw_root,
+            acquisition_result=candidate,
+        )
+
+
+def test_generic_month_qa_rejects_result_bound_to_another_verified_scope_instance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    other_scope = load_verified_complete_metadata(tmp_path / "metadata", config)
+    assert other_scope.is_verified_for(config)
+    assert other_scope is not scope
+
+    _assert_seasonal_acquisition_rejected(
+        config=config,
+        scope=other_scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+
+def test_generic_month_qa_rejects_result_after_valid_raw_inventory_is_rewritten(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    data_path = min((raw_root / "timeseries").glob("*.jsonl.gz"))
+    with gzip.open(data_path, "ab"):
+        pass
+    manifest_path = (
+        raw_root
+        / "manifests"
+        / "timeseries"
+        / data_path.name.replace(".jsonl.gz", ".manifest.json")
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["sha256"] = hashlib.sha256(data_path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+    assert result.qa["gate"]["checks"]["raw_snapshot_valid"] is True
+    assert result.qa["gate"]["checks"]["acquisition_complete_and_consistent"] is False
+    assert result.gate_status == "FAIL"
+
+
+def test_sealed_result_rejects_cross_month_verification(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    inventory = full_qa_module.canonical_seasonal_inventory(raw_root)
+
+    assert acquisition.is_verified_for(config=config, scope=scope, inventory=inventory)
+    assert not acquisition.is_verified_for(
+        config=jpl_month_config("2019-08"),
+        scope=scope,
+        inventory=inventory,
+    )

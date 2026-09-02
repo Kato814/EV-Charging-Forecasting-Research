@@ -14,6 +14,7 @@ import gzip
 import hashlib
 import json
 import math
+import weakref
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
@@ -104,7 +105,7 @@ class _FrozenMapping(Mapping[str, Any]):
         return type(self), (dict(self.__items),)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class _SnapshotVerification:
     schema_version: str
     data_snapshot_sha256: str
@@ -115,8 +116,19 @@ class _SnapshotVerification:
     causal_prefix_source_sha256: str | None
     seal_sha256: str
 
+    def __copy__(self) -> _SnapshotVerification:
+        return _SnapshotVerification(*_snapshot_verification_values(self))
 
-@dataclass(frozen=True, slots=True)
+    def __deepcopy__(self, _memo: dict[int, Any]) -> _SnapshotVerification:
+        return _SnapshotVerification(*_snapshot_verification_values(self))
+
+    def __reduce__(self) -> tuple[Any, tuple[tuple[Any, ...]]]:
+        if not _is_issued_snapshot_verification(self):
+            raise ValueError("unissued snapshot verification cannot be checkpointed")
+        return _restore_snapshot_verification, (_snapshot_verification_values(self),)
+
+
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class _SeasonalSnapshotVerification:
     schema_version: str
     month: str
@@ -133,6 +145,98 @@ class _SeasonalSnapshotVerification:
     target_source_sha256: str
     feature_source_sha256: str
     seal_sha256: str
+
+    def __copy__(self) -> _SeasonalSnapshotVerification:
+        return _SeasonalSnapshotVerification(*_seasonal_snapshot_verification_values(self))
+
+    def __deepcopy__(self, _memo: dict[int, Any]) -> _SeasonalSnapshotVerification:
+        return _SeasonalSnapshotVerification(*_seasonal_snapshot_verification_values(self))
+
+    def __reduce__(self) -> tuple[Any, tuple[tuple[Any, ...]]]:
+        if not _is_issued_snapshot_verification(self):
+            raise ValueError("unissued snapshot verification cannot be checkpointed")
+        return _restore_seasonal_snapshot_verification, (
+            _seasonal_snapshot_verification_values(self),
+        )
+
+
+_SnapshotVerificationType = _SnapshotVerification | _SeasonalSnapshotVerification
+_SNAPSHOT_VERIFICATION_REGISTRY: dict[int, weakref.ReferenceType[Any]] = {}
+
+
+def _snapshot_verification_values(value: _SnapshotVerification) -> tuple[Any, ...]:
+    return (
+        value.schema_version,
+        value.data_snapshot_sha256,
+        value.artifact_sha256,
+        value.loader_implementation_sha256,
+        value.target_source_sha256,
+        value.feature_source_sha256,
+        value.causal_prefix_source_sha256,
+        value.seal_sha256,
+    )
+
+
+def _seasonal_snapshot_verification_values(
+    value: _SeasonalSnapshotVerification,
+) -> tuple[Any, ...]:
+    return (
+        value.schema_version,
+        value.month,
+        value.timezone_name,
+        value.utc_start_utc_s,
+        value.utc_end_utc_s,
+        value.expected_bins,
+        value.expected_issue_count,
+        value.tiers,
+        value.issue_snapshot_sha256,
+        value.data_snapshot_sha256,
+        value.artifact_sha256,
+        value.adapter_implementation_sha256,
+        value.target_source_sha256,
+        value.feature_source_sha256,
+        value.seal_sha256,
+    )
+
+
+def _register_snapshot_verification(
+    verification: _SnapshotVerificationType,
+) -> _SnapshotVerificationType:
+    if type(verification) not in (_SnapshotVerification, _SeasonalSnapshotVerification):
+        raise TypeError("snapshot verification must use an exact internal type")
+    identity = id(verification)
+
+    def discard(reference: weakref.ReferenceType[Any]) -> None:
+        if _SNAPSHOT_VERIFICATION_REGISTRY.get(identity) is reference:
+            _SNAPSHOT_VERIFICATION_REGISTRY.pop(identity, None)
+
+    _SNAPSHOT_VERIFICATION_REGISTRY[identity] = weakref.ref(verification, discard)
+    return verification
+
+
+def _is_issued_snapshot_verification(verification: object) -> bool:
+    if type(verification) not in (_SnapshotVerification, _SeasonalSnapshotVerification):
+        return False
+    reference = _SNAPSHOT_VERIFICATION_REGISTRY.get(id(verification))
+    return reference is not None and reference() is verification
+
+
+def _restore_snapshot_verification(values: tuple[Any, ...]) -> _SnapshotVerification:
+    if type(values) is not tuple or len(values) != 8:
+        raise ValueError("snapshot checkpoint verification failed")
+    restored = _SnapshotVerification(*values)
+    _register_snapshot_verification(restored)
+    return restored
+
+
+def _restore_seasonal_snapshot_verification(
+    values: tuple[Any, ...],
+) -> _SeasonalSnapshotVerification:
+    if type(values) is not tuple or len(values) != 15:
+        raise ValueError("snapshot checkpoint verification failed")
+    restored = _SeasonalSnapshotVerification(*values)
+    _register_snapshot_verification(restored)
+    return restored
 
 
 _MANIFEST_KEYS = {
@@ -528,12 +632,13 @@ class Gate1Snapshot:
         for name, value in zip(self.__slots__, state, strict=True):
             restored = _readonly(np.asarray(value)) if isinstance(value, np.ndarray) else value
             object.__setattr__(self, name, restored)
-        if self._verification is not None:
-            try:
-                verified_snapshot_provenance(self)
-            except (AttributeError, KeyError, TypeError, ValueError) as exc:
-                object.__setattr__(self, "_verification", None)
-                raise ValueError("snapshot checkpoint verification failed") from exc
+        try:
+            if not _is_issued_snapshot_verification(self._verification):
+                raise ValueError("snapshot checkpoint has no issued verification")
+            verified_snapshot_provenance(self)
+        except (AttributeError, KeyError, OSError, TypeError, ValueError) as exc:
+            object.__setattr__(self, "_verification", None)
+            raise ValueError("snapshot checkpoint verification failed") from exc
 
 
 CausalPrefixConsumer = Callable[[int, int, CausalSessionSeries], None]
@@ -834,19 +939,20 @@ def _issue_snapshot_verification(
         feature_source_sha256=feature_source_sha256,
         causal_prefix_source_sha256=causal_prefix_source_sha256,
     )
+    verification = _SnapshotVerification(
+        schema_version=_SNAPSHOT_VERIFICATION_SCHEMA,
+        data_snapshot_sha256=snapshot.data_snapshot_sha256,
+        artifact_sha256=artifacts,
+        loader_implementation_sha256=loader_sha256,
+        target_source_sha256=target_source_sha256,
+        feature_source_sha256=feature_source_sha256,
+        causal_prefix_source_sha256=causal_prefix_source_sha256,
+        seal_sha256=hashlib.sha256(payload).hexdigest(),
+    )
     object.__setattr__(
         snapshot,
         "_verification",
-        _SnapshotVerification(
-            schema_version=_SNAPSHOT_VERIFICATION_SCHEMA,
-            data_snapshot_sha256=snapshot.data_snapshot_sha256,
-            artifact_sha256=artifacts,
-            loader_implementation_sha256=loader_sha256,
-            target_source_sha256=target_source_sha256,
-            feature_source_sha256=feature_source_sha256,
-            causal_prefix_source_sha256=causal_prefix_source_sha256,
-            seal_sha256=hashlib.sha256(payload).hexdigest(),
-        ),
+        _register_snapshot_verification(verification),
     )
 
 
@@ -902,26 +1008,27 @@ def _issue_seasonal_snapshot_verification(
         target_source_sha256=target_source,
         feature_source_sha256=feature_source,
     )
+    verification = _SeasonalSnapshotVerification(
+        schema_version=_SEASONAL_SNAPSHOT_VERIFICATION_SCHEMA,
+        month=config.month,
+        timezone_name=config.timezone_name,
+        utc_start_utc_s=int(config.utc_start.timestamp()),
+        utc_end_utc_s=int(config.utc_end.timestamp()),
+        expected_bins=config.expected_bins,
+        expected_issue_count=config.expected_scheduled_issue_times,
+        tiers=config.tiers,
+        issue_snapshot_sha256=issue_snapshot_sha256,
+        data_snapshot_sha256=snapshot.data_snapshot_sha256,
+        artifact_sha256=artifacts,
+        adapter_implementation_sha256=implementation,
+        target_source_sha256=target_source,
+        feature_source_sha256=feature_source,
+        seal_sha256=hashlib.sha256(payload).hexdigest(),
+    )
     object.__setattr__(
         snapshot,
         "_verification",
-        _SeasonalSnapshotVerification(
-            schema_version=_SEASONAL_SNAPSHOT_VERIFICATION_SCHEMA,
-            month=config.month,
-            timezone_name=config.timezone_name,
-            utc_start_utc_s=int(config.utc_start.timestamp()),
-            utc_end_utc_s=int(config.utc_end.timestamp()),
-            expected_bins=config.expected_bins,
-            expected_issue_count=config.expected_scheduled_issue_times,
-            tiers=config.tiers,
-            issue_snapshot_sha256=issue_snapshot_sha256,
-            data_snapshot_sha256=snapshot.data_snapshot_sha256,
-            artifact_sha256=artifacts,
-            adapter_implementation_sha256=implementation,
-            target_source_sha256=target_source,
-            feature_source_sha256=feature_source,
-            seal_sha256=hashlib.sha256(payload).hexdigest(),
-        ),
+        _register_snapshot_verification(verification),
     )
 
 
@@ -1086,13 +1193,15 @@ def _verified_seasonal_snapshot_provenance(
 def verified_snapshot_provenance(snapshot: Gate1Snapshot) -> str:
     """Return loader-issued provenance, rejecting synthetic or replaced snapshots."""
 
-    if not isinstance(snapshot, Gate1Snapshot):
+    if type(snapshot) is not Gate1Snapshot:
         raise TypeError("verified snapshot provenance requires a Gate1Snapshot")
     verification = snapshot._verification
-    if isinstance(verification, _SeasonalSnapshotVerification):
+    if not _is_issued_snapshot_verification(verification):
+        raise ValueError("snapshot has no issued loader verification")
+    if type(verification) is _SeasonalSnapshotVerification:
         return _verified_seasonal_snapshot_provenance(snapshot, verification)
-    if not isinstance(verification, _SnapshotVerification):
-        raise ValueError("snapshot has no verified loader seal")  # noqa: TRY004
+    if type(verification) is not _SnapshotVerification:
+        raise ValueError("snapshot has no verified loader seal")
     if verification.schema_version != _SNAPSHOT_VERIFICATION_SCHEMA:
         raise ValueError("snapshot loader seal schema is invalid")
     if not _valid_sha256(snapshot.data_snapshot_sha256) or (

@@ -1320,10 +1320,20 @@ def validate_seasonal_cleaning_documents(
         raise ValueError("boundary current audit policy is inconsistent")
 
 
+def json_safe_payload(payload: object) -> object:
+    """Recursively copy immutable snapshot material into JSON-native containers."""
+
+    if isinstance(payload, Mapping):
+        return {key: json_safe_payload(value) for key, value in payload.items()}
+    if isinstance(payload, (list, tuple)):
+        return [json_safe_payload(value) for value in payload]
+    return payload
+
+
 def _json_bytes(payload: object) -> bytes:
     return (
         json.dumps(
-            payload,
+            json_safe_payload(payload),
             ensure_ascii=False,
             sort_keys=True,
             indent=2,
@@ -1349,7 +1359,7 @@ def _deterministic_gzip_jsonl_bytes(rows: Iterable[Mapping[str, Any]]) -> bytes:
     with gzip.GzipFile(filename="", mode="wb", fileobj=target, mtime=0) as compressed:
         for row in rows:
             line = json.dumps(
-                row,
+                json_safe_payload(row),
                 ensure_ascii=False,
                 sort_keys=True,
                 separators=(",", ":"),

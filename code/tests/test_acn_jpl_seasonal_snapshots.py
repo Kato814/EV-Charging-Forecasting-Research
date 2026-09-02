@@ -5,7 +5,7 @@ import hashlib
 import json
 import pickle
 from collections.abc import Mapping
-from dataclasses import replace
+from dataclasses import fields, replace
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -393,6 +393,45 @@ def test_seasonal_gate1_checkpoint_tamper_has_explicit_verification_error() -> N
     forged = object.__new__(gate1_data.Gate1Snapshot)
 
     with pytest.raises(ValueError, match="checkpoint verification failed"):
+        forged.__setstate__(tuple(state))
+
+
+@pytest.mark.parametrize(
+    "verification_attack",
+    ("none", "wrong_type", "subclass", "manual", "bad_seal"),
+)
+def test_gate1_checkpoint_requires_an_issued_exact_verification(
+    verification_attack: str,
+) -> None:
+    config, station_rows, result = _seasonal_adapter_inputs()
+    snapshot = gate1_data.build_seasonal_gate1_snapshot(result, station_rows, config=config)
+    state = list(snapshot.__getstate__())
+    verification_position = snapshot.__slots__.index("_verification")
+    verification = state[verification_position]
+    assert verification is not None
+    values = {field.name: getattr(verification, field.name) for field in fields(verification)}
+
+    if verification_attack == "none":
+        attacked_verification: object = None
+    elif verification_attack == "wrong_type":
+        attacked_verification = object()
+    elif verification_attack == "subclass":
+
+        class VerificationSubclass(type(verification)):
+            pass
+
+        attacked_verification = VerificationSubclass(**values)
+    elif verification_attack == "manual":
+        attacked_verification = type(verification)(**values)
+    else:
+        attacked_verification = replace(verification, seal_sha256="0" * 64)
+    state[verification_position] = attacked_verification
+    forged = object.__new__(gate1_data.Gate1Snapshot)
+
+    with pytest.raises(
+        ValueError,
+        match="^snapshot checkpoint verification failed$",
+    ):
         forged.__setstate__(tuple(state))
 
 

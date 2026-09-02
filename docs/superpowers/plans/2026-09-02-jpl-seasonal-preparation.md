@@ -18,7 +18,7 @@
 - February has 2,688 bins and 2,577 scheduled issue times; August has 2,976 bins and 2,865 scheduled issue times.
 - Seasonal output contains M1, M2, and M3 only. No M4 tier, row, feature, file, manifest entry, or hash may exist. The only permitted public references are the negative audit `m4_generated=false` and the final human-readable statement `M4 generated: NO`.
 - Raw and processed data remain ignored. No session, user, station, space, object identifier, trajectory, prediction, model, credential, or local absolute path is public.
-- Severe 208 V evidence contradictions set seasonal `power_semantics_status=CURRENT_PROXY_ONLY` and `e208_authorized=false`; the current-proxy M1-M3 pipeline continues. The legacy May wrapper keeps its existing stop behavior and artifacts.
+- Severe 208 V evidence contradictions set seasonal `power_semantics_status=CURRENT_PROXY_ONLY` and `e208_authorized=false`; the current-proxy M1-M3 pipeline continues. A passing evidence rule may report `KW_RECONSTRUCTION_CANDIDATE`, but the local execution pipeline still records `e208_authorized=false`: candidate status is not research authorization. The legacy May wrapper keeps its existing stop behavior and artifacts.
 - May regression remains: local sessions 1,644; UTC sessions 1,645; carry-in 1; bins 2,976; scheduled/formal issue times 2,865/2,853; raw inventory and published hashes unchanged.
 
 ### Closed monthly QA schema
@@ -33,7 +33,7 @@ Every public JSON is validated against a closed schema: required keys must all b
 
 ### Frozen top-level decision matrix
 
-- `PASS`: all three months complete every acquisition, integrity, cleaning, valid-bin, leakage, privacy, snapshot, local-test, and final-head CI gate, and every month authorizes the nominal 208 V reconstruction candidate.
+- `PASS`: all three months complete every acquisition, integrity, cleaning, valid-bin, leakage, privacy, snapshot, local-test, and final-head CI gate, and every month independently reaches `KW_RECONSTRUCTION_CANDIDATE`. This does not set `e208_authorized=true`; formal authorization remains a main-controller decision.
 - `CONDITIONAL_PASS`: all three months pass every data/security/test/CI gate and are ready for current-proxy M1-M3 replication, but at least one month is conservatively downgraded to `CURRENT_PROXY_ONLY`; nominal 208 V kW reporting is not authorized for that month.
 - `FAIL`: any target month is incomplete or fails a required data/security/test/CI gate. A previously completed month remains preserved, but the three-month package is not declared ready.
 
@@ -353,7 +353,7 @@ Keep pinned repository `zach401/acnportal` and commit `14e723b11339e56ca3afd2bf4
 
 The primary audit cohort is fixed before seeing seasonal results: `kWhDelivered >= 0.5 kWh` and current coverage `>= 0.90`. Add closed-schema tests for mapping coverage, eligible/retained counts and rate, median Veff, Q1/Q3/IQR, 208 V MdAPE, P90 APE, aggregate energy error, and the resulting status/authorization pair.
 
-`seasonal_power_decision()` must first call the unchanged legacy `classify_power_semantics()` rule. Mapping below 0.95, any non-finite statistic or zero retained-rate denominator, or absolute monthly relative energy error above 0.50 remains a legacy severe failure; the seasonal adapter maps that result to `CURRENT_PROXY_ONLY`, `e208_authorized=false`, and `continue_current_pipeline=true`. The candidate boundary remains exactly mapping 1.0, primary audit coverage at least 0.90, retained rate at least 0.90, MdAPE at most 0.20, P90 APE at most 0.40, and absolute monthly error at most 0.10. All other finite non-severe cases remain `CURRENT_PROXY_ONLY`. Add threshold, equality-boundary, negative-error, NaN, infinity, and zero-denominator tests; do not invent a second classifier.
+`seasonal_power_decision()` must first call the unchanged legacy `classify_power_semantics()` rule. Mapping below 0.95, any non-finite statistic or zero retained-rate denominator, or absolute monthly relative energy error above 0.50 remains a legacy severe failure; the seasonal adapter maps that result to `CURRENT_PROXY_ONLY`, `e208_authorized=false`, and `continue_current_pipeline=true`. The candidate boundary remains exactly mapping 1.0, primary audit coverage at least 0.90, retained rate at least 0.90, MdAPE at most 0.20, P90 APE at most 0.40, and absolute monthly error at most 0.10. A candidate preserves the candidate status but also keeps `e208_authorized=false` until main-controller review. All other finite non-severe cases remain `CURRENT_PROXY_ONLY`. Add threshold, equality-boundary, negative-error, NaN, infinity, zero-denominator, and candidate-without-authorization tests; do not invent a second classifier.
 
 - [ ] **Step 5: Run cleaning/power suites and May regression**
 

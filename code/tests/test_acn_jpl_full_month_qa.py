@@ -4,6 +4,7 @@ import copy
 import gzip
 import hashlib
 import json
+import math
 import shutil
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
@@ -14,16 +15,25 @@ from zoneinfo import ZoneInfo
 import pytest
 from evcf.data import acn_jpl_full_month_qa as full_qa_module
 from evcf.data import acn_jpl_full_month_ts as full_ts_module
-from evcf.data.acn_api import ACNQuery
+from evcf.data import acn_jpl_month_config as month_config_module
+from evcf.data.acn_api import ACNClient, ACNQuery
 from evcf.data.acn_jpl_full_month_qa import (
     PUBLIC_ARTIFACT_NAMES,
     _safe_rate,
     audit_quality_records,
     generate_full_month_timeseries_qa,
+    generate_month_timeseries_qa,
     verify_public_artifact_hashes,
 )
 from evcf.data.acn_jpl_full_month_ts import run_full_month_timeseries
 from evcf.data.acn_jpl_gate0 import chunk_paths, jpl_analysis_windows
+from evcf.data.acn_jpl_month_config import (
+    CompleteMetadataScope,
+    jpl_month_config,
+    load_verified_complete_metadata,
+)
+from evcf.data.acn_jpl_official_reference import probe_official_local_month_total
+from evcf.data.acn_jpl_seasonal_acquisition import acquire_jpl_month
 
 ZONE = ZoneInfo("America/Los_Angeles")
 
@@ -878,3 +888,396 @@ def test_ambiguous_orphaned_previous_releases_fail_closed(
         assert _release_snapshot(output_root) == previous
     else:
         assert not output_root.exists()
+
+
+class _GenericProbeResponse:
+    status_code = 200
+
+    def __init__(self, total: int) -> None:
+        self.total = total
+
+    def json(self) -> dict[str, Any]:
+        return {"_meta": {"total": self.total}}
+
+    def raise_for_status(self) -> None:
+        return None
+
+
+class _GenericProbeSession:
+    def __init__(self, total: int) -> None:
+        self.total = total
+        self.auth: tuple[str, str] | None = None
+        self.headers: dict[str, str] = {}
+        self.calls = 0
+
+    def get(self, url: str, *, params: Any = None, timeout: Any = None) -> Any:
+        del url, params, timeout
+        self.calls += 1
+        return _GenericProbeResponse(self.total)
+
+
+class _GenericTimeseriesClient:
+    def __init__(
+        self,
+        local_records: list[dict[str, Any]],
+        carry_records: list[dict[str, Any]],
+    ) -> None:
+        self.local_records = tuple(local_records)
+        self.carry_records = {record["sessionID"]: record for record in carry_records}
+
+    def iter_pages(self, query: ACNQuery):  # type: ignore[no-untyped-def]
+        if query.session_id is not None:
+            items = [self.carry_records[query.session_id]]
+        else:
+            items = [
+                record
+                for record in self.local_records
+                if query.start_utc
+                <= datetime.strptime(record["connectionTime"], "%a, %d %b %Y %H:%M:%S GMT").replace(
+                    tzinfo=timezone.utc
+                )
+                < query.end_utc
+            ]
+        yield _page(items)
+
+
+def _generic_scope_and_acquisition(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    month: str,
+    carry_count: int,
+    invalid_first: bool = False,
+) -> tuple[Any, CompleteMetadataScope, Path, Any]:
+    config = jpl_month_config(month)
+    local_records = [
+        _record(index + 200, config.utc_start + timedelta(days=index, minutes=1))
+        for index in range(3)
+    ]
+    if invalid_first:
+        local_records[0].pop("chargingCurrent")
+        local_records[0].pop("pilotSignal")
+    carry_records = [
+        _record(index + 500, config.utc_start - timedelta(hours=index + 1))
+        for index in range(carry_count)
+    ]
+    for index, record in enumerate(carry_records):
+        record["disconnectTime"] = _stamp(config.utc_start + timedelta(minutes=index + 1))
+        record["doneChargingTime"] = _stamp(config.utc_start)
+    records = local_records + carry_records
+    metadata_root = tmp_path / "metadata"
+    metadata_root.mkdir(parents=True)
+    data_path = metadata_root / "complete.jsonl.gz"
+    with gzip.open(data_path, "wt", encoding="utf-8", newline="\n") as handle:
+        for record in records:
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
+    digest = hashlib.sha256(data_path.read_bytes()).hexdigest()
+    data_path.with_name(data_path.name + ".manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "endpoint": "sessions/jpl",
+                "site": "jpl",
+                "mode": "metadata",
+                "record_count": len(records),
+                "source_total": len(records),
+                "sha256": digest,
+            }
+        ),
+        encoding="utf-8",
+    )
+    inventory = hashlib.sha256(f"{data_path.name}\0{digest}\0{len(records)}\n".encode()).hexdigest()
+    monkeypatch.setattr(month_config_module, "EXPECTED_COMPLETE_METADATA_FILE_COUNT", 1)
+    monkeypatch.setattr(
+        month_config_module,
+        "EXPECTED_COMPLETE_METADATA_RECORD_COUNT",
+        len(records),
+    )
+    monkeypatch.setattr(
+        month_config_module,
+        "EXPECTED_COMPLETE_METADATA_INVENTORY_SHA256",
+        inventory,
+    )
+    scope = load_verified_complete_metadata(metadata_root, config)
+    raw_root = tmp_path / "raw" / month
+    reference = raw_root / "state" / "official.json"
+    probe_session = _GenericProbeSession(scope.local_month_session_count)
+
+    def live_probe(month_config: Any) -> Any:
+        return probe_official_local_month_total(
+            ACNClient("fixture-probe-token", session=probe_session),  # type: ignore[arg-type]
+            reference,
+            month=month_config,
+        )
+
+    acquisition = acquire_jpl_month(
+        authorized=True,
+        config=config,
+        scope=scope,
+        official_probe=live_probe,
+        raw_root=raw_root,
+        ts_client_factory=lambda: _GenericTimeseriesClient(
+            local_records,
+            carry_records,
+        ),
+        downloaded_at_utc=datetime(2026, 9, 2, tzinfo=timezone.utc),
+    )
+    assert acquisition.status == "COMPLETE"
+    assert probe_session.calls == 1
+    return config, scope, raw_root, acquisition
+
+
+@pytest.mark.parametrize(
+    ("month", "carry_count"),
+    [("2019-02", 0), ("2019-08", 1), ("2019-11", 2)],
+)
+def test_generic_month_qa_closes_dynamic_days_carry_linkage_and_raw_inventory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    month: str,
+    carry_count: int,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month=month,
+        carry_count=carry_count,
+    )
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+    integrity = result.qa["integrity"]
+    assert result.gate_status == "PASS"
+    assert result.artifact_names == ()
+    assert integrity["daily_chunks"]["expected"] == config.day_count
+    assert integrity["daily_chunks"]["valid"] == config.day_count
+    assert integrity["local_month"]["observed_records"] == 3
+    assert integrity["local_month"]["missing_metadata_pairs"] == 0
+    assert integrity["local_month"]["orphan_timeseries_pairs"] == 0
+    assert integrity["carry_in"]["observed_records"] == carry_count
+    assert integrity["carry_in"]["missing_metadata_pairs"] == 0
+    assert integrity["carry_in"]["orphan_timeseries_pairs"] == 0
+    assert integrity["combined"]["observed_records"] == 3 + carry_count
+    assert integrity["combined"]["unique_pair_count"] == 3 + carry_count
+    assert integrity["raw_inventory"]["unchanged"] is True
+    assert integrity["raw_inventory"]["sha256"] == acquisition.raw_inventory_sha256
+    assert integrity["partial_file_count"] == 0
+    for field in ("chargingCurrent", "pilotSignal"):
+        rate = result.qa["quality"]["series"][field]["invalid_container_rate"]
+        assert math.isfinite(rate)
+        assert rate <= 0.10
+
+
+def test_generic_month_qa_fails_when_both_invalid_container_rates_exceed_limit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+        invalid_first=True,
+    )
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+    assert result.gate_status == "FAIL"
+    checks = result.qa["gate"]["checks"]
+    assert checks["current_invalid_rate_at_most_limit"] is False
+    assert checks["pilot_invalid_rate_at_most_limit"] is False
+    for field in ("chargingCurrent", "pilotSignal"):
+        rate = result.qa["quality"]["series"][field]["invalid_container_rate"]
+        assert rate == pytest.approx(1 / 3, abs=1e-8)
+        assert math.isfinite(rate)
+
+
+@pytest.mark.parametrize(
+    "invalid_shape",
+    ["absent", "non_mapping", "timestamps_non_list", "values_non_list", "length_mismatch"],
+)
+@pytest.mark.parametrize("field", ["chargingCurrent", "pilotSignal"])
+def test_invalid_series_container_definition_is_closed(
+    invalid_shape: str,
+    field: str,
+) -> None:
+    record = _record(900, datetime(2019, 5, 2, 8, tzinfo=timezone.utc))
+    value_key = "current" if field == "chargingCurrent" else "pilot"
+    if invalid_shape == "absent":
+        record.pop(field)
+    elif invalid_shape == "non_mapping":
+        record[field] = []
+    elif invalid_shape == "timestamps_non_list":
+        record[field]["timestamps"] = "not-a-list"
+    elif invalid_shape == "values_non_list":
+        record[field][value_key] = "not-a-list"
+    else:
+        record[field][value_key].pop()
+
+    series = audit_quality_records([record], denominator=1)["series"][field]
+
+    assert series["invalid_container_count"] == 1
+    assert series["invalid_container_rate"] == 1.0
+
+
+def test_generic_month_qa_detects_pair_orphans_even_with_valid_hashes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=1,
+    )
+    data_path: Path | None = None
+    for candidate in sorted((raw_root / "timeseries").glob("*.jsonl.gz")):
+        with gzip.open(candidate, "rt", encoding="utf-8") as handle:
+            if handle.read(1):
+                data_path = candidate
+                break
+    assert data_path is not None
+    with gzip.open(data_path, "rt", encoding="utf-8") as handle:
+        records = [json.loads(line) for line in handle if line.strip()]
+    records[0]["_id"] = "private-orphan-object"
+    records[0]["sessionID"] = "private-orphan-session"
+    with (
+        data_path.open("wb") as raw_handle,
+        gzip.GzipFile(filename="", mode="wb", fileobj=raw_handle, mtime=0) as handle,
+    ):
+        for record in records:
+            handle.write((json.dumps(record, sort_keys=True) + "\n").encode())
+    manifest_path = (
+        raw_root
+        / "manifests"
+        / "timeseries"
+        / data_path.name.replace(".jsonl.gz", ".manifest.json")
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["sha256"] = hashlib.sha256(data_path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+    assert result.gate_status == "FAIL"
+    assert result.qa["integrity"]["local_month"]["missing_metadata_pairs"] == 1
+    assert result.qa["integrity"]["local_month"]["orphan_timeseries_pairs"] == 1
+
+
+def test_generic_month_qa_rejects_extra_raw_and_partial_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    extra = raw_root / "timeseries" / "nested" / "extra.jsonl.gz"
+    extra.parent.mkdir()
+    extra.write_bytes(b"not-valid")
+    partial = raw_root / "state" / "private.partial"
+    partial.write_text("sentinel-partial-token", encoding="utf-8")
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+        sensitive_values=("sentinel-partial-token",),
+    )
+
+    assert result.gate_status == "FAIL"
+    assert "RAW_SNAPSHOT_INVALID" in result.qa["gate"]["reason_codes"]
+    assert result.qa["integrity"]["partial_file_count"] == 1
+    assert "sentinel-partial-token" not in repr(result)
+
+
+@pytest.mark.parametrize("target", ["daily_manifest", "unrelated_state", "official"])
+def test_generic_month_qa_requires_closed_raw_and_state_documents(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    target: str,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=1,
+    )
+    sentinel = f"sentinel-{target}-token"
+    if target == "daily_manifest":
+        path = min((raw_root / "manifests" / "timeseries").glob("*.manifest.json"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["token"] = sentinel
+        path.write_text(json.dumps(payload), encoding="utf-8")
+    elif target == "unrelated_state":
+        (raw_root / "state" / "unrelated.json").write_text(
+            json.dumps({"token": sentinel}), encoding="utf-8"
+        )
+    else:
+        path = next(
+            path for path in (raw_root / "state").glob("*.json") if path.name != "progress.json"
+        )
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["token"] = sentinel
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+        sensitive_values=(sentinel,),
+    )
+
+    assert result.gate_status == "FAIL"
+    assert "RAW_SNAPSHOT_INVALID" in result.qa["gate"]["reason_codes"]
+    assert sentinel not in repr(result)
+
+
+def test_generic_month_qa_detects_raw_mutation_during_read_only_audit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    data_path = min((raw_root / "timeseries").glob("*.jsonl.gz"))
+    original = full_qa_module.iter_validated_raw_records
+
+    def mutating_records(*args: Any, **kwargs: Any):  # type: ignore[no-untyped-def]
+        yield from original(*args, **kwargs)
+        data_path.write_bytes(data_path.read_bytes() + b"changed")
+
+    monkeypatch.setattr(full_qa_module, "iter_validated_raw_records", mutating_records)
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+    assert result.gate_status == "FAIL"
+    assert result.qa["integrity"]["raw_inventory"]["unchanged"] is False
+    assert "RAW_SNAPSHOT_CHANGED" in result.qa["gate"]["reason_codes"]

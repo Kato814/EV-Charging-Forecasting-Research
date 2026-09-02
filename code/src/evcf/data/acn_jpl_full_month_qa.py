@@ -46,6 +46,25 @@ from .acn_jpl_gate0 import (
     is_valid_utc_timestamp,
     jpl_analysis_windows,
 )
+from .acn_jpl_month_config import (
+    SEASONAL_MONTHS,
+    CompleteMetadataScope,
+    JPLMonthConfig,
+    is_canonical_jpl_month_config,
+)
+from .acn_jpl_official_reference import load_verified_official_local_month_total
+from .acn_jpl_preparation import (
+    InventorySnapshot,
+    RawSnapshotContract,
+    assert_raw_snapshot_unchanged,
+    canonical_seasonal_inventory,
+    iter_validated_raw_records,
+    validate_raw_snapshot,
+)
+from .acn_jpl_seasonal_acquisition import (
+    MonthAcquisitionResult,
+    _progress_document_is_complete,
+)
 
 EXPECTED_TOTAL_SESSION_COUNT = EXPECTED_ANALYSIS_SESSION_COUNT + EXPECTED_CARRY_IN_SESSION_COUNT
 INVALID_CHARGING_CURRENT_RATE_LIMIT = 0.10
@@ -87,6 +106,28 @@ _FAILED_CSV_COLUMNS = (
     "reason_code",
     "observed_records",
     "reported_records",
+)
+_DAILY_MANIFEST_KEYS = frozenset(
+    {
+        "schema_version",
+        "dataset_id",
+        "source",
+        "endpoint",
+        "site",
+        "timezone",
+        "local_start_inclusive",
+        "local_end_exclusive",
+        "utc_start_inclusive",
+        "utc_end_exclusive",
+        "query_condition",
+        "record_count",
+        "remote_total_reported",
+        "complete_for_query",
+        "downloaded_at_utc",
+        "sha256",
+        "token_stored",
+        "output_file",
+    }
 )
 
 _CURRENT_FIELD = "chargingCurrent"
@@ -509,6 +550,22 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _closed_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in payload:
+            raise ValueError("JSON object contains duplicate keys")
+        payload[key] = value
+    return payload
+
+
+def _load_closed_json(path: Path) -> object:
+    return json.loads(
+        path.read_text(encoding="utf-8"),
+        object_pairs_hook=_closed_json_object,
+    )
+
+
 @dataclass
 class _ChunkScan:
     local_date: str
@@ -556,8 +613,8 @@ def _scan_daily_chunk(raw_root: Path, window: Any) -> _ChunkScan:
     manifest: dict[str, Any] | None = None
     if manifest_present:
         try:
-            candidate = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError):
+            candidate = _load_closed_json(manifest_path)
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
             candidate = None
         if isinstance(candidate, dict):
             manifest = candidate
@@ -586,6 +643,7 @@ def _scan_daily_chunk(raw_root: Path, window: Any) -> _ChunkScan:
     remote_total = manifest.get("remote_total_reported") if manifest is not None else None
     manifest_contract_valid = bool(
         manifest is not None
+        and set(manifest) == _DAILY_MANIFEST_KEYS
         and all(manifest.get(key) == value for key, value in expected_context.items())
         and manifest.get("complete_for_query") is True
         and manifest.get("token_stored") is False
@@ -1858,3 +1916,425 @@ def generate_full_month_timeseries_qa(
     contents["SHA256SUMS"] = checksum_content
     _publish_artifact_release(Path(output_root), contents)
     return FullMonthQAResult(gate_status=gate_status, qa=qa)
+
+
+def _scope_pairs(
+    records: Iterable[Mapping[str, Any]],
+) -> set[tuple[str, str]] | None:
+    pairs: set[tuple[str, str]] = set()
+    count = 0
+    for record in records:
+        count += 1
+        object_id = record.get("_id")
+        session_id = record.get("sessionID")
+        if not isinstance(object_id, str) or not object_id:
+            return None
+        if not isinstance(session_id, str) or not session_id:
+            return None
+        pairs.add((object_id, session_id))
+    return pairs if len(pairs) == count else None
+
+
+def _seasonal_state_is_closed(
+    root: Path,
+    config: JPLMonthConfig,
+    expected_total: int,
+) -> bool:
+    state_root = root / "state"
+    if not state_root.is_dir() or state_root.is_symlink():
+        return False
+    try:
+        entries = tuple(state_root.iterdir())
+    except OSError:
+        return False
+    if any(path.is_symlink() or not path.is_file() for path in entries):
+        return False
+    progress = state_root / "progress.json"
+    references = tuple(path for path in entries if path != progress)
+    if (
+        len(entries) != 2
+        or len(references) != 1
+        or references[0].suffix != ".json"
+        or references[0].name.endswith(".manifest.json")
+        or not _progress_document_is_complete(progress, config)
+    ):
+        return False
+    try:
+        official = load_verified_official_local_month_total(references[0], month=config)
+    except (OSError, TypeError, ValueError):
+        return False
+    return official.total == expected_total
+
+
+def _seasonal_acquisition_payload(result: object) -> Mapping[str, Any]:
+    if isinstance(result, MonthAcquisitionResult):
+        return result.public_dict()
+    return result if isinstance(result, Mapping) else {}
+
+
+def _seasonal_acquisition_matches(
+    result: object,
+    *,
+    config: JPLMonthConfig,
+    scope: CompleteMetadataScope,
+    inventory: InventorySnapshot | None,
+) -> bool:
+    payload = _seasonal_acquisition_payload(result)
+    if inventory is None:
+        return False
+    expected_total = scope.local_month_session_count + scope.carry_in_session_count
+    expected = {
+        "month": config.month,
+        "status": "COMPLETE",
+        "local_session_count": scope.local_month_session_count,
+        "official_total": scope.local_month_session_count,
+        "carry_in_count": scope.carry_in_session_count,
+        "valid_daily_chunks": config.day_count,
+        "failed_daily_chunks": 0,
+        "daily_record_count": scope.local_month_session_count,
+        "daily_unique_object_count": scope.local_month_session_count,
+        "daily_unique_session_count": scope.local_month_session_count,
+        "daily_unique_pair_count": scope.local_month_session_count,
+        "carry_in_completed": scope.carry_in_session_count,
+        "carry_record_count": scope.carry_in_session_count,
+        "carry_unique_pair_count": scope.carry_in_session_count,
+        "combined_record_count": expected_total,
+        "combined_unique_object_count": expected_total,
+        "combined_unique_session_count": expected_total,
+        "combined_unique_pair_count": expected_total,
+        "missing_pairs": 0,
+        "orphan_pairs": 0,
+        "raw_file_count": inventory.file_count,
+        "partial_file_count": 0,
+        "raw_inventory_sha256": inventory.digest,
+    }
+    return all(payload.get(key) == value for key, value in expected.items()) and payload.get(
+        "reason_codes"
+    ) in ((), [])
+
+
+def _generic_scope_failure(config: JPLMonthConfig) -> FullMonthQAResult:
+    quality = audit_quality_records((), denominator=0)
+    qa = {
+        "schema_version": "acn-jpl-month-timeseries-qa/v1",
+        "month": config.month,
+        "integrity": {
+            "status": "FAIL",
+            "scope_verified": False,
+            "daily_chunks": {
+                "expected": config.day_count,
+                "valid": 0,
+                "failed_or_incomplete": config.day_count,
+            },
+            "local_month": _local_integrity(_PrivateInventory(), set(), 0),
+            "carry_in": _local_integrity(_PrivateInventory(), set(), 0),
+            "combined": _local_integrity(_PrivateInventory(), set(), 0),
+            "raw_inventory": {
+                "file_count": 0,
+                "total_bytes": 0,
+                "sha256": None,
+                "unchanged": False,
+            },
+            "partial_file_count": 0,
+        },
+        "quality": quality,
+        "gate": {
+            "status": "FAIL",
+            "checks": {"scope_verified": False},
+            "reason_codes": ["SCOPE_NOT_VERIFIED"],
+            "ready_for_cleaning": False,
+            "ready_for_15_min": "NO",
+            "gate1_ready": "NO",
+        },
+        "privacy": {
+            "aggregate_only": True,
+            "private_keys_emitted": False,
+            "credentials_emitted": False,
+            "absolute_local_paths_emitted": False,
+            "raw_trajectories_emitted": False,
+        },
+    }
+    return FullMonthQAResult(gate_status="FAIL", qa=qa, artifact_names=())
+
+
+def _invalid_rate_at_most(
+    numerator: int,
+    denominator: int,
+    rendered_rate: object,
+    limit: float,
+) -> bool:
+    return (
+        denominator > 0
+        and isinstance(rendered_rate, (int, float))
+        and not isinstance(rendered_rate, bool)
+        and math.isfinite(float(rendered_rate))
+        and numerator / denominator <= limit
+    )
+
+
+def generate_month_timeseries_qa(
+    *,
+    config: JPLMonthConfig,
+    scope: CompleteMetadataScope,
+    raw_root: str | Path,
+    acquisition_result: MonthAcquisitionResult | Mapping[str, Any] | None,
+    sensitive_values: Iterable[str] = (),
+) -> FullMonthQAResult:
+    """Read-only, aggregate QA for one approved seasonal JPL local month."""
+
+    if not is_canonical_jpl_month_config(config) or config.month not in SEASONAL_MONTHS:
+        raise ValueError("config must be an approved seasonal JPL month")
+    if not isinstance(scope, CompleteMetadataScope) or not scope.is_verified_for(config):
+        return _generic_scope_failure(config)
+
+    expected_local_pairs = _scope_pairs(scope.local_month_records)
+    expected_carry_pairs = _scope_pairs(scope.carry_in_records)
+    if expected_local_pairs is None or expected_carry_pairs is None:
+        return _generic_scope_failure(config)
+
+    expected_local = scope.local_month_session_count
+    expected_carry = scope.carry_in_session_count
+    expected_total = expected_local + expected_carry
+    root = Path(raw_root)
+    before: InventorySnapshot | None = None
+    after: InventorySnapshot | None = None
+    inventory_unchanged = False
+    raw_snapshot_valid = False
+    state_valid = False
+    partial_count = 0
+    scans: list[_ChunkScan] = []
+    local_inventory = _PrivateInventory()
+    carry_inventory = _PrivateInventory()
+    quality = _QualityAccumulator()
+    try:
+        partial_count = sum(path.is_file() for path in root.rglob("*.partial"))
+        before = canonical_seasonal_inventory(root)
+        contract = RawSnapshotContract.for_month(
+            config,
+            local_record_count=expected_local,
+            carry_in_record_count=expected_carry,
+            inventory=before,
+        )
+        validate_raw_snapshot(root, contract=contract)
+        scans = [_scan_daily_chunk(root, window) for window in config.day_windows]
+        state_valid = _seasonal_state_is_closed(root, config, expected_local)
+        for raw_record in iter_validated_raw_records(root, contract=contract):
+            inventory = carry_inventory if raw_record.chunk_kind == "carry_in" else local_inventory
+            inventory.add(raw_record.payload)
+            quality.add(raw_record.payload)
+        after = canonical_seasonal_inventory(root)
+        assert_raw_snapshot_unchanged(before, after)
+        inventory_unchanged = True
+        raw_snapshot_valid = True
+    except Exception:  # noqa: BLE001 - return only static aggregate failure codes
+        try:
+            after = canonical_seasonal_inventory(root)
+            inventory_unchanged = before is not None and before == after
+        except Exception:  # noqa: BLE001 - an unreadable inventory is simply invalid
+            after = None
+
+    local = _local_integrity(local_inventory, expected_local_pairs, expected_local)
+    carry = _local_integrity(carry_inventory, expected_carry_pairs, expected_carry)
+    combined_inventory = _PrivateInventory()
+    combined_inventory.merge(local_inventory)
+    combined_inventory.merge(carry_inventory)
+    combined_expected_pairs = expected_local_pairs | expected_carry_pairs
+    combined = _local_integrity(combined_inventory, combined_expected_pairs, expected_total)
+    for public in (local, carry, combined):
+        public["unique_pair_count"] = len(
+            local_inventory.pairs
+            if public is local
+            else carry_inventory.pairs
+            if public is carry
+            else combined_inventory.pairs
+        )
+
+    valid_daily = sum(scan.status == "PASS" for scan in scans)
+    daily_integrity = {
+        "expected": config.day_count,
+        "data_files_present": sum(scan.data_present for scan in scans),
+        "manifests_present": sum(scan.manifest_present for scan in scans),
+        "manifest_contracts_valid": sum(scan.manifest_contract_valid for scan in scans),
+        "sha256_verified": sum(scan.sha256_verified for scan in scans),
+        "gzip_json_valid": sum(scan.gzip_json_valid for scan in scans),
+        "record_manifest_matches": sum(scan.record_count_matches_manifest for scan in scans),
+        "record_remote_matches": sum(scan.record_count_matches_remote for scan in scans),
+        "valid": valid_daily,
+        "failed_or_incomplete": config.day_count - valid_daily,
+    }
+    quality_public = quality.public_dict(expected_total)
+    current = quality_public["series"][_CURRENT_FIELD]
+    pilot = quality_public["series"][_PILOT_FIELD]
+    acquisition_valid = _seasonal_acquisition_matches(
+        acquisition_result,
+        config=config,
+        scope=scope,
+        inventory=before,
+    )
+    local_exact = (
+        local["observed_records"] == expected_local
+        and local["unique_object_keys"] == expected_local
+        and local["unique_session_keys"] == expected_local
+        and local["unique_pair_count"] == expected_local
+        and local["missing_object_key_records"] == 0
+        and local["missing_session_key_records"] == 0
+        and local["duplicate_object_key_records"] == 0
+        and local["duplicate_session_key_records"] == 0
+        and local["duplicate_pair_records"] == 0
+        and local["missing_metadata_pairs"] == 0
+        and local["orphan_timeseries_pairs"] == 0
+    )
+    carry_exact = (
+        carry["observed_records"] == expected_carry
+        and carry["unique_object_keys"] == expected_carry
+        and carry["unique_session_keys"] == expected_carry
+        and carry["unique_pair_count"] == expected_carry
+        and carry["missing_object_key_records"] == 0
+        and carry["missing_session_key_records"] == 0
+        and carry["duplicate_object_key_records"] == 0
+        and carry["duplicate_session_key_records"] == 0
+        and carry["duplicate_pair_records"] == 0
+        and carry["missing_metadata_pairs"] == 0
+        and carry["orphan_timeseries_pairs"] == 0
+    )
+    combined_exact = (
+        expected_local_pairs.isdisjoint(expected_carry_pairs)
+        and combined["observed_records"] == expected_total
+        and combined["unique_object_keys"] == expected_total
+        and combined["unique_session_keys"] == expected_total
+        and combined["unique_pair_count"] == expected_total
+        and combined["missing_object_key_records"] == 0
+        and combined["missing_session_key_records"] == 0
+        and combined["duplicate_object_key_records"] == 0
+        and combined["duplicate_session_key_records"] == 0
+        and combined["duplicate_pair_records"] == 0
+        and combined["missing_metadata_pairs"] == 0
+        and combined["orphan_timeseries_pairs"] == 0
+    )
+    checks = {
+        "scope_verified": True,
+        "raw_snapshot_valid": raw_snapshot_valid,
+        "raw_inventory_unchanged": inventory_unchanged,
+        "state_contract_closed": state_valid,
+        "partial_files_absent": partial_count == 0,
+        "daily_chunks_complete": valid_daily == config.day_count,
+        "local_metadata_timeseries_exact": local_exact,
+        "carry_metadata_timeseries_exact": carry_exact,
+        "combined_identity_exact": combined_exact,
+        "quality_record_count_exact": quality.record_count == expected_total,
+        "current_invalid_rate_at_most_limit": _invalid_rate_at_most(
+            quality.current.invalid_containers,
+            expected_total,
+            current["invalid_container_rate"],
+            INVALID_CHARGING_CURRENT_RATE_LIMIT,
+        ),
+        "pilot_invalid_rate_at_most_limit": _invalid_rate_at_most(
+            quality.pilot.invalid_containers,
+            expected_total,
+            pilot["invalid_container_rate"],
+            INVALID_PILOT_SIGNAL_RATE_LIMIT,
+        ),
+        "zero_timestamp_parse_anomalies": (
+            current["timestamp_parse_errors"] + pilot["timestamp_parse_errors"] == 0
+        ),
+        "zero_timestamp_nonmonotonic_anomalies": (
+            current["nonmonotonic_pairs"] + pilot["nonmonotonic_pairs"] == 0
+        ),
+        "acquisition_complete_and_consistent": acquisition_valid,
+    }
+    reasons: list[str] = []
+    if not raw_snapshot_valid or not state_valid or valid_daily != config.day_count:
+        reasons.append("RAW_SNAPSHOT_INVALID")
+    if not inventory_unchanged:
+        reasons.append("RAW_SNAPSHOT_CHANGED")
+    if partial_count:
+        reasons.append("PARTIAL_FILES_PRESENT")
+    if not local_exact:
+        reasons.append("LOCAL_LINKAGE_FAIL")
+    if not carry_exact:
+        reasons.append("CARRY_LINKAGE_FAIL")
+    if not combined_exact:
+        reasons.append("COMBINED_LINKAGE_FAIL")
+    if not acquisition_valid:
+        reasons.append("ACQUISITION_INCOMPLETE")
+    if not (
+        checks["current_invalid_rate_at_most_limit"] and checks["pilot_invalid_rate_at_most_limit"]
+    ):
+        reasons.append("INVALID_CONTAINER_RATE_EXCEEDED")
+    if not (
+        checks["zero_timestamp_parse_anomalies"] and checks["zero_timestamp_nonmonotonic_anomalies"]
+    ):
+        reasons.append("TIMESTAMP_QUALITY_FAIL")
+    gate_status = "PASS" if all(checks.values()) else "FAIL"
+    inventory_for_public = after if after is not None else before
+    integrity_status = (
+        "PASS"
+        if all(
+            checks[name]
+            for name in (
+                "scope_verified",
+                "raw_snapshot_valid",
+                "raw_inventory_unchanged",
+                "state_contract_closed",
+                "partial_files_absent",
+                "daily_chunks_complete",
+                "local_metadata_timeseries_exact",
+                "carry_metadata_timeseries_exact",
+                "combined_identity_exact",
+                "quality_record_count_exact",
+            )
+        )
+        else "FAIL"
+    )
+    qa: dict[str, Any] = {
+        "schema_version": "acn-jpl-month-timeseries-qa/v1",
+        "month": config.month,
+        "integrity": {
+            "status": integrity_status,
+            "scope_verified": True,
+            "daily_chunks": daily_integrity,
+            "local_month": local,
+            "carry_in": carry,
+            "combined": combined,
+            "raw_inventory": {
+                "file_count": (
+                    inventory_for_public.file_count if inventory_for_public is not None else 0
+                ),
+                "total_bytes": (
+                    inventory_for_public.total_bytes if inventory_for_public is not None else 0
+                ),
+                "sha256": (
+                    inventory_for_public.digest if inventory_for_public is not None else None
+                ),
+                "unchanged": inventory_unchanged,
+            },
+            "partial_file_count": partial_count,
+        },
+        "quality": quality_public,
+        "gate": {
+            "status": gate_status,
+            "thresholds": {
+                "charging_current_invalid_rate_max": INVALID_CHARGING_CURRENT_RATE_LIMIT,
+                "pilot_signal_invalid_rate_max": INVALID_PILOT_SIGNAL_RATE_LIMIT,
+                "metadata_timeseries_match_rate_required": 1.0,
+                "orphan_timeseries_pairs_required": 0,
+            },
+            "checks": checks,
+            "reason_codes": reasons,
+            "ready_for_cleaning": gate_status == "PASS",
+            "ready_for_15_min": ("YES_CURRENT_PROXY_ONLY" if gate_status == "PASS" else "NO"),
+            "gate1_ready": "NO",
+        },
+        "power_semantics": _power_semantics(),
+        "privacy": {
+            "aggregate_only": True,
+            "private_keys_emitted": False,
+            "credentials_emitted": False,
+            "absolute_local_paths_emitted": False,
+            "raw_trajectories_emitted": False,
+        },
+    }
+    rendered = repr(qa)
+    if any(value and value in rendered for value in sensitive_values):
+        raise ValueError("generic QA aggregate privacy validation failed")
+    return FullMonthQAResult(gate_status=gate_status, qa=qa, artifact_names=())

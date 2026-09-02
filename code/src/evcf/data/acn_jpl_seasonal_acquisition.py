@@ -41,6 +41,7 @@ from .acn_jpl_month_config import (
     jpl_month_config,
 )
 from .acn_jpl_official_reference import OfficialLocalMonthTotalResult
+from .acn_jpl_preparation import canonical_seasonal_inventory
 
 _CARRY_SCHEMA = "acn-jpl-seasonal-carry-in/v1"
 _RUN_SCHEMA = "acn-jpl-seasonal-month-ts-run/v1"
@@ -605,20 +606,8 @@ def _raw_inventory(root: Path) -> tuple[int, int, str | None]:
     if not root.is_dir():
         return 0, 0, None
     partial_count = sum(path.is_file() for path in root.rglob("*.partial"))
-    files = sorted(
-        (
-            path
-            for path in root.rglob("*")
-            if path.is_file()
-            and (path.name.endswith(".jsonl.gz") or path.name.endswith(".manifest.json"))
-        ),
-        key=lambda path: path.relative_to(root).as_posix(),
-    )
-    digest = hashlib.sha256()
-    for path in files:
-        relative = path.relative_to(root).as_posix()
-        digest.update(f"{relative}\0{_sha256_file(path)}\0{path.stat().st_size}\n".encode())
-    return len(files), partial_count, digest.hexdigest()
+    snapshot = canonical_seasonal_inventory(root)
+    return snapshot.file_count, partial_count, snapshot.digest
 
 
 def _expected_raw_paths(config: JPLMonthConfig, carry_count: int) -> frozenset[str]:

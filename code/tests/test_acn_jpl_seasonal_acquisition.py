@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import evcf.data.acn_jpl_month_config as month_config_module
+import evcf.data.acn_jpl_seasonal_acquisition as seasonal_module
 import pytest
 from evcf.data.acn_api import ACNClient
 from evcf.data.acn_audit import parse_acn_datetime
@@ -536,11 +537,12 @@ def test_recursive_raw_allowlist_rejects_extra_nested_and_wrong_extension_files(
     config = jpl_month_config("2019-02")
     scope = _verified_scope(tmp_path / "metadata", monkeypatch, month=config.month)
     root = tmp_path / config.month
+    reference = root / "state" / "official.json"
     first = acquire_jpl_month(
         authorized=True,
         config=config,
         scope=scope,
-        official_probe=_LiveProbe(root / "state" / "official-first.json", 3),
+        official_probe=_LiveProbe(reference, 3),
         raw_root=root,
         ts_client_factory=lambda: _FullClient(scope),
     )
@@ -548,12 +550,13 @@ def test_recursive_raw_allowlist_rejects_extra_nested_and_wrong_extension_files(
     extra = root / relative_path
     extra.parent.mkdir(parents=True, exist_ok=True)
     extra.write_bytes(b"must-not-be-ignored")
+    reference.unlink()
 
     second = acquire_jpl_month(
         authorized=True,
         config=config,
         scope=scope,
-        official_probe=_LiveProbe(root / "state" / "official-second.json", 3),
+        official_probe=_LiveProbe(reference, 3),
         raw_root=root,
         ts_client_factory=lambda: _FullClient(scope),
     )
@@ -574,12 +577,13 @@ def test_default_daily_chunks_and_carry_resume_without_network_or_byte_changes(
         carry_count=2,
     )
     root = tmp_path / config.month
+    reference = root / "state" / "official.json"
     first_client = _FullClient(scope)
     first = acquire_jpl_month(
         authorized=True,
         config=config,
         scope=scope,
-        official_probe=_LiveProbe(root / "state" / "official-first.json", 3),
+        official_probe=_LiveProbe(reference, 3),
         raw_root=root,
         ts_client_factory=lambda: first_client,
         downloaded_at_utc=datetime(2026, 9, 2, tzinfo=timezone.utc),
@@ -599,12 +603,13 @@ def test_default_daily_chunks_and_carry_resume_without_network_or_byte_changes(
         for path in tracked
     }
 
+    reference.unlink()
     second_client = _FullClient(scope)
     second = acquire_jpl_month(
         authorized=True,
         config=config,
         scope=scope,
-        official_probe=_LiveProbe(root / "state" / "official-second.json", 3),
+        official_probe=_LiveProbe(reference, 3),
         raw_root=root,
         ts_client_factory=lambda: second_client,
         downloaded_at_utc=datetime(2026, 9, 3, tzinfo=timezone.utc),
@@ -638,11 +643,12 @@ def test_unexpected_carry_ordinal_cannot_be_ignored_as_complete(
         carry_count=1,
     )
     root = tmp_path / config.month
+    reference = root / "state" / "official.json"
     first = acquire_jpl_month(
         authorized=True,
         config=config,
         scope=scope,
-        official_probe=_LiveProbe(root / "state" / "official-first.json", 3),
+        official_probe=_LiveProbe(reference, 3),
         raw_root=root,
         ts_client_factory=lambda: _FullClient(scope),
         downloaded_at_utc=datetime(2026, 9, 2, tzinfo=timezone.utc),
@@ -658,12 +664,13 @@ def test_unexpected_carry_ordinal_cannot_be_ignored_as_complete(
     payload["ordinal"] = 2
     payload["output_file"] = orphan_data.name
     orphan_manifest.write_text(json.dumps(payload), encoding="utf-8")
+    reference.unlink()
 
     second = acquire_jpl_month(
         authorized=True,
         config=config,
         scope=scope,
-        official_probe=_LiveProbe(root / "state" / "official-second.json", 3),
+        official_probe=_LiveProbe(reference, 3),
         raw_root=root,
         ts_client_factory=lambda: _FullClient(scope),
     )
@@ -722,3 +729,169 @@ def test_fixed_order_runner_rejects_reordering_and_duplicates(months: tuple[Any,
             months=months,
             month_runner=lambda config: {},
         )
+
+
+def _complete_february(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[Any, CompleteMetadataScope, Path, Path]:
+    config = jpl_month_config("2019-02")
+    scope = _verified_scope(tmp_path / "metadata", monkeypatch, month=config.month)
+    root = tmp_path / config.month
+    reference = root / "state" / "official.json"
+    result = acquire_jpl_month(
+        authorized=True,
+        config=config,
+        scope=scope,
+        official_probe=_LiveProbe(reference, 3),
+        raw_root=root,
+        ts_client_factory=lambda: _FullClient(scope),
+    )
+    assert result.status == "COMPLETE"
+    return config, scope, root, reference
+
+
+@pytest.mark.parametrize("extra_key", ["token", "unexpected_field"])
+def test_daily_manifest_with_token_or_any_extra_key_is_not_complete(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    extra_key: str,
+) -> None:
+    config, scope, root, reference = _complete_february(tmp_path, monkeypatch)
+    manifest_path = root / "manifests" / "timeseries" / "2019-02-01.manifest.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload[extra_key] = "sentinel-daily-extra"
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+    reference.unlink()
+
+    result = acquire_jpl_month(
+        authorized=True,
+        config=config,
+        scope=scope,
+        official_probe=_LiveProbe(reference, 3),
+        raw_root=root,
+        ts_client_factory=lambda: _FullClient(scope),
+    )
+
+    assert result.status == "INCOMPLETE"
+    assert result.reason_codes == ("DAILY_INCOMPLETE",)
+    assert "sentinel-daily-extra" not in repr(result)
+
+
+def test_state_allowlist_rejects_unrelated_json_even_when_raw_is_valid(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, root, reference = _complete_february(tmp_path, monkeypatch)
+    (root / "state" / "unrelated.json").write_text(
+        json.dumps({"token": "sentinel-state-token"}), encoding="utf-8"
+    )
+    reference.unlink()
+
+    result = acquire_jpl_month(
+        authorized=True,
+        config=config,
+        scope=scope,
+        official_probe=_LiveProbe(reference, 3),
+        raw_root=root,
+        ts_client_factory=lambda: _FullClient(scope),
+    )
+
+    assert result.status == "INCOMPLETE"
+    assert result.reason_codes == ("RAW_LAYOUT_INVALID",)
+    assert "sentinel-state-token" not in repr(result)
+
+
+@pytest.mark.parametrize("target", ["progress", "official"])
+def test_state_documents_require_closed_current_schemas(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    target: str,
+) -> None:
+    config = jpl_month_config("2019-02")
+    scope = _verified_scope(tmp_path / "metadata", monkeypatch, month=config.month)
+    root = tmp_path / config.month
+    reference = root / "state" / "official.json"
+
+    def corrupting_runner(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        progress = seasonal_module.run_daily_chunks(*args, **kwargs)
+        path = root / "state" / "progress.json" if target == "progress" else reference
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["token"] = f"sentinel-{target}-token"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return progress
+
+    result = acquire_jpl_month(
+        authorized=True,
+        config=config,
+        scope=scope,
+        official_probe=_LiveProbe(reference, 3),
+        raw_root=root,
+        ts_client_factory=lambda: _FullClient(scope),
+        daily_runner=corrupting_runner,
+    )
+
+    assert result.status == "INCOMPLETE"
+    assert result.reason_codes == ("RAW_LAYOUT_INVALID",)
+    assert f"sentinel-{target}-token" not in repr(result)
+
+
+def test_live_reference_must_be_a_direct_file_below_month_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = jpl_month_config("2019-02")
+    scope = _verified_scope(tmp_path / "metadata", monkeypatch, month=config.month)
+    root = tmp_path / config.month
+    factory_calls: list[str] = []
+
+    def factory() -> Any:
+        factory_calls.append("factory")
+        return _FullClient(scope)
+
+    result = acquire_jpl_month(
+        authorized=True,
+        config=config,
+        scope=scope,
+        official_probe=_LiveProbe(tmp_path / "outside-state.json", 3),
+        raw_root=root,
+        ts_client_factory=factory,
+    )
+
+    assert result.status == "METADATA_GATE_FAIL"
+    assert result.reason_codes == ("OFFICIAL_REFERENCE_LOCATION_INVALID",)
+    assert factory_calls == []
+    assert not root.exists()
+
+
+@pytest.mark.parametrize(
+    "helper_name",
+    ["_load_daily_sink", "_raw_inventory", "_raw_layout_exact"],
+)
+def test_all_post_client_helpers_share_static_privacy_exception_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    helper_name: str,
+) -> None:
+    config = jpl_month_config("2019-02")
+    scope = _verified_scope(tmp_path / "metadata", monkeypatch, month=config.month)
+    root = tmp_path / config.month
+    private_error = f"{tmp_path} https://private.invalid/?token=never-echo"
+
+    def fail(*args: Any, **kwargs: Any) -> Any:
+        raise OSError(private_error)
+
+    monkeypatch.setattr(seasonal_module, helper_name, fail)
+    result = acquire_jpl_month(
+        authorized=True,
+        config=config,
+        scope=scope,
+        official_probe=_LiveProbe(root / "state" / "official.json", 3),
+        raw_root=root,
+        ts_client_factory=lambda: _FullClient(scope),
+    )
+
+    assert result.status == "INCOMPLETE"
+    assert result.reason_codes == ("UNEXPECTED_ERROR",)
+    assert str(tmp_path) not in repr(result)
+    assert "private.invalid" not in repr(result)

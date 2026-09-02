@@ -45,12 +45,49 @@ from .acn_jpl_official_reference import OfficialLocalMonthTotalResult
 _CARRY_SCHEMA = "acn-jpl-seasonal-carry-in/v1"
 _RUN_SCHEMA = "acn-jpl-seasonal-month-ts-run/v1"
 _SEASONAL_SCHEMA = "acn-jpl-seasonal-ts-run/v1"
+_DAILY_MANIFEST_KEYS = frozenset(
+    {
+        "schema_version",
+        "dataset_id",
+        "source",
+        "endpoint",
+        "site",
+        "timezone",
+        "local_start_inclusive",
+        "local_end_exclusive",
+        "utc_start_inclusive",
+        "utc_end_exclusive",
+        "query_condition",
+        "record_count",
+        "remote_total_reported",
+        "complete_for_query",
+        "downloaded_at_utc",
+        "sha256",
+        "token_stored",
+        "output_file",
+    }
+)
+_PROGRESS_KEYS = frozenset(
+    {
+        "schema_version",
+        "endpoint",
+        "pending_days",
+        "completed_days",
+        "failed_days",
+        "last_success",
+        "retry_count",
+        "failure_reasons",
+        "stop_reason",
+    }
+)
+_PROGRESS_DOCUMENT_KEYS = _PROGRESS_KEYS | {"endpoints"}
 _SAFE_FAILURE_CODES = frozenset(
     {
         "SCOPE_NOT_VERIFIED",
         "MONTH_NOT_SEASONAL",
         "OFFICIAL_PROBE_FAILED",
         "OFFICIAL_PROBE_NOT_LIVE",
+        "OFFICIAL_REFERENCE_LOCATION_INVALID",
         "OFFICIAL_TOTAL_MISMATCH",
         "DAILY_INCOMPLETE",
         "DAILY_LINKAGE_FAIL",
@@ -212,6 +249,22 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _closed_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in payload:
+            raise ValueError("JSON object contains duplicate keys")
+        payload[key] = value
+    return payload
+
+
+def _load_closed_json(path: Path) -> object:
+    return json.loads(
+        path.read_text(encoding="utf-8"),
+        object_pairs_hook=_closed_json_object,
+    )
+
+
 def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".partial")
@@ -295,7 +348,16 @@ def _load_daily_sink(
             endpoint="timeseries",
             _private_identity_capture=capture,
         )
-        if validation.valid and capture.inventory is not None:
+        try:
+            manifest = _load_closed_json(manifest_path)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            manifest = None
+        if (
+            validation.valid
+            and isinstance(manifest, dict)
+            and set(manifest) == _DAILY_MANIFEST_KEYS
+            and capture.inventory is not None
+        ):
             sink[window.day_key] = capture.inventory
     return sink
 
@@ -575,17 +637,90 @@ def _expected_raw_paths(config: JPLMonthConfig, carry_count: int) -> frozenset[s
     return frozenset(paths)
 
 
-def _raw_layout_exact(root: Path, config: JPLMonthConfig, carry_count: int) -> bool:
-    """Require the recursive raw-content allowlist and isolated JSON state files."""
+def _official_reference_is_direct_state_file(
+    root: Path,
+    config: JPLMonthConfig,
+    official: OfficialLocalMonthTotalResult,
+) -> bool:
+    reference = official.reference_path
+    state_root = root / "state"
+    if (
+        reference.suffix != ".json"
+        or reference.name == "progress.json"
+        or reference.name.endswith(".manifest.json")
+    ):
+        return False
+    try:
+        return (
+            not root.is_symlink()
+            and not state_root.is_symlink()
+            and not reference.is_symlink()
+            and reference.resolve(strict=True).parent == state_root.resolve(strict=True)
+            and official.is_live_verified_for(config)
+        )
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return False
 
-    if not root.is_dir():
+
+def _progress_document_is_complete(path: Path, config: JPLMonthConfig) -> bool:
+    try:
+        payload = _load_closed_json(path)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return False
+    if not isinstance(payload, dict) or set(payload) != _PROGRESS_DOCUMENT_KEYS:
+        return False
+    endpoints = payload.get("endpoints")
+    if not isinstance(endpoints, dict) or set(endpoints) != {"timeseries"}:
+        return False
+    endpoint = endpoints.get("timeseries")
+    if not isinstance(endpoint, dict) or set(endpoint) != _PROGRESS_KEYS:
+        return False
+    if payload.get("schema_version") != "acn-jpl-progress/v3":
+        return False
+    if endpoint.get("schema_version") != "acn-jpl-progress/v2":
+        return False
+    for key in _PROGRESS_KEYS - {"schema_version"}:
+        if payload.get(key) != endpoint.get(key):
+            return False
+    day_order = [window.day_key for window in config.day_windows]
+    retry_count = payload.get("retry_count")
+    return (
+        payload.get("endpoint") == "timeseries"
+        and payload.get("pending_days") == []
+        and payload.get("completed_days") == day_order
+        and payload.get("failed_days") == []
+        and payload.get("last_success") == day_order[-1]
+        and isinstance(retry_count, int)
+        and not isinstance(retry_count, bool)
+        and retry_count >= 0
+        and payload.get("failure_reasons") == {}
+        and payload.get("stop_reason") is None
+    )
+
+
+def _raw_layout_exact(
+    root: Path,
+    config: JPLMonthConfig,
+    carry_count: int,
+    official: OfficialLocalMonthTotalResult,
+) -> bool:
+    """Require exact recursive raw and current-run state allowlists."""
+
+    if not root.is_dir() or not _official_reference_is_direct_state_file(root, config, official):
         return False
     expected_files = _expected_raw_paths(config, carry_count)
+    reference_relative = (
+        official.reference_path.resolve(strict=True)
+        .relative_to(root.resolve(strict=True))
+        .as_posix()
+    )
+    expected_state = frozenset({"state/progress.json", reference_relative})
     expected_directories = {
         str(Path(relative).parent).replace("\\", "/") for relative in expected_files
     }
     expected_directories.update({"timeseries", "manifests", "state"})
     actual_content: set[str] = set()
+    actual_state: set[str] = set()
     for path in root.rglob("*"):
         relative = path.relative_to(root).as_posix()
         if path.is_symlink():
@@ -599,18 +734,15 @@ def _raw_layout_exact(root: Path, config: JPLMonthConfig, carry_count: int) -> b
         if relative in expected_files:
             actual_content.add(relative)
             continue
-        # Probe references and the daily progress document are not raw content.
-        # They must remain flat, JSON-only state and cannot masquerade as a raw
-        # data file, manifest, partial, log, or nested artifact.
-        if (
-            relative.startswith("state/")
-            and relative.count("/") == 1
-            and path.suffix == ".json"
-            and not path.name.endswith(".manifest.json")
-        ):
+        if relative in expected_state:
+            actual_state.add(relative)
             continue
         return False
-    return actual_content == expected_files
+    return (
+        actual_content == expected_files
+        and actual_state == expected_state
+        and _progress_document_is_complete(root / "state" / "progress.json", config)
+    )
 
 
 def _carry_layout_exact(root: Path, count: int) -> bool:
@@ -623,7 +755,7 @@ def _carry_layout_exact(root: Path, count: int) -> bool:
     return actual_data == expected_data and actual_manifests == expected_manifests
 
 
-def acquire_jpl_month(
+def _acquire_jpl_month_unbounded(
     *,
     authorized: bool,
     config: JPLMonthConfig,
@@ -691,6 +823,15 @@ def acquire_jpl_month(
             official_total=official_total,
             reason_codes=("OFFICIAL_PROBE_NOT_LIVE",),
         )
+    root = Path(raw_root)
+    if not _official_reference_is_direct_state_file(root, config, official):
+        return _result(
+            config,
+            scope,
+            status="METADATA_GATE_FAIL",
+            official_total=official.total,
+            reason_codes=("OFFICIAL_REFERENCE_LOCATION_INVALID",),
+        )
     if not scope.is_verified_for(config):
         return _result(
             config,
@@ -719,7 +860,6 @@ def acquire_jpl_month(
             failed_daily_chunks=config.day_count,
             reason_codes=("UNEXPECTED_ERROR",),
         )
-    root = Path(raw_root)
     runner_sink: dict[str, _ChunkIdentityInventory] = {}
     try:
         if _runner_supports_sink(daily_runner):
@@ -887,7 +1027,7 @@ def acquire_jpl_month(
             reason_codes=("PARTIAL_FILES_PRESENT",),
             **final_counts,
         )
-    if not _raw_layout_exact(root, config, len(ordered_carry)):
+    if not _raw_layout_exact(root, config, len(ordered_carry), official):
         return _result(
             config,
             scope,
@@ -903,6 +1043,55 @@ def acquire_jpl_month(
         official_total=official.total,
         **final_counts,
     )
+
+
+def acquire_jpl_month(
+    *,
+    authorized: bool,
+    config: JPLMonthConfig,
+    scope: CompleteMetadataScope,
+    official_probe: Callable[[JPLMonthConfig], OfficialLocalMonthTotalResult],
+    raw_root: str | Path,
+    ts_client_factory: Callable[[], ACNClient],
+    daily_runner: Callable[..., dict[str, Any]] = run_daily_chunks,
+    downloaded_at_utc: datetime | None = None,
+    concurrency: int = 1,
+) -> MonthAcquisitionResult:
+    """Acquire one sealed local month with a post-client privacy boundary."""
+
+    if authorized is not True:
+        raise SeasonalAuthorizationError("seasonal acquisition requires explicit authorization")
+    client_created = False
+
+    def tracked_client_factory() -> ACNClient:
+        nonlocal client_created
+        client = ts_client_factory()
+        client_created = True
+        return client
+
+    try:
+        return _acquire_jpl_month_unbounded(
+            authorized=authorized,
+            config=config,
+            scope=scope,
+            official_probe=official_probe,
+            raw_root=raw_root,
+            ts_client_factory=tracked_client_factory,
+            daily_runner=daily_runner,
+            downloaded_at_utc=downloaded_at_utc,
+            concurrency=concurrency,
+        )
+    except Exception:
+        if not client_created:
+            raise
+        return _result(
+            config,
+            scope,
+            status="INCOMPLETE",
+            official_total=scope.local_month_session_count,
+            failed_daily_chunks=config.day_count,
+            reason_codes=("UNEXPECTED_ERROR",),
+        )
 
 
 def _ordered_months(months: Sequence[JPLMonthConfig] | None) -> tuple[JPLMonthConfig, ...]:

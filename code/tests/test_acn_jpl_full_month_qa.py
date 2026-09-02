@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import copy
+import gc
 import gzip
 import hashlib
 import json
 import math
 import pickle
 import shutil
+import weakref
 from dataclasses import fields, replace
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
@@ -18,6 +20,7 @@ import pytest
 from evcf.data import acn_jpl_full_month_qa as full_qa_module
 from evcf.data import acn_jpl_full_month_ts as full_ts_module
 from evcf.data import acn_jpl_month_config as month_config_module
+from evcf.data import acn_jpl_seasonal_acquisition as seasonal_acquisition_module
 from evcf.data.acn_api import ACNClient, ACNQuery
 from evcf.data.acn_jpl_full_month_qa import (
     PUBLIC_ARTIFACT_NAMES,
@@ -1458,9 +1461,149 @@ def test_sealed_result_rejects_cross_month_verification(
     )
     inventory = full_qa_module.canonical_seasonal_inventory(raw_root)
 
-    assert acquisition.is_verified_for(config=config, scope=scope, inventory=inventory)
-    assert not acquisition.is_verified_for(
+    assert seasonal_acquisition_module.verify_month_acquisition_result(
+        acquisition,
+        config=config,
+        scope=scope,
+        inventory=inventory,
+    )
+    assert not seasonal_acquisition_module.verify_month_acquisition_result(
+        acquisition,
         config=jpl_month_config("2019-08"),
         scope=scope,
         inventory=inventory,
     )
+
+
+def test_seasonal_qa_rejects_replace_plus_instance_method_injection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    copied = replace(acquisition)
+    with pytest.raises(AttributeError):
+        object.__setattr__(copied, "is_verified_for", lambda **_kwargs: True)
+    with pytest.raises(AttributeError):
+        object.__setattr__(
+            copied,
+            "public_dict",
+            lambda: MonthAcquisitionResult.public_dict(acquisition),
+        )
+
+    _assert_seasonal_acquisition_rejected(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=copied,
+    )
+
+
+def test_month_result_slots_reject_method_and_public_dict_injection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _config, _scope, _raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+
+    with pytest.raises(AttributeError):
+        object.__setattr__(acquisition, "is_verified_for", lambda **_kwargs: True)
+    with pytest.raises(AttributeError):
+        object.__setattr__(acquisition, "public_dict", dict)
+    with pytest.raises(AttributeError):
+        object.__setattr__(acquisition, "unexpected_attribute", True)
+
+
+def test_seasonal_qa_rejects_genuine_result_field_tampering(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    object.__setattr__(acquisition, "valid_daily_chunks", 0)
+
+    _assert_seasonal_acquisition_rejected(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+
+@pytest.mark.parametrize("target", ["records", "source_evidence"])
+def test_seasonal_qa_rejects_scope_mutation_even_with_instance_verifier_injection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    target: str,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    if target == "records":
+        object.__setattr__(scope, "local_month_records", ())
+    else:
+        assert scope.source_evidence is not None
+        object.__setattr__(scope.source_evidence, "source_inventory_sha256", "0" * 64)
+    object.__setattr__(scope, "is_verified_for", lambda _config: True)
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+    assert result.gate_status == "FAIL"
+
+
+def test_month_result_registry_discards_gc_entries_and_rejects_stale_id_entries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    inventory = full_qa_module.canonical_seasonal_inventory(raw_root)
+    result_id = id(acquisition)
+    reference = weakref.ref(acquisition)
+    stale_entry = seasonal_acquisition_module._VERIFIED_MONTH_RESULTS[result_id]
+    init_values = {
+        item.name: getattr(acquisition, item.name)
+        for item in fields(MonthAcquisitionResult)
+        if item.init
+    }
+
+    del acquisition
+    gc.collect()
+    assert reference() is None
+    assert result_id not in seasonal_acquisition_module._VERIFIED_MONTH_RESULTS
+
+    unsealed = MonthAcquisitionResult(**init_values)
+    seasonal_acquisition_module._VERIFIED_MONTH_RESULTS[id(unsealed)] = stale_entry
+    try:
+        assert not seasonal_acquisition_module.verify_month_acquisition_result(
+            unsealed,
+            config=config,
+            scope=scope,
+            inventory=inventory,
+        )
+    finally:
+        seasonal_acquisition_module._VERIFIED_MONTH_RESULTS.pop(id(unsealed), None)

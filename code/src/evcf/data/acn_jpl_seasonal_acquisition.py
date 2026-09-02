@@ -114,7 +114,7 @@ class SeasonalAuthorizationError(PermissionError):
     """Raised before any read, client construction, or write without opt-in."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class MonthAcquisitionResult:
     """Aggregate-only result for one approved month."""
 
@@ -179,23 +179,6 @@ class MonthAcquisitionResult:
             },
         }
 
-    def is_verified_for(
-        self,
-        *,
-        config: JPLMonthConfig,
-        scope: CompleteMetadataScope,
-        inventory: InventorySnapshot,
-    ) -> bool:
-        """Return whether this exact in-process result remains bound to disk evidence."""
-
-        return _month_result_is_verified(
-            self,
-            config=config,
-            scope=scope,
-            inventory=inventory,
-        )
-
-
 _VERIFIED_MONTH_RESULTS: dict[
     int,
     tuple[weakref.ReferenceType[MonthAcquisitionResult], str, int],
@@ -210,7 +193,7 @@ def _month_result_binding(
 ) -> str:
     evidence = scope.source_evidence
     payload = {
-        "result": result.public_dict(),
+        "result": MonthAcquisitionResult.public_dict(result),
         "config": {
             "month": config.month,
             "timezone_name": config.timezone_name,
@@ -262,9 +245,9 @@ def _seal_month_result(
     scope: object,
 ) -> MonthAcquisitionResult:
     if not (
-        isinstance(scope, CompleteMetadataScope)
+        type(scope) is CompleteMetadataScope
         and is_canonical_jpl_month_config(config)
-        and scope.is_verified_for(config)
+        and CompleteMetadataScope.is_verified_for(scope, config)
     ):
         return result
     result_id = id(result)
@@ -283,20 +266,25 @@ def _seal_month_result(
     return result
 
 
-def _month_result_is_verified(
-    result: MonthAcquisitionResult,
+def verify_month_acquisition_result(
+    result: object,
     *,
     config: JPLMonthConfig,
     scope: CompleteMetadataScope,
     inventory: InventorySnapshot,
 ) -> bool:
+    """Verify one exact in-process result against its scope and current raw inventory."""
+
+    if type(result) is not MonthAcquisitionResult:
+        return False
     entry = _VERIFIED_MONTH_RESULTS.get(id(result))
     if not (
         entry is not None
         and entry[0]() is result
         and entry[2] == id(scope)
         and is_canonical_jpl_month_config(config)
-        and scope.is_verified_for(config)
+        and type(scope) is CompleteMetadataScope
+        and CompleteMetadataScope.is_verified_for(scope, config)
         and isinstance(inventory, InventorySnapshot)
         and result.raw_file_count == inventory.file_count
         and result.raw_inventory_sha256 == inventory.digest
@@ -908,7 +896,7 @@ def _acquire_jpl_month_unbounded(
     if not (
         isinstance(scope, CompleteMetadataScope)
         and is_canonical_jpl_month_config(config)
-        and scope.is_verified_for(config)
+        and CompleteMetadataScope.is_verified_for(scope, config)
     ):
         return _result(
             config,
@@ -950,7 +938,7 @@ def _acquire_jpl_month_unbounded(
             official_total=official.total,
             reason_codes=("OFFICIAL_REFERENCE_LOCATION_INVALID",),
         )
-    if not scope.is_verified_for(config):
+    if not CompleteMetadataScope.is_verified_for(scope, config):
         return _result(
             config,
             scope,
@@ -1331,4 +1319,5 @@ __all__ = [
     "SeasonalAuthorizationError",
     "acquire_jpl_month",
     "run_seasonal_acquisition",
+    "verify_month_acquisition_result",
 ]

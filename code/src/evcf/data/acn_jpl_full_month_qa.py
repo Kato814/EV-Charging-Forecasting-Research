@@ -65,6 +65,7 @@ from .acn_jpl_preparation import (
 from .acn_jpl_seasonal_acquisition import (
     MonthAcquisitionResult,
     _progress_document_is_complete,
+    verify_month_acquisition_result,
 )
 
 EXPECTED_TOTAL_SESSION_COUNT = EXPECTED_ANALYSIS_SESSION_COUNT + EXPECTED_CARRY_IN_SESSION_COUNT
@@ -1964,10 +1965,15 @@ def _seasonal_acquisition_matches(
     if not (
         isinstance(result, MonthAcquisitionResult)
         and inventory is not None
-        and result.is_verified_for(config=config, scope=scope, inventory=inventory)
+        and verify_month_acquisition_result(
+            result,
+            config=config,
+            scope=scope,
+            inventory=inventory,
+        )
     ):
         return False
-    payload = result.public_dict()
+    payload = MonthAcquisitionResult.public_dict(result)
     expected_total = scope.local_month_session_count + scope.carry_in_session_count
     expected = {
         "month": config.month,
@@ -2070,7 +2076,9 @@ def generate_month_timeseries_qa(
 
     if not is_canonical_jpl_month_config(config) or config.month not in SEASONAL_MONTHS:
         raise ValueError("config must be an approved seasonal JPL month")
-    if not isinstance(scope, CompleteMetadataScope) or not scope.is_verified_for(config):
+    if not isinstance(scope, CompleteMetadataScope) or not CompleteMetadataScope.is_verified_for(
+        scope, config
+    ):
         return _generic_scope_failure(config)
 
     expected_local_pairs = _scope_pairs(scope.local_month_records)

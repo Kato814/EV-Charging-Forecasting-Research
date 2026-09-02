@@ -634,6 +634,7 @@ def _require_integral_report(
     report: Mapping[str, Any],
     *,
     context: str,
+    value_hours_nonnegative: bool,
 ) -> tuple[int, int, float | None, float]:
     observed = _require_nonnegative_int(
         report["observed_seconds"],
@@ -655,6 +656,7 @@ def _require_integral_report(
     value_hours = _require_finite_number(
         report["value_hours"],
         context=f"{context} value hours",
+        nonnegative=value_hours_nonnegative,
     )
     return observed, eligible, coverage, value_hours
 
@@ -903,6 +905,7 @@ def validate_seasonal_cleaning_documents(
     if (
         sanitized_revisions > raw_revisions
         or unparseable_revisions > raw_revisions
+        or sanitized_revisions + unparseable_revisions != raw_revisions
         or unparseable_revisions != 0
         or user_inputs["issue_time_truncation_ready"] is not True
     ):
@@ -1024,11 +1027,17 @@ def validate_seasonal_cleaning_documents(
             - counts["invalid_timestamps"]
             - counts["invalid_values"]
         )
+        producer_retained_upper_bound = (
+            valid_observations
+            - counts["exact_duplicate_extras"]
+            - 2 * counts["conflicting_timestamps"]
+        )
         if (
             counts["retained_samples"] > counts["raw_samples"]
             or valid_observations < 0
             or counts["exact_duplicate_extras"] > valid_observations
             or counts["conflicting_timestamps"] > valid_observations
+            or counts["retained_samples"] > producer_retained_upper_bound
             or counts["conflict_affected_sessions"] > sessions_processed
             or counts["conflict_affected_sessions"]
             > counts["conflicting_timestamps"]
@@ -1051,6 +1060,7 @@ def validate_seasonal_cleaning_documents(
         value_hours = _require_finite_number(
             section["bounded_value_hours"],
             context=f"cleaning QA {name} bounded value hours",
+            nonnegative=name == "current",
         )
         main_series[name] = (coverage, value_hours)
 
@@ -1142,6 +1152,7 @@ def validate_seasonal_cleaning_documents(
             integral = _require_integral_report(
                 report,
                 context=f"cleaning sensitivity {name} hold {threshold}",
+                value_hours_nonnegative=name == "current",
             )
             observed, eligible, _, _ = integral
             if observed < previous_observed:
@@ -1174,6 +1185,7 @@ def validate_seasonal_cleaning_documents(
             _, eligible, _, value_hours = _require_integral_report(
                 report,
                 context=f"cleaning sensitivity {comparison_name} {name}",
+                value_hours_nonnegative=name == "current",
             )
             main_hours = main_integral[3]
             relative_change = report["relative_value_hours_change"]

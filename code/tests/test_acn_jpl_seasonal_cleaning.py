@@ -58,6 +58,7 @@ def _modes(current: int = 10, pilot: int = 30) -> SamplingModes:
 def _seasonal_documents(
     *,
     policy: object | None = None,
+    raw_record: dict[str, object] | None = None,
     empty_series: bool = False,
     boundary_points: bool = False,
 ) -> dict[str, Any]:
@@ -65,7 +66,7 @@ def _seasonal_documents(
     preparation = importlib.import_module("evcf.data.acn_jpl_gate1_prep")
     modes = _modes()
     selected_policy = policy or cleaning.cleaning_policy_from_sampling_modes(modes)
-    raw = _raw_record()
+    raw = copy.deepcopy(raw_record) if raw_record is not None else _raw_record()
     if empty_series:
         raw["chargingCurrent"] = {"timestamps": [], "current": []}
         raw["pilotSignal"] = {"timestamps": [], "pilot": []}
@@ -374,6 +375,88 @@ def test_signed_boundary_distribution_with_positive_points_is_valid() -> None:
     assert distribution["minimum"] < 0 < distribution["maximum"]
 
 
+def test_retained_samples_respect_the_cleaner_duplicate_conflict_upper_bound() -> None:
+    raw = _raw_record()
+    base = datetime(2019, 2, 1, 8, tzinfo=timezone.utc)
+    raw["chargingCurrent"] = {
+        "timestamps": [
+            _stamp(base, 0),
+            _stamp(base, 0),
+            _stamp(base, 10),
+            _stamp(base, 10),
+            _stamp(base, 10),
+            _stamp(base, 20),
+            "not-a-timestamp",
+            _stamp(base, 30),
+            _stamp(base, 100),
+        ],
+        "current": [1.0, 1.0, 2.0, 2.0, 3.0, 4.0, 5.0, "bad", 6.0],
+    }
+    documents = _seasonal_documents(raw_record=raw)
+    produced = documents["cleaning_qa"]["current"]
+
+    _validate(documents)
+    assert {
+        name: produced[name]
+        for name in (
+            "raw_samples",
+            "retained_samples",
+            "invalid_timestamps",
+            "invalid_values",
+            "exact_duplicate_extras",
+            "conflicting_timestamps",
+        )
+    } == {
+        "raw_samples": 9,
+        "retained_samples": 2,
+        "invalid_timestamps": 1,
+        "invalid_values": 1,
+        "exact_duplicate_extras": 2,
+        "conflicting_timestamps": 1,
+    }
+
+    produced["retained_samples"] = 4
+    produced["retained_sample_rate"] = 4 / 9
+    with pytest.raises(ValueError, match="counts are inconsistent"):
+        _validate(documents)
+
+
+def test_user_input_counts_form_the_exact_cleaner_partition() -> None:
+    documents = _seasonal_documents()
+    produced = documents["cleaning_qa"]["user_inputs"]
+
+    _validate(documents)
+    assert produced["sanitized_revision_count"] + produced[
+        "unparseable_modified_count"
+    ] == produced["raw_revision_count"]
+
+    produced["raw_revision_count"] = 2
+    with pytest.raises(ValueError, match="user-input truncation"):
+        _validate(documents)
+
+
+def test_negative_pilot_value_hours_produced_by_the_cleaner_are_valid() -> None:
+    raw = _raw_record()
+    raw["pilotSignal"]["pilot"] = [-6.0, -6.0, -6.0]  # type: ignore[index]
+    documents = _seasonal_documents(raw_record=raw)
+
+    _validate(documents)
+
+    assert documents["cleaning_qa"]["pilot"]["bounded_value_hours"] < 0
+    assert all(
+        report["value_hours"] < 0
+        for report in documents["cleaning_sensitivity"]["hold_thresholds"][
+            "pilot"
+        ].values()
+    )
+    assert documents["cleaning_sensitivity"]["last_write_wins"]["pilot"][
+        "value_hours"
+    ] < 0
+    assert documents["cleaning_sensitivity"]["boundary_plus_minus_60_seconds"][
+        "pilot"
+    ]["value_hours"] < 0
+
+
 def test_every_statistical_leaf_rejects_nonfinite_or_wrong_types() -> None:
     documents = _seasonal_documents()
     accepted: list[str] = []
@@ -412,9 +495,14 @@ def test_every_unsigned_statistical_leaf_rejects_negative_values() -> None:
             lambda value: isinstance(value, (int, float)) and not isinstance(value, bool),
         )
         for path in numeric_paths:
+            signed_pilot_value_hours = "pilot" in path and path[-1] in (
+                "bounded_value_hours",
+                "value_hours",
+            )
             if (
                 "signed_distance_seconds" in path
                 or path[-1] == "relative_value_hours_change"
+                or signed_pilot_value_hours
             ):
                 continue
             current = document

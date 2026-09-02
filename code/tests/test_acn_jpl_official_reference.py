@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import timezone
 from pathlib import Path
 from typing import Any
 
+import evcf.data.acn_jpl_official_reference as official_reference_module
 import pytest
-from evcf.data.acn_api import ACNClient, ACNSchemaError
+from evcf.data.acn_api import ACNClient, ACNQuery, ACNSchemaError
 from evcf.data.acn_jpl_gate0 import JPL_ANALYSIS_END, JPL_ANALYSIS_START
-from evcf.data.acn_jpl_month_config import MAY_2019, jpl_month_config
+from evcf.data.acn_jpl_month_config import MAY_2019, JPLMonthConfig, jpl_month_config
 from evcf.data.acn_jpl_official_reference import (
+    OfficialLocalMonthTotalResult,
     probe_official_local_month_total,
 )
 
@@ -39,6 +42,32 @@ class _Session:
         return self.response
 
 
+def _official_payload(month: JPLMonthConfig, total: object = 17) -> dict[str, object]:
+    query = ACNQuery(
+        site="jpl",
+        start=month.local_start,
+        end=month.local_end,
+        timeseries=False,
+    )
+    return {
+        "schema_version": "acn-jpl-official-local-month-total/v1",
+        "source": "ACN-Data official REST API",
+        "endpoint": query.endpoint,
+        "site": "jpl",
+        "timezone": month.timezone_name,
+        "interval_semantics": "[start,end)",
+        "local_start_inclusive": month.local_start.isoformat(),
+        "local_end_exclusive": month.local_end.isoformat(),
+        "utc_start_inclusive": month.utc_start.isoformat(),
+        "utc_end_exclusive": month.utc_end.isoformat(),
+        "query_condition": query.condition,
+        "official_meta_total": total,
+        "request_count": 1,
+        "response_fields_consumed": ["_meta.total"],
+        "token_stored": False,
+    }
+
+
 def test_probe_reads_one_meta_total_and_writes_secret_free_contract(
     tmp_path: Path,
 ) -> None:
@@ -61,6 +90,7 @@ def test_probe_reads_one_meta_total_and_writes_secret_free_contract(
     assert result.utc_start_inclusive == MAY_2019.utc_start.isoformat()
     assert result.utc_end_exclusive == MAY_2019.utc_end.isoformat()
     assert result.request_count == 1
+    assert result.is_verified_for(MAY_2019) is True
     assert len(fake.calls) == 1
     call = fake.calls[0]
     assert call["url"].endswith("/api/v1/sessions/jpl")
@@ -219,3 +249,142 @@ def test_probe_removes_partial_when_atomic_replace_fails(
     assert len(fake.calls) == 1
     assert not destination.exists()
     assert not destination.with_suffix(destination.suffix + ".partial").exists()
+
+
+def test_manual_and_replaced_official_results_are_never_verified(tmp_path: Path) -> None:
+    destination = tmp_path / "private" / "official_local_month_total.json"
+    destination.parent.mkdir()
+    destination.write_text(json.dumps(_official_payload(MAY_2019)), encoding="utf-8")
+    forged = OfficialLocalMonthTotalResult(
+        total=17,
+        reference_path=destination,
+        month=MAY_2019.month,
+        local_start_inclusive=MAY_2019.local_start.isoformat(),
+        local_end_exclusive=MAY_2019.local_end.isoformat(),
+        utc_start_inclusive=MAY_2019.utc_start.isoformat(),
+        utc_end_exclusive=MAY_2019.utc_end.isoformat(),
+        request_count=1,
+    )
+
+    assert forged.is_verified_for(MAY_2019) is False
+    assert str(destination) not in repr(forged)
+
+    fake = _Session({"_meta": {"total": 17}})
+    authentic_path = tmp_path / "authentic.json"
+    authentic = probe_official_local_month_total(
+        ACNClient("token", session=fake),  # type: ignore[arg-type]
+        authentic_path,
+    )
+    assert authentic.is_verified_for(MAY_2019) is True
+    assert replace(authentic).is_verified_for(MAY_2019) is False
+    assert replace(authentic, total=18).is_verified_for(MAY_2019) is False
+    assert authentic.is_verified_for(jpl_month_config("2019-08")) is False
+
+
+def test_strict_loader_verifies_existing_reference_without_network(tmp_path: Path) -> None:
+    destination = tmp_path / "official_local_month_total.json"
+    destination.write_text(json.dumps(_official_payload(MAY_2019, 23)), encoding="utf-8")
+
+    loaded = official_reference_module.load_verified_official_local_month_total(destination)
+
+    assert loaded.total == 23
+    assert loaded.reference_path == destination
+    assert loaded.is_verified_for(MAY_2019) is True
+    assert str(destination) not in repr(loaded)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "missing",
+        "extra",
+        "schema",
+        "source",
+        "endpoint",
+        "site",
+        "timezone",
+        "interval",
+        "local_start",
+        "local_end",
+        "utc_start",
+        "utc_end",
+        "query",
+        "bool_total",
+        "negative_total",
+        "zero_requests",
+        "two_requests",
+        "bool_requests",
+        "response_fields",
+        "token_stored",
+    ],
+)
+def test_strict_loader_rejects_incomplete_or_tampered_contract(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    payload = _official_payload(MAY_2019)
+    if mutation == "missing":
+        payload.pop("source")
+    elif mutation == "extra":
+        payload["unexpected"] = "field"
+    elif mutation == "schema":
+        payload["schema_version"] = "v2"
+    elif mutation == "source":
+        payload["source"] = "untrusted"
+    elif mutation == "endpoint":
+        payload["endpoint"] = "sessions/caltech"
+    elif mutation == "site":
+        payload["site"] = "caltech"
+    elif mutation == "timezone":
+        payload["timezone"] = "UTC"
+    elif mutation == "interval":
+        payload["interval_semantics"] = "[start,end]"
+    elif mutation == "local_start":
+        payload["local_start_inclusive"] = MAY_2019.local_start.isoformat() + "Z"
+    elif mutation == "local_end":
+        payload["local_end_exclusive"] = MAY_2019.local_end.isoformat() + "Z"
+    elif mutation == "utc_start":
+        payload["utc_start_inclusive"] = MAY_2019.utc_start.isoformat() + "Z"
+    elif mutation == "utc_end":
+        payload["utc_end_exclusive"] = MAY_2019.utc_end.isoformat() + "Z"
+    elif mutation == "query":
+        payload["query_condition"] = "tampered"
+    elif mutation == "bool_total":
+        payload["official_meta_total"] = True
+    elif mutation == "negative_total":
+        payload["official_meta_total"] = -1
+    elif mutation == "zero_requests":
+        payload["request_count"] = 0
+    elif mutation == "two_requests":
+        payload["request_count"] = 2
+    elif mutation == "bool_requests":
+        payload["request_count"] = True
+    elif mutation == "response_fields":
+        payload["response_fields_consumed"] = ["_meta.total", "_items"]
+    else:
+        payload["token_stored"] = True
+    destination = tmp_path / f"{mutation}.json"
+    destination.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(official_reference_module.OfficialLocalMonthReferenceError):
+        official_reference_module.load_verified_official_local_month_total(destination)
+
+
+def test_strict_loader_rejects_missing_partial_and_wrong_month(tmp_path: Path) -> None:
+    missing = tmp_path / "missing.json"
+    with pytest.raises(official_reference_module.OfficialLocalMonthReferenceError):
+        official_reference_module.load_verified_official_local_month_total(missing)
+
+    destination = tmp_path / "official_local_month_total.json"
+    destination.write_text(json.dumps(_official_payload(MAY_2019)), encoding="utf-8")
+    partial = destination.with_suffix(destination.suffix + ".partial")
+    partial.write_text("incomplete", encoding="utf-8")
+    with pytest.raises(official_reference_module.OfficialLocalMonthReferenceError):
+        official_reference_module.load_verified_official_local_month_total(destination)
+
+    partial.unlink()
+    with pytest.raises(official_reference_module.OfficialLocalMonthReferenceError):
+        official_reference_module.load_verified_official_local_month_total(
+            destination,
+            month=jpl_month_config("2019-08"),
+        )

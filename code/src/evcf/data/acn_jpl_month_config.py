@@ -39,6 +39,7 @@ _GRID_SECONDS = 900
 _SCHEDULED_ISSUE_EDGE_BINS = 111
 _APPROVED_MONTHS = ("2019-02", "2019-05", "2019-08", "2019-11")
 _VERIFIED_SOURCE_EVIDENCE_SEAL = object()
+_VERIFIED_SCOPE_SEAL = object()
 
 
 class CompleteMetadataError(ValueError):
@@ -93,6 +94,18 @@ class CompleteMetadataScope:
     carry_in_session_count: int
     record_inventory_sha256: str
     source_evidence: CompleteMetadataSourceEvidence | None = None
+    _verification_seal: object | None = field(
+        default=None,
+        init=False,
+        repr=False,
+        compare=False,
+    )
+    _verified_scope_binding: str | None = field(
+        default=None,
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     @property
     def inventory_sha256(self) -> str:
@@ -105,15 +118,21 @@ class CompleteMetadataScope:
         """Whether the source evidence matches the one frozen published inventory."""
 
         evidence = self.source_evidence
-        return (
-            evidence is not None
+        if not (
+            self._verification_seal is _VERIFIED_SCOPE_SEAL
+            and evidence is not None
             and evidence._verification_seal is _VERIFIED_SOURCE_EVIDENCE_SEAL
             and evidence.file_count == EXPECTED_COMPLETE_METADATA_FILE_COUNT
             and evidence.valid_manifest_count == EXPECTED_COMPLETE_METADATA_FILE_COUNT
             and evidence.record_count == EXPECTED_COMPLETE_METADATA_RECORD_COUNT
             and evidence.source_inventory_sha256 == EXPECTED_COMPLETE_METADATA_INVENTORY_SHA256
             and evidence.inventory_algorithm == SOURCE_INVENTORY_DIGEST_ALGORITHM
-        )
+        ):
+            return False
+        try:
+            return self._verified_scope_binding == _scope_binding(self)
+        except (TypeError, ValueError):
+            return False
 
 
 def _parse_month(month: str) -> tuple[int, int]:
@@ -229,6 +248,35 @@ def _canonical_record_inventory_sha256(records: Iterable[Mapping[str, Any]]) -> 
         digest.update(encoded)
         digest.update(b"\n")
     return digest.hexdigest()
+
+
+def _scope_binding(scope: CompleteMetadataScope) -> str:
+    evidence = scope.source_evidence
+    if evidence is None:
+        raise ValueError("verified scope requires source evidence")
+    payload = {
+        "record_inventory_sha256": scope.record_inventory_sha256,
+        "local_month_records_sha256": _canonical_record_inventory_sha256(scope.local_month_records),
+        "carry_in_records_sha256": _canonical_record_inventory_sha256(scope.carry_in_records),
+        "local_month_record_count": len(scope.local_month_records),
+        "carry_in_record_count": len(scope.carry_in_records),
+        "local_month_session_count": scope.local_month_session_count,
+        "utc_month_session_count": scope.utc_month_session_count,
+        "left_boundary_count": scope.left_boundary_count,
+        "right_boundary_count": scope.right_boundary_count,
+        "carry_in_session_count": scope.carry_in_session_count,
+        "source_file_count": evidence.file_count,
+        "source_valid_manifest_count": evidence.valid_manifest_count,
+        "source_record_count": evidence.record_count,
+        "source_inventory_sha256": evidence.source_inventory_sha256,
+        "source_inventory_algorithm": evidence.inventory_algorithm,
+    }
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _utc_calendar_bounds(config: JPLMonthConfig) -> tuple[datetime, datetime]:
@@ -417,6 +465,8 @@ def load_verified_complete_metadata(
 
     scope = summarize_complete_metadata(records, config)
     verified = replace(scope, source_evidence=evidence)
+    object.__setattr__(verified, "_verified_scope_binding", _scope_binding(verified))
+    object.__setattr__(verified, "_verification_seal", _VERIFIED_SCOPE_SEAL)
     if not verified.source_inventory_verified:
         raise CompleteMetadataError("complete metadata source evidence is not verified")
     return verified

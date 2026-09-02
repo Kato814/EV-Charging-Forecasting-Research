@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import gzip
+import hashlib
+import json
 from dataclasses import FrozenInstanceError, replace
 from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import evcf.data.acn_jpl_month_config as month_config_module
 import pytest
 from evcf.data.acn_jpl_gate0 import LocalDayWindow
 from evcf.data.acn_jpl_month_config import (
@@ -35,6 +40,40 @@ def _record(
         "connectionTime": connection,
         "disconnectTime": disconnect or connection + timedelta(hours=1),
     }
+
+
+def _write_test_complete_inventory(root: Path) -> str:
+    root.mkdir(parents=True, exist_ok=True)
+    inventory = hashlib.sha256()
+    for index in range(EXPECTED_COMPLETE_METADATA_FILE_COUNT):
+        record = _record(
+            index,
+            MAY_2019.utc_start + timedelta(days=1, minutes=index),
+        )
+        serializable = {
+            **record,
+            "connectionTime": format_datetime(record["connectionTime"], usegmt=True),
+            "disconnectTime": format_datetime(record["disconnectTime"], usegmt=True),
+        }
+        data_path = root / f"part-{index:02d}.jsonl.gz"
+        with gzip.open(data_path, "wt", encoding="utf-8", newline="\n") as handle:
+            handle.write(json.dumps(serializable, sort_keys=True) + "\n")
+        raw_sha256 = hashlib.sha256(data_path.read_bytes()).hexdigest()
+        manifest = {
+            "schema_version": 1,
+            "endpoint": "sessions/jpl",
+            "site": "jpl",
+            "mode": "metadata",
+            "record_count": 1,
+            "source_total": 1,
+            "sha256": raw_sha256,
+        }
+        data_path.with_name(data_path.name + ".manifest.json").write_text(
+            json.dumps(manifest),
+            encoding="utf-8",
+        )
+        inventory.update(f"{data_path.name}\0{raw_sha256}\0{1}\n".encode())
+    return inventory.hexdigest()
 
 
 def test_seasonal_months_have_fixed_order_and_only_m1_to_m3() -> None:
@@ -297,3 +336,39 @@ def test_production_loader_exposes_frozen_source_contract_and_fails_closed(
 
     with pytest.raises(CompleteMetadataError, match="exactly 42"):
         load_verified_complete_metadata(tmp_path, MAY_2019)
+
+
+def test_verified_scope_is_bound_to_the_exact_summarized_scope(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_digest = _write_test_complete_inventory(tmp_path)
+    monkeypatch.setattr(month_config_module, "EXPECTED_COMPLETE_METADATA_RECORD_COUNT", 42)
+    monkeypatch.setattr(
+        month_config_module,
+        "EXPECTED_COMPLETE_METADATA_INVENTORY_SHA256",
+        source_digest,
+    )
+    verified = load_verified_complete_metadata(tmp_path, MAY_2019)
+
+    assert verified.source_inventory_verified is True
+    synthetic = summarize_complete_metadata([], MAY_2019)
+    assert (
+        replace(synthetic, source_evidence=verified.source_evidence).source_inventory_verified
+        is False
+    )
+    assert replace(verified).source_inventory_verified is False
+    assert (
+        replace(
+            verified,
+            local_month_session_count=verified.local_month_session_count + 1,
+        ).source_inventory_verified
+        is False
+    )
+    assert replace(verified, local_month_records=()).source_inventory_verified is False
+    assert replace(verified, record_inventory_sha256="0" * 64).source_inventory_verified is False
+
+    retained_record = verified.local_month_records[0]
+    assert isinstance(retained_record, dict)
+    retained_record["sessionID"] = "tampered-after-verification"
+    assert verified.source_inventory_verified is False

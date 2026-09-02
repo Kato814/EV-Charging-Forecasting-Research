@@ -102,6 +102,16 @@ class PowerDecisionInputs:
         return self.retained_session_count / self.eligible_session_count
 
 
+@dataclass(frozen=True)
+class SeasonalPowerDecision:
+    """Conservative seasonal adapter around the frozen legacy classifier."""
+
+    legacy_classifier_status: str
+    power_semantics_status: str
+    e208_authorized: bool
+    continue_current_pipeline: bool
+
+
 def classify_power_semantics(inputs: PowerDecisionInputs) -> str:
     """Apply the frozen candidate, current-only, and severe-failure rules."""
 
@@ -135,6 +145,26 @@ def classify_power_semantics(inputs: PowerDecisionInputs) -> str:
     ):
         return KW_RECONSTRUCTION_CANDIDATE
     return CURRENT_PROXY_ONLY
+
+
+def seasonal_power_decision(inputs: PowerDecisionInputs) -> SeasonalPowerDecision:
+    """Map legacy severe failure to an ampere-only seasonal continuation.
+
+    The legacy classifier remains the sole owner of all numeric thresholds. A
+    reconstruction candidate is still only a candidate: neither it nor any
+    other status authorizes an E=208*I feature.
+    """
+
+    legacy_status = classify_power_semantics(inputs)
+    seasonal_status = (
+        CURRENT_PROXY_ONLY if legacy_status == POWER_SEMANTICS_FAIL else legacy_status
+    )
+    return SeasonalPowerDecision(
+        legacy_classifier_status=legacy_status,
+        power_semantics_status=seasonal_status,
+        e208_authorized=False,
+        continue_current_pipeline=True,
+    )
 
 
 _OFFLINE_ONLY_KEY_TOKENS = (
@@ -487,6 +517,32 @@ def _decision_report(status: str, inputs: PowerDecisionInputs) -> dict[str, Any]
     }
 
 
+def _power_decision_inputs(
+    mapping: Mapping[str, Any],
+    primary: Mapping[str, Any],
+) -> PowerDecisionInputs:
+    error = primary["e208_error"]
+    monthly = primary["aggregate_energy"]
+
+    def finite_or_nan(value: object) -> float:
+        return float(value) if _finite_number(value) else math.nan
+
+    return PowerDecisionInputs(
+        mapping_rate=float(mapping["mapping_rate"]),
+        primary_audit_coverage=finite_or_nan(primary["audit_coverage"]),
+        eligible_session_count=int(primary["eligible_session_count"]),
+        retained_session_count=int(primary["retained_session_count"]),
+        median_absolute_percentage_error=finite_or_nan(
+            error["median_absolute_percentage_error"]
+        ),
+        p90_absolute_percentage_error=finite_or_nan(
+            error["p90_absolute_percentage_error"]
+        ),
+        monthly_relative_energy_error=finite_or_nan(monthly["relative_error"]),
+        statistics_finite=_required_statistics_finite(primary),
+    )
+
+
 def audit_power_semantics(
     sessions: Iterable[PowerAuditSession],
 ) -> dict[str, Any]:
@@ -498,23 +554,7 @@ def audit_power_semantics(
     sensitivity = [
         _cohort_report(ordered_sessions, threshold) for threshold in _SENSITIVITY_COHORTS
     ]
-    error = primary["e208_error"]
-    monthly = primary["aggregate_energy"]
-    statistics_finite = _required_statistics_finite(primary)
-
-    def finite_or_nan(value: object) -> float:
-        return float(value) if _finite_number(value) else math.nan
-
-    inputs = PowerDecisionInputs(
-        mapping_rate=float(mapping["mapping_rate"]),
-        primary_audit_coverage=finite_or_nan(primary["audit_coverage"]),
-        eligible_session_count=int(primary["eligible_session_count"]),
-        retained_session_count=int(primary["retained_session_count"]),
-        median_absolute_percentage_error=finite_or_nan(error["median_absolute_percentage_error"]),
-        p90_absolute_percentage_error=finite_or_nan(error["p90_absolute_percentage_error"]),
-        monthly_relative_energy_error=finite_or_nan(monthly["relative_error"]),
-        statistics_finite=statistics_finite,
-    )
+    inputs = _power_decision_inputs(mapping, primary)
     status = classify_power_semantics(inputs)
     return {
         "schema_version": "acn-jpl-power-semantics-audit/v1",
@@ -538,3 +578,32 @@ def audit_power_semantics(
             "token_emitted": False,
         },
     }
+
+
+def audit_seasonal_power_semantics(
+    sessions: Iterable[PowerAuditSession],
+) -> dict[str, Any]:
+    """Return the legacy evidence with the conservative seasonal decision."""
+
+    legacy = audit_power_semantics(sessions)
+    mapping = legacy["mapping"]
+    primary = legacy["cohorts"]["primary"]
+    decision = seasonal_power_decision(_power_decision_inputs(mapping, primary))
+    if decision.legacy_classifier_status != legacy["status"]:
+        raise AssertionError("seasonal adapter diverged from the legacy classifier")
+
+    report = dict(legacy)
+    report.update(
+        {
+            "schema_version": "acn-jpl-seasonal-power-semantics-audit/v1",
+            "status": decision.power_semantics_status,
+            "legacy_classifier_status": decision.legacy_classifier_status,
+            "e208_authorized": decision.e208_authorized,
+            "continue_current_pipeline": decision.continue_current_pipeline,
+        }
+    )
+    report["decision"] = {
+        **legacy["decision"],
+        "status": decision.power_semantics_status,
+    }
+    return report

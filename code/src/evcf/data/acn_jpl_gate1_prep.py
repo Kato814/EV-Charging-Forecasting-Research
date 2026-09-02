@@ -38,9 +38,11 @@ from .acn_jpl_cleaning import (
     CleaningPolicy,
     CleanSeries,
     CleanSession,
+    SamplingModes,
     SeriesPoint,
     bounded_locf_integral,
     clean_session,
+    cleaning_policy_from_sampling_modes,
     derive_sampling_modes,
     parse_timestamp_utc_s,
     write_cleaned_sessions,
@@ -479,6 +481,348 @@ class CleaningAccumulator:
             "main_result_excludes_boundary_points": True,
             "sensitivity_window_seconds": self.policy.boundary_sensitivity_s,
         }
+
+
+def build_cleaning_qa(
+    accumulator: CleaningAccumulator,
+    *,
+    modes: SamplingModes,
+    expected_sessions: int,
+    analysis_window: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Finalize aggregate cleaning QA without assuming a particular month."""
+
+    cleaning_qa = accumulator.cleaning_qa(expected_sessions=expected_sessions)
+    cleaning_qa["sampling_interval"].update(
+        {
+            "current_positive_delta_count": modes.current.positive_delta_count,
+            "pilot_positive_delta_count": modes.pilot.positive_delta_count,
+            "current_distinct_positive_delta_count": len(modes.current.delta_histogram),
+            "pilot_distinct_positive_delta_count": len(modes.pilot.delta_histogram),
+            "current_top_delta_counts": [
+                list(item)
+                for item in sorted(
+                    modes.current.delta_histogram,
+                    key=lambda item: (-item[1], item[0]),
+                )[:20]
+            ],
+            "pilot_top_delta_counts": [
+                list(item)
+                for item in sorted(
+                    modes.pilot.delta_histogram,
+                    key=lambda item: (-item[1], item[0]),
+                )[:20]
+            ],
+        }
+    )
+    cleaning_qa["analysis_window"] = dict(analysis_window)
+    return cleaning_qa
+
+
+def build_seasonal_cleaning_sensitivity(
+    accumulator: CleaningAccumulator,
+) -> dict[str, Any]:
+    """Expose separate current/pilot hold grids without changing May output."""
+
+    legacy = accumulator.cleaning_sensitivity()
+    current_thresholds = sorted(int(value) for value in legacy["hold_thresholds"]["current"])
+    pilot_thresholds = sorted(int(value) for value in legacy["hold_thresholds"]["pilot"])
+    return {
+        **legacy,
+        "schema_version": "acn-jpl-seasonal-cleaning-sensitivity/v1",
+        "main_hold_seconds": {
+            "current": accumulator.policy.hold_cap_for("chargingCurrent"),
+            "pilot": accumulator.policy.hold_cap_for("pilotSignal"),
+        },
+        "hold_thresholds_seconds": {
+            "current": current_thresholds,
+            "pilot": pilot_thresholds,
+        },
+    }
+
+
+def _require_closed_shape(
+    value: object,
+    expected: Mapping[str, object],
+    *,
+    context: str,
+) -> None:
+    if not isinstance(value, Mapping):
+        raise TypeError(f"{context} must be an object")
+    actual_fields = set(value)
+    expected_fields = set(expected)
+    if actual_fields != expected_fields:
+        unexpected = sorted(actual_fields - expected_fields)
+        if unexpected:
+            raise ValueError(f"{context} has unexpected fields: {unexpected}")
+        missing = sorted(expected_fields - actual_fields)
+        raise ValueError(f"{context} is missing required fields: {missing}")
+    for name, nested_shape in expected.items():
+        if isinstance(nested_shape, Mapping):
+            _require_closed_shape(
+                value[name],
+                nested_shape,
+                context=f"{context}.{name}",
+            )
+
+
+def _require_finite_or_zero_denominator_null(
+    value: object,
+    *,
+    denominator: int,
+    context: str,
+) -> None:
+    if value is None:
+        if denominator != 0:
+            raise ValueError(f"{context} may be null only for a zero denominator")
+        return
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
+        raise ValueError(f"{context} must be finite")
+
+
+def validate_seasonal_cleaning_documents(
+    *,
+    cleaning_qa: Mapping[str, Any],
+    cleaning_sensitivity: Mapping[str, Any],
+    boundary_audit: Mapping[str, Any],
+    modes: SamplingModes,
+    policy: CleaningPolicy,
+    expected_sessions: int,
+) -> None:
+    """Validate the exact aggregate seasonal cleaning document contract."""
+
+    leaf = None
+    series_shape = {
+        name: leaf
+        for name in (
+            "raw_samples",
+            "retained_samples",
+            "invalid_timestamps",
+            "invalid_values",
+            "exact_duplicate_extras",
+            "conflicting_timestamps",
+            "retained_sample_rate",
+            "conflict_affected_sessions",
+            "conflicts_isolated_as_missing",
+            "bounded_observation_coverage",
+            "bounded_value_hours",
+        )
+    }
+    _require_closed_shape(
+        cleaning_qa,
+        {
+            "schema_version": leaf,
+            "status": leaf,
+            "sessions_processed": leaf,
+            "expected_sessions": leaf,
+            "timezone_policy": {
+                "internal": leaf,
+                "calendar_mapping": leaf,
+                "aware_only": leaf,
+            },
+            "interval_rule": leaf,
+            "sampling_interval": {
+                name: leaf
+                for name in (
+                    "derivation",
+                    "current_mode_seconds",
+                    "pilot_mode_seconds",
+                    "main_current_hold_seconds",
+                    "main_pilot_hold_seconds",
+                    "unbounded_interpolation",
+                    "current_positive_delta_count",
+                    "pilot_positive_delta_count",
+                    "current_distinct_positive_delta_count",
+                    "pilot_distinct_positive_delta_count",
+                    "current_top_delta_counts",
+                    "pilot_top_delta_counts",
+                )
+            },
+            "duplicate_policy": {
+                "exact": leaf,
+                "conflict_main": leaf,
+                "conflict_sensitivity": leaf,
+            },
+            "current": series_shape,
+            "pilot": series_shape,
+            "user_inputs": {
+                "raw_revision_count": leaf,
+                "sanitized_revision_count": leaf,
+                "unparseable_modified_count": leaf,
+                "issue_time_truncation_ready": leaf,
+            },
+            "retrospective_done_time": {
+                "present_count": leaf,
+                "parsed_count": leaf,
+                "unparseable_count": leaf,
+                "online_feature_allowed": leaf,
+                "original_value_retained_locally": leaf,
+            },
+            "raw_modified": leaf,
+            "analysis_window": {
+                "month": leaf,
+                "timezone": leaf,
+                "local_start_inclusive": leaf,
+                "local_end_exclusive": leaf,
+                "utc_start_inclusive": leaf,
+                "utc_end_exclusive": leaf,
+            },
+        },
+        context="cleaning QA",
+    )
+    if (
+        cleaning_qa.get("schema_version") != "acn-jpl-cleaning-qa/v1"
+        or cleaning_qa.get("expected_sessions") != expected_sessions
+        or cleaning_qa.get("sessions_processed") != expected_sessions
+        or cleaning_qa.get("status") != "PASS"
+        or cleaning_qa.get("raw_modified") is not False
+    ):
+        raise ValueError("cleaning QA status/count/raw contract is inconsistent")
+    if cleaning_qa["timezone_policy"] != {
+        "internal": "UTC",
+        "calendar_mapping": "America/Los_Angeles",
+        "aware_only": True,
+    }:
+        raise ValueError("cleaning QA timezone policy is inconsistent")
+    if cleaning_qa.get("interval_rule") != "left_closed_right_open":
+        raise ValueError("cleaning QA interval rule is inconsistent")
+    if cleaning_qa["duplicate_policy"] != {
+        "exact": "retain_first_remove_extra",
+        "conflict_main": "mark_timestamp_missing",
+        "conflict_sensitivity": "last_write_wins",
+    }:
+        raise ValueError("cleaning QA duplicate policy is inconsistent")
+    user_inputs = cleaning_qa["user_inputs"]
+    if (
+        user_inputs.get("unparseable_modified_count") != 0
+        or user_inputs.get("issue_time_truncation_ready") is not True
+    ):
+        raise ValueError("cleaning QA user-input truncation is not ready")
+    retrospective = cleaning_qa["retrospective_done_time"]
+    if (
+        retrospective.get("online_feature_allowed") is not False
+        or retrospective.get("original_value_retained_locally") is not True
+    ):
+        raise ValueError("cleaning QA retrospective done-time policy is inconsistent")
+    sampling = cleaning_qa["sampling_interval"]
+    if (
+        sampling["derivation"]
+        != "mode_of_positive_raw_timestamp_differences"
+        or
+        sampling["current_mode_seconds"] != modes.current.mode_seconds
+        or sampling["pilot_mode_seconds"] != modes.pilot.mode_seconds
+        or sampling["main_current_hold_seconds"]
+        != policy.hold_cap_for("chargingCurrent")
+        or sampling["main_pilot_hold_seconds"] != policy.hold_cap_for("pilotSignal")
+        or sampling["unbounded_interpolation"] is not False
+    ):
+        raise ValueError("cleaning QA sampling policy is inconsistent")
+    for name in ("current", "pilot"):
+        section = cleaning_qa[name]
+        _require_finite_or_zero_denominator_null(
+            section["retained_sample_rate"],
+            denominator=int(section["raw_samples"]),
+            context=f"cleaning QA {name} retained rate",
+        )
+        _require_finite_or_zero_denominator_null(
+            section["bounded_observation_coverage"],
+            denominator=1,
+            context=f"cleaning QA {name} bounded coverage",
+        )
+
+    expected_holds = {
+        "current": policy.hold_cap_for("chargingCurrent"),
+        "pilot": policy.hold_cap_for("pilotSignal"),
+    }
+    expected_thresholds = {
+        "current": sorted(
+            {
+                policy.mode_for("chargingCurrent"),
+                expected_holds["current"],
+                policy.locf_cap_s,
+            }
+        ),
+        "pilot": sorted(
+            {
+                policy.mode_for("pilotSignal"),
+                expected_holds["pilot"],
+                policy.locf_cap_s,
+            }
+        ),
+    }
+    integral_shape = {
+        "observed_seconds": leaf,
+        "eligible_seconds": leaf,
+        "coverage": leaf,
+        "value_hours": leaf,
+    }
+    comparison_shape = {**integral_shape, "relative_value_hours_change": leaf}
+    _require_closed_shape(
+        cleaning_sensitivity,
+        {
+            "schema_version": leaf,
+            "main_hold_seconds": {"current": leaf, "pilot": leaf},
+            "hold_thresholds_seconds": {"current": leaf, "pilot": leaf},
+            "hold_thresholds": {
+                name: {
+                    str(threshold): integral_shape
+                    for threshold in expected_thresholds[name]
+                }
+                for name in ("current", "pilot")
+            },
+            "last_write_wins": {
+                "current": comparison_shape,
+                "pilot": comparison_shape,
+            },
+            "boundary_plus_minus_60_seconds": {
+                "current": comparison_shape,
+                "pilot": comparison_shape,
+            },
+        },
+        context="cleaning sensitivity",
+    )
+    if cleaning_sensitivity.get("schema_version") != (
+        "acn-jpl-seasonal-cleaning-sensitivity/v1"
+    ):
+        raise ValueError("cleaning sensitivity schema is invalid")
+    if cleaning_sensitivity.get("main_hold_seconds") != expected_holds:
+        raise ValueError("cleaning sensitivity main holds are inconsistent")
+    if cleaning_sensitivity.get("hold_thresholds_seconds") != expected_thresholds:
+        raise ValueError("cleaning sensitivity hold thresholds are inconsistent")
+
+    _require_closed_shape(
+        boundary_audit,
+        {
+            "schema_version": leaf,
+            "status": leaf,
+            "positive_points_excluded": leaf,
+            "sessions_affected": leaf,
+            "signed_distance_seconds": {
+                "count": leaf,
+                "minimum": leaf,
+                "p05": leaf,
+                "median": leaf,
+                "p95": leaf,
+                "maximum": leaf,
+            },
+            "before_connection_count": leaf,
+            "at_or_after_disconnect_count": leaf,
+            "excluded_positive_ampere_seconds": leaf,
+            "raw_total_ampere_seconds": leaf,
+            "current_integral_share": leaf,
+            "main_result_excludes_boundary_points": leaf,
+            "sensitivity_window_seconds": leaf,
+        },
+        context="boundary current audit",
+    )
+    if (
+        boundary_audit.get("schema_version") != "acn-jpl-boundary-current-audit/v1"
+        or boundary_audit.get("status") != "PASS"
+        or boundary_audit.get("main_result_excludes_boundary_points") is not True
+        or boundary_audit.get("sensitivity_window_seconds")
+        != policy.boundary_sensitivity_s
+    ):
+        raise ValueError("boundary current audit policy is inconsistent")
 
 
 def _json_bytes(payload: object) -> bytes:
@@ -1013,16 +1357,16 @@ def prepare_jpl_gate1_data(
             details={"raw_object_count": before_validation.total_record_count},
         )
     modes = derive_sampling_modes(record.payload for record in iter_validated_raw_records(raw))
-    policy = CleaningPolicy(
-        current_mode_s=modes.current.mode_seconds,
-        pilot_mode_s=modes.pilot.mode_seconds,
-        locf_mode_multiplier=int(protocol["cleaning"]["locf_mode_multiplier"]),
-        locf_cap_s=int(protocol["cleaning"]["locf_cap_seconds"]),
-        boundary_sensitivity_s=int(protocol["cleaning"]["boundary_sensitivity_seconds"]),
-    )
     expected_mode = int(protocol["cleaning"]["expected_sampling_mode_seconds"])
-    if policy.current_mode_s != expected_mode or policy.pilot_mode_s != expected_mode:
-        raise ValueError("frozen snapshot did not reproduce the audited 4-second modes")
+    policy = cleaning_policy_from_sampling_modes(
+        modes,
+        locf_mode_multiplier=int(protocol["cleaning"]["locf_mode_multiplier"]),
+        locf_cap_seconds=int(protocol["cleaning"]["locf_cap_seconds"]),
+        boundary_sensitivity_seconds=int(
+            protocol["cleaning"]["boundary_sensitivity_seconds"]
+        ),
+        required_mode_seconds=expected_mode,
+    )
     expected_hold = min(
         int(protocol["cleaning"]["locf_mode_multiplier"]) * expected_mode,
         int(protocol["cleaning"]["locf_cap_seconds"]),
@@ -1055,30 +1399,12 @@ def prepare_jpl_gate1_data(
         source_inventory_sha256=before.digest,
         overwrite=True,
     )
-    cleaning_qa = accumulator.cleaning_qa(expected_sessions=FROZEN_RAW_CONTRACT.total_record_count)
-    cleaning_qa["sampling_interval"].update(
-        {
-            "current_positive_delta_count": modes.current.positive_delta_count,
-            "pilot_positive_delta_count": modes.pilot.positive_delta_count,
-            "current_distinct_positive_delta_count": len(modes.current.delta_histogram),
-            "pilot_distinct_positive_delta_count": len(modes.pilot.delta_histogram),
-            "current_top_delta_counts": [
-                list(item)
-                for item in sorted(
-                    modes.current.delta_histogram,
-                    key=lambda item: (-item[1], item[0]),
-                )[:20]
-            ],
-            "pilot_top_delta_counts": [
-                list(item)
-                for item in sorted(
-                    modes.pilot.delta_histogram,
-                    key=lambda item: (-item[1], item[0]),
-                )[:20]
-            ],
-        }
+    cleaning_qa = build_cleaning_qa(
+        accumulator,
+        modes=modes,
+        expected_sessions=FROZEN_RAW_CONTRACT.total_record_count,
+        analysis_window=protocol["analysis"],
     )
-    cleaning_qa["analysis_window"] = dict(protocol["analysis"])
     if cleaning_qa["status"] != "PASS":
         raise ValueError("cleaning gate failed")
     cleaning_sensitivity = accumulator.cleaning_sensitivity()

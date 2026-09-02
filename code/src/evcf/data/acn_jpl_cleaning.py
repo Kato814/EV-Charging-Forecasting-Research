@@ -90,6 +90,38 @@ class SamplingModes:
     pilot: SamplingMode
 
 
+def cleaning_policy_from_sampling_modes(
+    modes: SamplingModes,
+    *,
+    locf_mode_multiplier: int = 3,
+    locf_cap_seconds: int = 60,
+    boundary_sensitivity_seconds: int = 60,
+    required_mode_seconds: int | None = None,
+) -> CleaningPolicy:
+    """Build one policy from the two modes observed in the current month."""
+
+    policy = CleaningPolicy(
+        current_mode_s=modes.current.mode_seconds,
+        pilot_mode_s=modes.pilot.mode_seconds,
+        locf_mode_multiplier=locf_mode_multiplier,
+        locf_cap_s=locf_cap_seconds,
+        boundary_sensitivity_s=boundary_sensitivity_seconds,
+    )
+    if required_mode_seconds is not None:
+        if (
+            not isinstance(required_mode_seconds, int)
+            or isinstance(required_mode_seconds, bool)
+            or required_mode_seconds <= 0
+        ):
+            raise ValueError("required_mode_seconds must be a positive integer")
+        if (
+            policy.current_mode_s != required_mode_seconds
+            or policy.pilot_mode_s != required_mode_seconds
+        ):
+            raise ValueError("frozen snapshot did not reproduce the audited 4-second modes")
+    return policy
+
+
 @dataclass(frozen=True)
 class SeriesCleaningAudit:
     raw_samples: int

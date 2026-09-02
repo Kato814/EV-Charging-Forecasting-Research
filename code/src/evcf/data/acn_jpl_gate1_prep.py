@@ -38,6 +38,7 @@ from .acn_jpl_cleaning import (
     CleaningPolicy,
     CleanSeries,
     CleanSession,
+    SamplingMode,
     SamplingModes,
     SeriesPoint,
     bounded_locf_integral,
@@ -53,6 +54,11 @@ from .acn_jpl_issue_snapshots import (
     build_issue_snapshots,
     feature_blacklist_document,
     feature_whitelist_document,
+)
+from .acn_jpl_month_config import (
+    SEASONAL_MONTHS,
+    JPLMonthConfig,
+    is_canonical_jpl_month_config,
 )
 from .acn_jpl_power_semantics import (
     CURRENT_PROXY_ONLY,
@@ -566,18 +572,154 @@ def _require_closed_shape(
             )
 
 
-def _require_finite_or_zero_denominator_null(
+def _require_nonnegative_int(
     value: object,
     *,
-    denominator: int,
+    context: str,
+    positive: bool = False,
+) -> int:
+    if type(value) is not int:
+        raise TypeError(f"{context} must be an integer")
+    if value < (1 if positive else 0):
+        qualifier = "positive" if positive else "nonnegative"
+        raise ValueError(f"{context} must be {qualifier}")
+    return value
+
+
+def _require_finite_number(
+    value: object,
+    *,
+    context: str,
+    nonnegative: bool = True,
+) -> float:
+    if type(value) not in (int, float):
+        raise TypeError(f"{context} must be numeric")
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"{context} must be finite")
+    if nonnegative and number < 0:
+        raise ValueError(f"{context} must be nonnegative")
+    return number
+
+
+def _numbers_match(left: float, right: float) -> bool:
+    return math.isclose(left, right, rel_tol=1e-12, abs_tol=1e-12)
+
+
+def _require_ratio(
+    value: object,
+    *,
+    numerator: float,
+    denominator: float,
+    context: str,
+    null_when_zero: bool,
+) -> float | None:
+    if denominator == 0:
+        if null_when_zero:
+            if value is not None:
+                raise ValueError(f"{context} must be null for a zero denominator")
+            return None
+        number = _require_finite_number(value, context=context)
+        if number != 0:
+            raise ValueError(f"{context} must be zero for a zero denominator")
+        return number
+    number = _require_finite_number(value, context=context)
+    expected = numerator / denominator
+    if not _numbers_match(number, expected):
+        raise ValueError(f"{context} does not match its numerator and denominator")
+    return number
+
+
+def _require_integral_report(
+    report: Mapping[str, Any],
+    *,
+    context: str,
+) -> tuple[int, int, float | None, float]:
+    observed = _require_nonnegative_int(
+        report["observed_seconds"],
+        context=f"{context} observed seconds",
+    )
+    eligible = _require_nonnegative_int(
+        report["eligible_seconds"],
+        context=f"{context} eligible seconds",
+    )
+    if observed > eligible:
+        raise ValueError(f"{context} observed seconds exceed eligible seconds")
+    coverage = _require_ratio(
+        report["coverage"],
+        numerator=observed,
+        denominator=eligible,
+        context=f"{context} coverage",
+        null_when_zero=True,
+    )
+    value_hours = _require_finite_number(
+        report["value_hours"],
+        context=f"{context} value hours",
+    )
+    return observed, eligible, coverage, value_hours
+
+
+def _require_sampling_mode(
+    mode: SamplingMode,
+    *,
+    field_name: str,
+) -> list[list[int]]:
+    if not isinstance(mode, SamplingMode) or mode.field_name != field_name:
+        raise ValueError(f"{field_name} sampling mode is not canonical")
+    mode_seconds = _require_nonnegative_int(
+        mode.mode_seconds,
+        context=f"{field_name} mode seconds",
+        positive=True,
+    )
+    positive_delta_count = _require_nonnegative_int(
+        mode.positive_delta_count,
+        context=f"{field_name} positive delta count",
+        positive=True,
+    )
+    histogram: list[tuple[int, int]] = []
+    if not isinstance(mode.delta_histogram, tuple) or not mode.delta_histogram:
+        raise TypeError(f"{field_name} delta histogram must be a nonempty tuple")
+    for item in mode.delta_histogram:
+        if not isinstance(item, tuple) or len(item) != 2:
+            raise TypeError(f"{field_name} delta histogram rows must be pairs")
+        delta = _require_nonnegative_int(
+            item[0], context=f"{field_name} delta", positive=True
+        )
+        count = _require_nonnegative_int(
+            item[1], context=f"{field_name} delta count", positive=True
+        )
+        histogram.append((delta, count))
+    if histogram != sorted(histogram) or len({delta for delta, _ in histogram}) != len(
+        histogram
+    ):
+        raise ValueError(f"{field_name} delta histogram must be uniquely sorted")
+    if sum(count for _, count in histogram) != positive_delta_count:
+        raise ValueError(f"{field_name} delta histogram count is inconsistent")
+    highest_count = max(count for _, count in histogram)
+    expected_mode = min(delta for delta, count in histogram if count == highest_count)
+    if mode_seconds != expected_mode:
+        raise ValueError(f"{field_name} mode does not match its delta histogram")
+    return [
+        list(item)
+        for item in sorted(histogram, key=lambda item: (-item[1], item[0]))[:20]
+    ]
+
+
+def _require_top_delta_rows(
+    value: object,
+    *,
+    expected: list[list[int]],
     context: str,
 ) -> None:
-    if value is None:
-        if denominator != 0:
-            raise ValueError(f"{context} may be null only for a zero denominator")
-        return
-    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
-        raise ValueError(f"{context} must be finite")
+    if not isinstance(value, list):
+        raise TypeError(f"{context} must be a list")
+    for row in value:
+        if not isinstance(row, list) or len(row) != 2:
+            raise TypeError(f"{context} rows must be two-item lists")
+        _require_nonnegative_int(row[0], context=f"{context} delta", positive=True)
+        _require_nonnegative_int(row[1], context=f"{context} count", positive=True)
+    if value != expected:
+        raise ValueError(f"{context} does not match the sampling histogram")
 
 
 def validate_seasonal_cleaning_documents(
@@ -585,12 +727,45 @@ def validate_seasonal_cleaning_documents(
     cleaning_qa: Mapping[str, Any],
     cleaning_sensitivity: Mapping[str, Any],
     boundary_audit: Mapping[str, Any],
+    config: JPLMonthConfig,
     modes: SamplingModes,
     policy: CleaningPolicy,
     expected_sessions: int,
 ) -> None:
     """Validate the exact aggregate seasonal cleaning document contract."""
 
+    if not is_canonical_jpl_month_config(config) or config.month not in SEASONAL_MONTHS:
+        raise ValueError("config must be a canonical seasonal month")
+    if not isinstance(policy, CleaningPolicy):
+        raise TypeError("policy must be a CleaningPolicy")
+    if (
+        policy.locf_mode_multiplier,
+        policy.locf_cap_s,
+        policy.boundary_sensitivity_s,
+    ) != (3, 60, 60):
+        raise ValueError("seasonal cleaning must use the fixed 3x/60s/60s policy")
+    expected_sessions = _require_nonnegative_int(
+        expected_sessions,
+        context="expected sessions",
+        positive=True,
+    )
+    if not isinstance(modes, SamplingModes):
+        raise TypeError("modes must be SamplingModes")
+    expected_top_deltas = {
+        "current": _require_sampling_mode(
+            modes.current,
+            field_name="chargingCurrent",
+        ),
+        "pilot": _require_sampling_mode(
+            modes.pilot,
+            field_name="pilotSignal",
+        ),
+    }
+    if (
+        policy.current_mode_s != modes.current.mode_seconds
+        or policy.pilot_mode_s != modes.pilot.mode_seconds
+    ):
+        raise ValueError("seasonal cleaning policy modes do not match observed modes")
     leaf = None
     series_shape = {
         name: leaf
@@ -670,19 +845,39 @@ def validate_seasonal_cleaning_documents(
         },
         context="cleaning QA",
     )
+    sessions_processed = _require_nonnegative_int(
+        cleaning_qa["sessions_processed"],
+        context="cleaning QA sessions processed",
+    )
+    declared_expected_sessions = _require_nonnegative_int(
+        cleaning_qa["expected_sessions"],
+        context="cleaning QA expected sessions",
+        positive=True,
+    )
     if (
-        cleaning_qa.get("schema_version") != "acn-jpl-cleaning-qa/v1"
-        or cleaning_qa.get("expected_sessions") != expected_sessions
-        or cleaning_qa.get("sessions_processed") != expected_sessions
-        or cleaning_qa.get("status") != "PASS"
-        or cleaning_qa.get("raw_modified") is not False
+        cleaning_qa["schema_version"] != "acn-jpl-cleaning-qa/v1"
+        or cleaning_qa["status"] != "PASS"
+        or sessions_processed != expected_sessions
+        or declared_expected_sessions != expected_sessions
+        or cleaning_qa["raw_modified"] is not False
     ):
         raise ValueError("cleaning QA status/count/raw contract is inconsistent")
-    if cleaning_qa["timezone_policy"] != {
-        "internal": "UTC",
-        "calendar_mapping": "America/Los_Angeles",
-        "aware_only": True,
-    }:
+    expected_analysis_window = {
+        "month": config.month,
+        "timezone": config.timezone_name,
+        "local_start_inclusive": config.local_start.isoformat(),
+        "local_end_exclusive": config.local_end.isoformat(),
+        "utc_start_inclusive": config.utc_start.isoformat(),
+        "utc_end_exclusive": config.utc_end.isoformat(),
+    }
+    if cleaning_qa["analysis_window"] != expected_analysis_window:
+        raise ValueError("cleaning QA analysis window does not match the month config")
+    timezone_policy = cleaning_qa["timezone_policy"]
+    if (
+        timezone_policy["internal"] != "UTC"
+        or timezone_policy["calendar_mapping"] != "America/Los_Angeles"
+        or timezone_policy["aware_only"] is not True
+    ):
         raise ValueError("cleaning QA timezone policy is inconsistent")
     if cleaning_qa.get("interval_rule") != "left_closed_right_open":
         raise ValueError("cleaning QA interval rule is inconsistent")
@@ -693,42 +888,171 @@ def validate_seasonal_cleaning_documents(
     }:
         raise ValueError("cleaning QA duplicate policy is inconsistent")
     user_inputs = cleaning_qa["user_inputs"]
+    raw_revisions = _require_nonnegative_int(
+        user_inputs["raw_revision_count"],
+        context="cleaning QA raw user-input revisions",
+    )
+    sanitized_revisions = _require_nonnegative_int(
+        user_inputs["sanitized_revision_count"],
+        context="cleaning QA sanitized user-input revisions",
+    )
+    unparseable_revisions = _require_nonnegative_int(
+        user_inputs["unparseable_modified_count"],
+        context="cleaning QA unparseable user-input revisions",
+    )
     if (
-        user_inputs.get("unparseable_modified_count") != 0
-        or user_inputs.get("issue_time_truncation_ready") is not True
+        sanitized_revisions > raw_revisions
+        or unparseable_revisions > raw_revisions
+        or unparseable_revisions != 0
+        or user_inputs["issue_time_truncation_ready"] is not True
     ):
         raise ValueError("cleaning QA user-input truncation is not ready")
     retrospective = cleaning_qa["retrospective_done_time"]
+    done_present = _require_nonnegative_int(
+        retrospective["present_count"],
+        context="cleaning QA done-time present count",
+    )
+    done_parsed = _require_nonnegative_int(
+        retrospective["parsed_count"],
+        context="cleaning QA done-time parsed count",
+    )
+    done_unparseable = _require_nonnegative_int(
+        retrospective["unparseable_count"],
+        context="cleaning QA done-time unparseable count",
+    )
     if (
-        retrospective.get("online_feature_allowed") is not False
-        or retrospective.get("original_value_retained_locally") is not True
+        done_present > sessions_processed
+        or done_parsed + done_unparseable != done_present
+        or retrospective["online_feature_allowed"] is not False
+        or retrospective["original_value_retained_locally"] is not True
     ):
         raise ValueError("cleaning QA retrospective done-time policy is inconsistent")
     sampling = cleaning_qa["sampling_interval"]
+    sampling_modes = {
+        "current": _require_nonnegative_int(
+            sampling["current_mode_seconds"],
+            context="cleaning QA current mode seconds",
+            positive=True,
+        ),
+        "pilot": _require_nonnegative_int(
+            sampling["pilot_mode_seconds"],
+            context="cleaning QA pilot mode seconds",
+            positive=True,
+        ),
+    }
+    sampling_holds = {
+        "current": _require_nonnegative_int(
+            sampling["main_current_hold_seconds"],
+            context="cleaning QA current hold seconds",
+            positive=True,
+        ),
+        "pilot": _require_nonnegative_int(
+            sampling["main_pilot_hold_seconds"],
+            context="cleaning QA pilot hold seconds",
+            positive=True,
+        ),
+    }
+    sampling_positive_counts = {
+        "current": _require_nonnegative_int(
+            sampling["current_positive_delta_count"],
+            context="cleaning QA current positive delta count",
+            positive=True,
+        ),
+        "pilot": _require_nonnegative_int(
+            sampling["pilot_positive_delta_count"],
+            context="cleaning QA pilot positive delta count",
+            positive=True,
+        ),
+    }
+    sampling_distinct_counts = {
+        "current": _require_nonnegative_int(
+            sampling["current_distinct_positive_delta_count"],
+            context="cleaning QA current distinct delta count",
+            positive=True,
+        ),
+        "pilot": _require_nonnegative_int(
+            sampling["pilot_distinct_positive_delta_count"],
+            context="cleaning QA pilot distinct delta count",
+            positive=True,
+        ),
+    }
+    _require_top_delta_rows(
+        sampling["current_top_delta_counts"],
+        expected=expected_top_deltas["current"],
+        context="cleaning QA current top deltas",
+    )
+    _require_top_delta_rows(
+        sampling["pilot_top_delta_counts"],
+        expected=expected_top_deltas["pilot"],
+        context="cleaning QA pilot top deltas",
+    )
     if (
         sampling["derivation"]
         != "mode_of_positive_raw_timestamp_differences"
-        or
-        sampling["current_mode_seconds"] != modes.current.mode_seconds
-        or sampling["pilot_mode_seconds"] != modes.pilot.mode_seconds
-        or sampling["main_current_hold_seconds"]
-        != policy.hold_cap_for("chargingCurrent")
-        or sampling["main_pilot_hold_seconds"] != policy.hold_cap_for("pilotSignal")
+        or sampling_modes["current"] != modes.current.mode_seconds
+        or sampling_modes["pilot"] != modes.pilot.mode_seconds
+        or sampling_holds["current"] != policy.hold_cap_for("chargingCurrent")
+        or sampling_holds["pilot"] != policy.hold_cap_for("pilotSignal")
+        or sampling_positive_counts["current"] != modes.current.positive_delta_count
+        or sampling_positive_counts["pilot"] != modes.pilot.positive_delta_count
+        or sampling_distinct_counts["current"] != len(modes.current.delta_histogram)
+        or sampling_distinct_counts["pilot"] != len(modes.pilot.delta_histogram)
         or sampling["unbounded_interpolation"] is not False
     ):
         raise ValueError("cleaning QA sampling policy is inconsistent")
+    main_series: dict[str, tuple[float, float]] = {}
     for name in ("current", "pilot"):
         section = cleaning_qa[name]
-        _require_finite_or_zero_denominator_null(
-            section["retained_sample_rate"],
-            denominator=int(section["raw_samples"]),
-            context=f"cleaning QA {name} retained rate",
+        count_names = (
+            "raw_samples",
+            "retained_samples",
+            "invalid_timestamps",
+            "invalid_values",
+            "exact_duplicate_extras",
+            "conflicting_timestamps",
+            "conflict_affected_sessions",
         )
-        _require_finite_or_zero_denominator_null(
+        counts = {
+            field: _require_nonnegative_int(
+                section[field],
+                context=f"cleaning QA {name} {field}",
+            )
+            for field in count_names
+        }
+        valid_observations = (
+            counts["raw_samples"]
+            - counts["invalid_timestamps"]
+            - counts["invalid_values"]
+        )
+        if (
+            counts["retained_samples"] > counts["raw_samples"]
+            or valid_observations < 0
+            or counts["exact_duplicate_extras"] > valid_observations
+            or counts["conflicting_timestamps"] > valid_observations
+            or counts["conflict_affected_sessions"] > sessions_processed
+            or counts["conflict_affected_sessions"]
+            > counts["conflicting_timestamps"]
+            or section["conflicts_isolated_as_missing"] is not True
+        ):
+            raise ValueError(f"cleaning QA {name} counts are inconsistent")
+        _require_ratio(
+            section["retained_sample_rate"],
+            numerator=counts["retained_samples"],
+            denominator=counts["raw_samples"],
+            context=f"cleaning QA {name} retained rate",
+            null_when_zero=True,
+        )
+        coverage = _require_finite_number(
             section["bounded_observation_coverage"],
-            denominator=1,
             context=f"cleaning QA {name} bounded coverage",
         )
+        if coverage > 1:
+            raise ValueError(f"cleaning QA {name} bounded coverage exceeds one")
+        value_hours = _require_finite_number(
+            section["bounded_value_hours"],
+            context=f"cleaning QA {name} bounded value hours",
+        )
+        main_series[name] = (coverage, value_hours)
 
     expected_holds = {
         "current": policy.hold_cap_for("chargingCurrent"),
@@ -785,10 +1109,104 @@ def validate_seasonal_cleaning_documents(
         "acn-jpl-seasonal-cleaning-sensitivity/v1"
     ):
         raise ValueError("cleaning sensitivity schema is invalid")
-    if cleaning_sensitivity.get("main_hold_seconds") != expected_holds:
+    declared_holds = cleaning_sensitivity["main_hold_seconds"]
+    for name in ("current", "pilot"):
+        _require_nonnegative_int(
+            declared_holds[name],
+            context=f"cleaning sensitivity {name} main hold",
+            positive=True,
+        )
+    if declared_holds != expected_holds:
         raise ValueError("cleaning sensitivity main holds are inconsistent")
-    if cleaning_sensitivity.get("hold_thresholds_seconds") != expected_thresholds:
+    declared_thresholds = cleaning_sensitivity["hold_thresholds_seconds"]
+    for name in ("current", "pilot"):
+        if not isinstance(declared_thresholds[name], list):
+            raise TypeError(f"cleaning sensitivity {name} thresholds must be a list")
+        for threshold in declared_thresholds[name]:
+            _require_nonnegative_int(
+                threshold,
+                context=f"cleaning sensitivity {name} threshold",
+                positive=True,
+            )
+    if declared_thresholds != expected_thresholds:
         raise ValueError("cleaning sensitivity hold thresholds are inconsistent")
+    threshold_integrals: dict[str, dict[int, tuple[int, int, float | None, float]]] = {
+        "current": {},
+        "pilot": {},
+    }
+    for name in ("current", "pilot"):
+        previous_observed = -1
+        expected_eligible: int | None = None
+        for threshold in expected_thresholds[name]:
+            report = cleaning_sensitivity["hold_thresholds"][name][str(threshold)]
+            integral = _require_integral_report(
+                report,
+                context=f"cleaning sensitivity {name} hold {threshold}",
+            )
+            observed, eligible, _, _ = integral
+            if observed < previous_observed:
+                raise ValueError(
+                    f"cleaning sensitivity {name} observation must increase with hold"
+                )
+            if expected_eligible is not None and eligible != expected_eligible:
+                raise ValueError(
+                    f"cleaning sensitivity {name} eligible seconds are inconsistent"
+                )
+            previous_observed = observed
+            expected_eligible = eligible
+            threshold_integrals[name][threshold] = integral
+
+        main_integral = threshold_integrals[name][expected_holds[name]]
+        main_coverage = main_integral[2]
+        if main_coverage is None or not _numbers_match(
+            main_coverage,
+            main_series[name][0],
+        ) or not _numbers_match(main_integral[3], main_series[name][1]):
+            raise ValueError(
+                f"cleaning sensitivity {name} main result differs from cleaning QA"
+            )
+
+        for comparison_name in (
+            "last_write_wins",
+            "boundary_plus_minus_60_seconds",
+        ):
+            report = cleaning_sensitivity[comparison_name][name]
+            _, eligible, _, value_hours = _require_integral_report(
+                report,
+                context=f"cleaning sensitivity {comparison_name} {name}",
+            )
+            main_hours = main_integral[3]
+            relative_change = report["relative_value_hours_change"]
+            if main_hours == 0:
+                if relative_change is not None:
+                    raise ValueError(
+                        f"cleaning sensitivity {comparison_name} {name} relative change "
+                        "must be null for zero main value hours"
+                    )
+            else:
+                relative_number = _require_finite_number(
+                    relative_change,
+                    context=(
+                        f"cleaning sensitivity {comparison_name} {name} relative change"
+                    ),
+                    nonnegative=False,
+                )
+                expected_change = (value_hours - main_hours) / main_hours
+                if not _numbers_match(relative_number, expected_change):
+                    raise ValueError(
+                        f"cleaning sensitivity {comparison_name} {name} relative change "
+                        "is inconsistent"
+                    )
+            expected_comparison_eligible = main_integral[1]
+            if comparison_name == "boundary_plus_minus_60_seconds":
+                expected_comparison_eligible += (
+                    2 * policy.boundary_sensitivity_s * sessions_processed
+                )
+            if eligible != expected_comparison_eligible:
+                raise ValueError(
+                    f"cleaning sensitivity {comparison_name} {name} eligible seconds "
+                    "are inconsistent"
+                )
 
     _require_closed_shape(
         boundary_audit,
@@ -815,12 +1233,77 @@ def validate_seasonal_cleaning_documents(
         },
         context="boundary current audit",
     )
+    positive_points = _require_nonnegative_int(
+        boundary_audit["positive_points_excluded"],
+        context="boundary audit positive points excluded",
+    )
+    affected_sessions = _require_nonnegative_int(
+        boundary_audit["sessions_affected"],
+        context="boundary audit affected sessions",
+    )
+    before_connection = _require_nonnegative_int(
+        boundary_audit["before_connection_count"],
+        context="boundary audit before-connection count",
+    )
+    at_or_after_disconnect = _require_nonnegative_int(
+        boundary_audit["at_or_after_disconnect_count"],
+        context="boundary audit at-or-after-disconnect count",
+    )
+    distance = boundary_audit["signed_distance_seconds"]
+    distance_count = _require_nonnegative_int(
+        distance["count"],
+        context="boundary audit distance count",
+    )
+    distance_statistics: list[float] = []
+    for field in ("minimum", "p05", "median", "p95", "maximum"):
+        value = distance[field]
+        if distance_count == 0:
+            if value is not None:
+                raise ValueError(
+                    f"boundary audit distance {field} must be null for zero count"
+                )
+        else:
+            distance_statistics.append(
+                _require_finite_number(
+                    value,
+                    context=f"boundary audit distance {field}",
+                    nonnegative=False,
+                )
+            )
+    if distance_statistics != sorted(distance_statistics):
+        raise ValueError("boundary audit distance statistics are not ordered")
+    excluded_ampere_seconds = _require_finite_number(
+        boundary_audit["excluded_positive_ampere_seconds"],
+        context="boundary audit excluded positive ampere seconds",
+    )
+    raw_ampere_seconds = _require_finite_number(
+        boundary_audit["raw_total_ampere_seconds"],
+        context="boundary audit raw total ampere seconds",
+    )
+    share = _require_ratio(
+        boundary_audit["current_integral_share"],
+        numerator=excluded_ampere_seconds,
+        denominator=raw_ampere_seconds,
+        context="boundary audit current integral share",
+        null_when_zero=False,
+    )
+    sensitivity_window = _require_nonnegative_int(
+        boundary_audit["sensitivity_window_seconds"],
+        context="boundary audit sensitivity window",
+        positive=True,
+    )
     if (
-        boundary_audit.get("schema_version") != "acn-jpl-boundary-current-audit/v1"
-        or boundary_audit.get("status") != "PASS"
-        or boundary_audit.get("main_result_excludes_boundary_points") is not True
-        or boundary_audit.get("sensitivity_window_seconds")
-        != policy.boundary_sensitivity_s
+        boundary_audit["schema_version"] != "acn-jpl-boundary-current-audit/v1"
+        or boundary_audit["status"] != "PASS"
+        or boundary_audit["main_result_excludes_boundary_points"] is not True
+        or sensitivity_window != policy.boundary_sensitivity_s
+        or positive_points != distance_count
+        or before_connection + at_or_after_disconnect != distance_count
+        or affected_sessions > sessions_processed
+        or affected_sessions > distance_count
+        or excluded_ampere_seconds > raw_ampere_seconds
+        or share is None
+        or share > 1
     ):
         raise ValueError("boundary current audit policy is inconsistent")
 

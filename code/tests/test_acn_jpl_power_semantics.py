@@ -235,6 +235,10 @@ def test_seasonal_power_audit_is_closed_and_keeps_ampere_pipeline_available() ->
     assert seasonal["continue_current_pipeline"] is True
     assert seasonal["decision"]["reconstructed_kw_column_authorized"] is False
     assert seasonal["online_feature_policy"]["e208_allowed"] is False
+    assert "q1" not in legacy["cohorts"]["primary"]["effective_voltage_v"]
+    assert "q3" not in legacy["cohorts"]["primary"]["effective_voltage_v"]
+    assert seasonal["cohorts"]["primary"]["effective_voltage_v"]["q1"] == 208.0
+    assert seasonal["cohorts"]["primary"]["effective_voltage_v"]["q3"] == 208.0
     assert set(seasonal) == {
         "schema_version",
         "status",

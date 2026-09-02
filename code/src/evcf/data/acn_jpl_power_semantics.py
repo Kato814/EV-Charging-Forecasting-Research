@@ -585,7 +585,8 @@ def audit_seasonal_power_semantics(
 ) -> dict[str, Any]:
     """Return the legacy evidence with the conservative seasonal decision."""
 
-    legacy = audit_power_semantics(sessions)
+    ordered_sessions = list(sessions)
+    legacy = audit_power_semantics(ordered_sessions)
     mapping = legacy["mapping"]
     primary = legacy["cohorts"]["primary"]
     decision = seasonal_power_decision(_power_decision_inputs(mapping, primary))
@@ -593,6 +594,22 @@ def audit_seasonal_power_semantics(
         raise AssertionError("seasonal adapter diverged from the legacy classifier")
 
     report = dict(legacy)
+    retained_voltages = [
+        row.effective_voltage_v
+        for session in ordered_sessions
+        if _coverage_qualified(session, _PRIMARY_COHORT)
+        and (row := _audit_row(session)) is not None
+    ]
+    seasonal_primary = dict(primary)
+    seasonal_primary["effective_voltage_v"] = {
+        **primary["effective_voltage_v"],
+        "q1": _quantile(retained_voltages, 0.25),
+        "q3": _quantile(retained_voltages, 0.75),
+    }
+    report["cohorts"] = {
+        **legacy["cohorts"],
+        "primary": seasonal_primary,
+    }
     report.update(
         {
             "schema_version": "acn-jpl-seasonal-power-semantics-audit/v1",

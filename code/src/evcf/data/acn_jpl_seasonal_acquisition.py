@@ -42,6 +42,7 @@ from .acn_jpl_month_config import (
     JPLMonthConfig,
     is_canonical_jpl_month_config,
     jpl_month_config,
+    verify_complete_metadata_scope,
 )
 from .acn_jpl_official_reference import (
     OfficialLocalMonthTotalResult,
@@ -264,7 +265,7 @@ def _seal_month_result(
     if not (
         type(scope) is CompleteMetadataScope
         and is_canonical_jpl_month_config(config)
-        and CompleteMetadataScope.is_verified_for(scope, config)
+        and verify_complete_metadata_scope(scope, config)
     ):
         return result
     result_id = id(result)
@@ -303,7 +304,7 @@ def verify_month_acquisition_result(
         and entry[2] == id(scope)
         and is_canonical_jpl_month_config(config)
         and type(scope) is CompleteMetadataScope
-        and CompleteMetadataScope.is_verified_for(scope, config)
+        and verify_complete_metadata_scope(scope, config)
         and isinstance(inventory, InventorySnapshot)
         and result.raw_file_count == inventory.file_count
         and result.raw_inventory_sha256 == inventory.digest
@@ -1016,7 +1017,7 @@ def verify_existing_jpl_month(
             and is_canonical_jpl_month_config(config)
             and config.month in SEASONAL_MONTHS
             and type(scope) is CompleteMetadataScope
-            and CompleteMetadataScope.is_verified_for(scope, config)
+            and verify_complete_metadata_scope(scope, config)
         ):
             raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
         root = Path(raw_root)
@@ -1188,7 +1189,7 @@ def _acquire_jpl_month_unbounded(
     if not (
         isinstance(scope, CompleteMetadataScope)
         and is_canonical_jpl_month_config(config)
-        and CompleteMetadataScope.is_verified_for(scope, config)
+        and verify_complete_metadata_scope(scope, config)
     ):
         return _result(
             config,
@@ -1230,7 +1231,7 @@ def _acquire_jpl_month_unbounded(
             official_total=official.total,
             reason_codes=("OFFICIAL_REFERENCE_LOCATION_INVALID",),
         )
-    if not CompleteMetadataScope.is_verified_for(scope, config):
+    if not verify_complete_metadata_scope(scope, config):
         return _result(
             config,
             scope,

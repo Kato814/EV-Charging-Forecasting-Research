@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import copy
+import csv
 import hashlib
+import io
 import json
 from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
@@ -307,7 +310,13 @@ def _month_documents(month: str, expected_bins: int, scheduled: int) -> dict[str
                 "retained_session_count": 0,
                 "audit_coverage": None,
                 "retained_rate": None,
-                "effective_voltage_v": {"count": 0, "median": None, "iqr": None},
+                "effective_voltage_v": {
+                    "count": 0,
+                    "q1": None,
+                    "median": None,
+                    "q3": None,
+                    "iqr": None,
+                },
                 "e208_error": {
                     "count": 0,
                     "median_absolute_percentage_error": None,
@@ -568,6 +577,275 @@ def test_release_is_exactly_37_files_deterministic_and_strictly_verified(
     assert not verify_seasonal_release(tmp_path)
 
 
+def _recursive_file_bytes(root: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in root.rglob("*")
+        if path.is_file()
+    }
+
+
+def test_full_publisher_restores_existing_release_when_install_and_cleanup_fail_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    results = tuple(_month_result(month) for month in SEASONAL_MONTHS)
+    destination = tmp_path / "release"
+    publish_month_release(results[0], destination)
+    before = _recursive_file_bytes(destination)
+    real_replace = prep_module.os.replace
+    real_remove = prep_module._safe_remove_generated
+    cleanup_failed = False
+
+    def fail_install(source, target):  # type: ignore[no-untyped-def]
+        if Path(source).name.startswith(".release.staging-") and Path(target) == destination:
+            raise OSError("injected install failure")
+        return real_replace(source, target)
+
+    def fail_first_staging_cleanup(path, *, parent):  # type: ignore[no-untyped-def]
+        nonlocal cleanup_failed
+        if Path(path).name.startswith(".release.staging-") and not cleanup_failed:
+            cleanup_failed = True
+            raise OSError("injected cleanup failure")
+        return real_remove(path, parent=parent)
+
+    monkeypatch.setattr(prep_module.os, "replace", fail_install)
+    monkeypatch.setattr(prep_module, "_safe_remove_generated", fail_first_staging_cleanup)
+
+    with pytest.raises(OSError, match="injected install failure"):
+        publish_seasonal_release(results, destination)
+
+    assert destination.is_dir()
+    assert _recursive_file_bytes(destination) == before
+    assert not tuple(tmp_path.glob(".release.staging-*"))
+    assert not tuple(tmp_path.glob(".release.backup-*"))
+
+
+def test_full_publisher_rolls_back_when_backup_cleanup_fails_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    results = tuple(_month_result(month) for month in SEASONAL_MONTHS)
+    destination = tmp_path / "release"
+    publish_month_release(results[0], destination)
+    before = _recursive_file_bytes(destination)
+    real_remove = prep_module._safe_remove_generated
+    cleanup_failed = False
+
+    def fail_first_backup_cleanup(path, *, parent):  # type: ignore[no-untyped-def]
+        nonlocal cleanup_failed
+        if (
+            Path(path).name.startswith(".release.backup-")
+            and Path(path).exists()
+            and not cleanup_failed
+        ):
+            cleanup_failed = True
+            raise OSError("injected backup cleanup failure")
+        return real_remove(path, parent=parent)
+
+    monkeypatch.setattr(prep_module, "_safe_remove_generated", fail_first_backup_cleanup)
+
+    with pytest.raises(OSError, match="injected backup cleanup failure"):
+        publish_seasonal_release(results, destination)
+
+    assert destination.is_dir()
+    assert _recursive_file_bytes(destination) == before
+    assert not tuple(tmp_path.glob(".release.staging-*"))
+    assert not tuple(tmp_path.glob(".release.backup-*"))
+
+
+def test_root_summary_and_report_cover_required_monthly_evidence_and_are_closed(
+    tmp_path: Path,
+) -> None:
+    results = tuple(_month_result(month) for month in SEASONAL_MONTHS)
+    publish_seasonal_release(results, tmp_path)
+    summary = (tmp_path / "seasonal_prep_summary.csv").read_text(encoding="utf-8")
+    reader = csv.DictReader(io.StringIO(summary))
+    rows = list(reader)
+    required_columns = {
+        "month",
+        "status",
+        "local_session_count",
+        "utc_calendar_session_count",
+        "left_boundary_count",
+        "right_boundary_count",
+        "carry_in_count",
+        "official_probe_request_count",
+        "official_probe_timeseries",
+        "daily_manifests_present",
+        "daily_sha256_verified",
+        "daily_json_valid",
+        "carry_completed",
+        "valid_daily_chunks",
+        "expected_daily_chunks",
+        "daily_unique_pair_count",
+        "combined_unique_pair_count",
+        "matched_metadata_pairs",
+        "missing_metadata_pairs",
+        "orphan_timeseries_pairs",
+        "sessions_processed",
+        "cleaned_session_count",
+        "invalid_skipped_session_count",
+        "charging_current_invalid_rate",
+        "pilot_signal_invalid_rate",
+        "current_raw_samples",
+        "current_usable_samples",
+        "current_retained_samples",
+        "pilot_raw_samples",
+        "pilot_usable_samples",
+        "pilot_retained_samples",
+        "current_retained_sample_rate",
+        "pilot_retained_sample_rate",
+        "current_exact_duplicate_extras",
+        "pilot_exact_duplicate_extras",
+        "current_conflicting_timestamps",
+        "pilot_conflicting_timestamps",
+        "boundary_positive_points_excluded",
+        "boundary_excluded_positive_ampere_seconds",
+        "boundary_raw_total_ampere_seconds",
+        "boundary_current_integral_share",
+        "current_boundary_60_relative_change",
+        "pilot_boundary_60_relative_change",
+        "current_mode_seconds",
+        "pilot_mode_seconds",
+        "retrospective_done_present_count",
+        "retrospective_done_unparseable_count",
+        "power_mapping_rate",
+        "power_mapping_raw_record_count",
+        "power_mapping_mapped_record_count",
+        "power_minimum_kwh_delivered",
+        "power_minimum_current_coverage",
+        "power_eligible_session_count",
+        "power_retained_session_count",
+        "power_statistics_finite",
+        "e208_authorized",
+        "pinned_power_commit",
+        "pinned_e208_formula",
+        "effective_voltage_q1_v",
+        "effective_voltage_median_v",
+        "effective_voltage_q3_v",
+        "effective_voltage_iqr_v",
+        "median_absolute_percentage_error",
+        "p90_absolute_percentage_error",
+        "aggregate_relative_error",
+        "station_bins",
+        "valid_bin_80_count",
+        "valid_bin_90_count",
+        "valid_bin_95_count",
+        "valid_bin_90_rate",
+        "missing_bin_90_rate",
+        "longest_missing_run",
+        "peak_current_proxy_a",
+        "max_absolute_ramp_a",
+        "dst_fold_extra_bins",
+        "grid_policy",
+        "time_weighted_integral_status",
+        "scheduled_issue_times",
+        "formal_issue_times",
+        "valid_labels_15_minutes",
+        "valid_labels_240_minutes",
+        "m1_sample_count",
+        "m2_sample_count",
+        "m3_sample_count",
+        "raw_dimension_m1",
+        "raw_dimension_m2",
+        "raw_dimension_m3",
+        "encoded_dimension_m1",
+        "encoded_dimension_m2",
+        "encoded_dimension_m3",
+        "future_outcome_field_count",
+        "private_identifier_field_count",
+        "feature_whitelist_status",
+        "snapshot_sha256",
+        "metadata_source_inventory_sha256",
+        "metadata_record_inventory_sha256",
+        "official_reference_sha256",
+        "raw_inventory_sha256",
+        "raw_inventory_before_sha256",
+        "raw_inventory_after_sha256",
+        "processed_snapshot_sha256",
+    }
+    assert set(reader.fieldnames or ()) >= required_columns
+    assert [row["month"] for row in rows] == list(SEASONAL_MONTHS)
+    assert rows[0]["official_reference_sha256"] == "7" * 64
+    assert rows[0]["raw_inventory_sha256"] == "4" * 64
+    assert rows[0]["snapshot_sha256"] == "6" * 64
+
+    report = (tmp_path / "seasonal_prep_report.md").read_text(encoding="utf-8")
+    headings = [line for line in report.splitlines() if line.startswith("## ")]
+    assert headings == [
+        "## Acquisition",
+        "## Cleaning",
+        "## Power semantics",
+        "## 15-minute",
+        "## M1-M3",
+        "## Security",
+        "## Decision",
+    ]
+    assert report.count("M4 generated: NO") == 1
+    for result in results:
+        assert result.raw_inventory_sha256 in report
+        assert result.processed_snapshot_sha256 in report
+
+    tampered = summary.replace("2019-02", "2019-05", 1).encode("utf-8")
+    (tmp_path / "seasonal_prep_summary.csv").write_bytes(tampered)
+    checksums = (tmp_path / "SHA256SUMS").read_text(encoding="ascii")
+    old_digest = hashlib.sha256(summary.encode("utf-8")).hexdigest()
+    new_digest = hashlib.sha256(tampered).hexdigest()
+    (tmp_path / "SHA256SUMS").write_text(
+        checksums.replace(old_digest, new_digest, 1),
+        encoding="ascii",
+        newline="",
+    )
+    assert not verify_seasonal_release(tmp_path)
+
+    (tmp_path / "seasonal_prep_summary.csv").write_text(
+        summary,
+        encoding="utf-8",
+        newline="",
+    )
+    report_bytes = report.encode("utf-8")
+    tampered_report = report.replace("M4 generated: NO", "M4 generated: YES").encode("utf-8")
+    (tmp_path / "seasonal_prep_report.md").write_bytes(tampered_report)
+    (tmp_path / "SHA256SUMS").write_text(
+        checksums.replace(
+            hashlib.sha256(report_bytes).hexdigest(),
+            hashlib.sha256(tampered_report).hexdigest(),
+            1,
+        ),
+        encoding="ascii",
+        newline="",
+    )
+    assert not verify_seasonal_release(tmp_path)
+
+
+def test_implementation_binding_covers_dependencies_and_detects_each_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    required = {
+        "code/src/evcf/data/acn_api.py",
+        "code/src/evcf/data/acn_audit.py",
+        "code/src/evcf/data/acn_jpl_gate0.py",
+        "code/src/evcf/data/acn_jpl_preparation.py",
+        "code/src/evcf/data/acn_jpl_official_reference.py",
+        "code/src/evcf/data/acn_jpl_full_month_ts.py",
+    }
+    assert set(prep_module.IMPLEMENTATION_PATHS) >= required
+
+    for drifted in prep_module.IMPLEMENTATION_PATHS:
+        def fake_run(args, _drifted=drifted, **_kwargs):  # type: ignore[no-untyped-def]
+            relative = args[2].split(":", 1)[1]
+            content = (repo_root / relative).read_bytes()
+            if relative == _drifted:
+                content += b"\n# injected drift\n"
+            return SimpleNamespace(returncode=0, stdout=content)
+
+        monkeypatch.setattr(prep_module.subprocess, "run", fake_run)
+        with pytest.raises(SeasonalPreparationError, match="IMPLEMENTATION_DRIFT"):
+            prep_module.verify_implementation_commit("a" * 40, repo_root=repo_root)
+
+
 def test_strict_loader_rejects_duplicate_keys_nan_and_extra_files(tmp_path: Path) -> None:
     results = tuple(_month_result(month) for month in SEASONAL_MONTHS)
     publish_seasonal_release(results, tmp_path)
@@ -611,6 +889,15 @@ def test_existing_raw_is_reconstructed_and_current_process_sealed(
         )
         == hashlib.sha256(reference.read_bytes()).hexdigest()
     )
+    with pytest.raises(
+        ExistingMonthVerificationError,
+        match="EXISTING_MONTH_VERIFICATION_FAILED",
+    ):
+        verify_existing_jpl_month(
+            config=config,
+            scope=copy.copy(scope),
+            raw_root=raw_root,
+        )
 
     reference.write_text('{"schema_version":"changed"}', encoding="utf-8")
     with pytest.raises(ExistingMonthVerificationError):

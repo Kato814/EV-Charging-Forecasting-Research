@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import copy
 import gzip
 import hashlib
 import json
+import pickle
 from dataclasses import FrozenInstanceError, replace
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
@@ -380,6 +382,58 @@ def test_verified_scope_is_bound_to_the_exact_summarized_scope(
     assert isinstance(retained_record, dict)
     retained_record["sessionID"] = "tampered-after-verification"
     assert verified.source_inventory_verified is False
+
+
+def test_verified_scope_rejects_copy_deepcopy_pickle_and_manual_instances(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_digest = _write_test_complete_inventory(tmp_path)
+    monkeypatch.setattr(month_config_module, "EXPECTED_COMPLETE_METADATA_RECORD_COUNT", 42)
+    monkeypatch.setattr(
+        month_config_module,
+        "EXPECTED_COMPLETE_METADATA_INVENTORY_SHA256",
+        source_digest,
+    )
+    verified = load_verified_complete_metadata(tmp_path, MAY_2019)
+    verifier = getattr(month_config_module, "verify_complete_metadata_scope", None)
+    evidence_verifier = getattr(
+        month_config_module,
+        "verify_complete_metadata_source_evidence",
+        None,
+    )
+
+    assert callable(verifier)
+    assert callable(evidence_verifier)
+    assert not hasattr(verified, "__dict__")
+    assert verifier(verified, MAY_2019) is True
+    assert evidence_verifier(verified.source_evidence) is True
+    evidence = verified.source_evidence
+    assert evidence is not None
+    manual_evidence = CompleteMetadataSourceEvidence(
+        file_count=evidence.file_count,
+        valid_manifest_count=evidence.valid_manifest_count,
+        record_count=evidence.record_count,
+        source_inventory_sha256=evidence.source_inventory_sha256,
+    )
+    object.__setattr__(manual_evidence, "_verification_seal", evidence._verification_seal)
+    for copied_evidence in (
+        copy.copy(evidence),
+        copy.deepcopy(evidence),
+        pickle.loads(pickle.dumps(evidence)),
+        manual_evidence,
+    ):
+        assert evidence_verifier(copied_evidence) is False
+    for copied in (
+        copy.copy(verified),
+        copy.deepcopy(verified),
+        pickle.loads(pickle.dumps(verified)),
+        replace(summarize_complete_metadata([], MAY_2019), source_evidence=verified.source_evidence),
+    ):
+        assert copied.source_inventory_verified is False
+        assert verifier(copied, MAY_2019) is False
+    with pytest.raises((AttributeError, TypeError)):
+        object.__setattr__(verified, "is_verified_for", lambda _config: True)
 
 
 def test_production_loader_rejects_replaced_month_config_before_source_scan(

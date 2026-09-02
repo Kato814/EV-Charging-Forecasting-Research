@@ -51,6 +51,7 @@ from .acn_jpl_month_config import (
     CompleteMetadataScope,
     JPLMonthConfig,
     is_canonical_jpl_month_config,
+    verify_complete_metadata_scope,
 )
 from .acn_jpl_official_reference import load_verified_official_local_month_total
 from .acn_jpl_preparation import (
@@ -2076,7 +2077,7 @@ def generate_month_timeseries_qa(
 
     if not is_canonical_jpl_month_config(config) or config.month not in SEASONAL_MONTHS:
         raise ValueError("config must be an approved seasonal JPL month")
-    if not isinstance(scope, CompleteMetadataScope) or not CompleteMetadataScope.is_verified_for(
+    if not isinstance(scope, CompleteMetadataScope) or not verify_complete_metadata_scope(
         scope, config
     ):
         return _generic_scope_failure(config)

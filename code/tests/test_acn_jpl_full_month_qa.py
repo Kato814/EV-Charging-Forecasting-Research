@@ -1559,7 +1559,8 @@ def test_seasonal_qa_rejects_scope_mutation_even_with_instance_verifier_injectio
     else:
         assert scope.source_evidence is not None
         object.__setattr__(scope.source_evidence, "source_inventory_sha256", "0" * 64)
-    object.__setattr__(scope, "is_verified_for", lambda _config: True)
+    with pytest.raises(AttributeError):
+        object.__setattr__(scope, "is_verified_for", lambda _config: True)
 
     result = generate_month_timeseries_qa(
         config=config,

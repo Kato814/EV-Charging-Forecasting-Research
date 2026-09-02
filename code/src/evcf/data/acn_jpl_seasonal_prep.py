@@ -7,7 +7,6 @@ paths never cross the :class:`MonthPreparationResult` boundary.
 
 from __future__ import annotations
 
-import csv
 import gzip
 import hashlib
 import io
@@ -29,6 +28,15 @@ from .acn_jpl_month_config import (
     JPLMonthConfig,
     is_canonical_jpl_month_config,
     jpl_month_config,
+    verify_complete_metadata_scope,
+)
+from .acn_jpl_seasonal_reporting import (
+    SeasonalReportingError,
+    build_month_summary_row,
+    render_report_markdown,
+    render_summary_csv,
+    validate_report_markdown,
+    validate_summary_csv,
 )
 
 MONTH_PAYLOAD_NAMES = (
@@ -78,14 +86,21 @@ _SNAPSHOT_MISSING_RATE_NAMES = (
 DEFAULT_SEASONAL_PROTOCOL_PATH = Path("code/configs/acn_jpl_seasonal_prep_2019.yaml")
 IMPLEMENTATION_PATHS = (
     "code/configs/acn_jpl_seasonal_prep_2019.yaml",
+    "code/src/evcf/data/acn_api.py",
+    "code/src/evcf/data/acn_audit.py",
+    "code/src/evcf/data/acn_jpl_gate0.py",
     "code/src/evcf/data/acn_jpl_month_config.py",
     "code/src/evcf/data/acn_jpl_seasonal_acquisition.py",
+    "code/src/evcf/data/acn_jpl_full_month_ts.py",
     "code/src/evcf/data/acn_jpl_full_month_qa.py",
+    "code/src/evcf/data/acn_jpl_official_reference.py",
+    "code/src/evcf/data/acn_jpl_preparation.py",
     "code/src/evcf/data/acn_jpl_cleaning.py",
     "code/src/evcf/data/acn_jpl_gate1_prep.py",
     "code/src/evcf/data/acn_jpl_power_semantics.py",
     "code/src/evcf/data/acn_jpl_15min.py",
     "code/src/evcf/data/acn_jpl_issue_snapshots.py",
+    "code/src/evcf/data/acn_jpl_seasonal_reporting.py",
     "code/src/evcf/data/acn_jpl_seasonal_prep.py",
     "code/src/evcf/forecasting/acn_jpl_gate1_data.py",
     "code/src/evcf/forecasting/acn_jpl_gate1_features.py",
@@ -1178,7 +1193,11 @@ def _validate_power(config: JPLMonthConfig, document: Mapping[str, Any]) -> str:
         ("minimum_kwh_delivered", "minimum_current_coverage"),
         "POWER_THRESHOLDS",
     )
-    voltage = _exact(primary["effective_voltage_v"], ("count", "median", "iqr"), "VOLTAGE")
+    voltage = _exact(
+        primary["effective_voltage_v"],
+        ("count", "q1", "median", "q3", "iqr"),
+        "VOLTAGE",
+    )
     error = _exact(
         primary["e208_error"],
         ("count", "median_absolute_percentage_error", "p90_absolute_percentage_error"),
@@ -1227,7 +1246,9 @@ def _validate_power(config: JPLMonthConfig, document: Mapping[str, Any]) -> str:
             raise SeasonalPreparationError("POWER_SEMANTICS_GATE_FAILED")
     if _integer(aggregate["session_count"], "POWER_ENERGY_COUNT") != retained_count:
         raise SeasonalPreparationError("POWER_SEMANTICS_GATE_FAILED")
+    q1_voltage = _optional_number(voltage["q1"], "Q1_VOLTAGE")
     median_voltage = _optional_number(voltage["median"], "MEDIAN_VOLTAGE")
+    q3_voltage = _optional_number(voltage["q3"], "Q3_VOLTAGE")
     voltage_iqr = _optional_number(voltage["iqr"], "VOLTAGE_IQR")
     median_ape = _optional_number(error["median_absolute_percentage_error"], "MEDIAN_APE")
     p90_ape = _optional_number(error["p90_absolute_percentage_error"], "P90_APE")
@@ -1262,6 +1283,24 @@ def _validate_power(config: JPLMonthConfig, document: Mapping[str, Any]) -> str:
         or (
             relative_error is not None
             and not _same_number(absolute_relative_error, abs(relative_error))
+        )
+        or (
+            retained_count == 0
+            and any(
+                item is not None
+                for item in (q1_voltage, median_voltage, q3_voltage, voltage_iqr)
+            )
+        )
+        or (
+            retained_count > 0
+            and (
+                any(
+                    item is None
+                    for item in (q1_voltage, median_voltage, q3_voltage, voltage_iqr)
+                )
+                or not q1_voltage <= median_voltage <= q3_voltage  # type: ignore[operator]
+                or not _same_number(voltage_iqr, q3_voltage - q1_voltage)  # type: ignore[operator]
+            )
         )
     ):
         raise SeasonalPreparationError("POWER_SEMANTICS_GATE_FAILED")
@@ -1981,42 +2020,40 @@ def _seasonal_result(
     )
 
 
+def _root_summary_rows(result: SeasonalPreparationResult) -> tuple[dict[str, object], ...]:
+    rows: list[dict[str, object]] = []
+    try:
+        for item in result.months:
+            documents = {
+                artifact.name: _decode_json_bytes(artifact.content)
+                for artifact in item.artifacts
+            }
+            rows.append(build_month_summary_row(documents))
+    except SeasonalReportingError as exc:
+        raise SeasonalPreparationError("SEASONAL_REPORT_INVALID") from exc
+    return tuple(rows)
+
+
 def _root_payloads(result: SeasonalPreparationResult) -> dict[str, bytes]:
-    stream = io.StringIO(newline="")
-    writer = csv.writer(stream, lineterminator="\n")
-    writer.writerow(
-        (
-            "month",
-            "status",
-            "local_session_count",
-            "carry_in_count",
-            "sessions_processed",
-            "cleaned_session_count",
-            "invalid_skipped_session_count",
-            "station_bins",
-            "valid_bin_90_count",
-            "scheduled_issue_times",
-            "formal_issue_times",
-            "power_semantics_status",
+    rows = _root_summary_rows(result)
+    try:
+        summary = render_summary_csv(rows)
+        report = render_report_markdown(
+            rows,
+            status=result.status,
+            config_sha256=result.config_sha256,
+            code_commit=result.code_commit,
         )
-    )
-    for item in result.months:
-        writer.writerow(
-            (
-                item.month,
-                item.status,
-                item.local_session_count,
-                item.carry_in_count,
-                item.sessions_processed,
-                item.cleaned_session_count,
-                item.invalid_skipped_session_count,
-                item.station_bins,
-                item.valid_bin_90_count,
-                item.scheduled_issue_times,
-                item.formal_issue_times,
-                item.power_semantics_status,
-            )
+        validate_summary_csv(summary, rows)
+        validate_report_markdown(
+            report,
+            rows,
+            status=result.status,
+            config_sha256=result.config_sha256,
+            code_commit=result.code_commit,
         )
+    except SeasonalReportingError as exc:
+        raise SeasonalPreparationError("SEASONAL_REPORT_INVALID") from exc
     snapshots = []
     for item in result.months:
         month_release = _month_release_bytes(item)
@@ -2040,29 +2077,21 @@ def _root_payloads(result: SeasonalPreparationResult) -> dict[str, bytes]:
         "public_file_count": 37,
         "aggregate_only": True,
     }
-    report = "\n".join(
-        (
-            "# JPL seasonal preparation report",
-            "",
-            f"Status: {result.status}",
-            "Months: 2019-02, 2019-08, 2019-11",
-            "Raw inventories unchanged: YES",
-            "Public evidence: aggregate only",
-            "Training executed: NO",
-            "Network access: NO",
-            "",
-        )
-    ).encode("utf-8")
     payloads = {
-        "seasonal_prep_summary.csv": stream.getvalue().encode("utf-8"),
+        "seasonal_prep_summary.csv": summary,
         "seasonal_snapshot_manifest.json": _json_bytes(manifest),
         "seasonal_prep_report.md": report,
     }
-    for content in payloads.values():
+    for name, content in payloads.items():
         text = content.decode("utf-8")
+        privacy_text = text
+        if name == "seasonal_prep_report.md":
+            if text.count("M4 generated: NO") != 1:
+                raise SeasonalPreparationError("PUBLIC_PRIVACY_INVALID")
+            privacy_text = text.replace("M4 generated: NO", "")
         if (
             _ABSOLUTE_PATH.search(text)
-            or "m4" in text.casefold()
+            or "m4" in privacy_text.casefold()
             or "prediction" in text.casefold()
         ):
             raise SeasonalPreparationError("PUBLIC_PRIVACY_INVALID")
@@ -2164,6 +2193,18 @@ def _validate_root_documents(
         }
         if dict(declared) != expected:
             raise SeasonalPreparationError("SEASONAL_MANIFEST_INVALID")
+    rows = _root_summary_rows(result)
+    try:
+        validate_summary_csv(contents["seasonal_prep_summary.csv"], rows)
+        validate_report_markdown(
+            contents["seasonal_prep_report.md"],
+            rows,
+            status=result.status,
+            config_sha256=result.config_sha256,
+            code_commit=result.code_commit,
+        )
+    except SeasonalReportingError as exc:
+        raise SeasonalPreparationError("SEASONAL_REPORT_INVALID") from exc
     expected_roots = _root_payloads(result)
     if any(contents[name] != expected_roots[name] for name in ROOT_PAYLOAD_NAMES):
         raise SeasonalPreparationError("SEASONAL_MANIFEST_INVALID")
@@ -2248,6 +2289,20 @@ def _safe_remove_generated(path: Path, *, parent: Path) -> None:
         shutil.rmtree(resolved)
 
 
+def _retry_remove_generated(path: Path, *, parent: Path) -> bool:
+    """Best-effort removal used only after the prior destination is safe."""
+
+    for _attempt in range(2):
+        try:
+            _safe_remove_generated(path, parent=parent)
+        except (OSError, SeasonalPreparationError):  # restore has priority
+            if not path.exists():
+                return True
+        else:
+            return not path.exists()
+    return not path.exists()
+
+
 def _tree_bytes(root: Path) -> dict[str, bytes]:
     return {
         name: (root / PurePosixPath(name)).read_bytes()
@@ -2296,6 +2351,8 @@ def publish_seasonal_release(
         raise SeasonalPreparationError("PUBLIC_EXISTING_STATE_INVALID")
     staging = Path(tempfile.mkdtemp(prefix=f".{destination.name}.staging-", dir=destination.parent))
     backup: Path | None = None
+    old_moved = False
+    installed = False
     try:
         _write_staged_tree(staging, contents)
         if not verify_seasonal_release(staging):
@@ -2304,14 +2361,29 @@ def publish_seasonal_release(
             backup = destination.with_name(f".{destination.name}.backup-{os.getpid()}")
             _safe_remove_generated(backup, parent=destination.parent)
             os.replace(destination, backup)
+            old_moved = True
         os.replace(staging, destination)
+        installed = True
         if backup is not None:
             _safe_remove_generated(backup, parent=destination.parent)
+            # Commit point: after this succeeds, no fallible operation remains.
     except BaseException:
-        if staging.exists():
-            _safe_remove_generated(staging, parent=destination.parent)
-        if backup is not None and backup.exists() and not destination.exists():
-            os.replace(backup, destination)
+        if old_moved and installed and backup is not None and not backup.exists():
+            # Cleanup removed the sole backup before reporting an error.  The
+            # new tree is already committed, so do not report a false failure.
+            return result
+        restored = not old_moved
+        if old_moved and backup is not None and backup.exists():
+            try:
+                if installed and destination.exists():
+                    os.replace(destination, staging)
+                os.replace(backup, destination)
+                restored = True
+            except OSError:
+                restored = False
+        cleaned = _retry_remove_generated(staging, parent=destination.parent)
+        if not restored or not cleaned or (backup is not None and backup.exists()):
+            raise SeasonalPreparationError("PUBLIC_ROLLBACK_FAILED") from None
         raise
     return result
 
@@ -2906,7 +2978,9 @@ def _compact_month_documents(
             "retained_rate": power_primary.get("retained_rate"),
             "effective_voltage_v": {
                 "count": power_voltage.get("count"),
+                "q1": power_voltage.get("q1"),
                 "median": power_voltage.get("median"),
+                "q3": power_voltage.get("q3"),
                 "iqr": power_voltage.get("iqr"),
             },
             "e208_error": {
@@ -3157,7 +3231,7 @@ def _prepare_verified_month(
     raw = raw_root.resolve(strict=True)
     interim, processed = _topology(raw, (interim_root, processed_root))
     scope = load_verified_complete_metadata(metadata_root, config)
-    if type(scope) is not CompleteMetadataScope or not CompleteMetadataScope.is_verified_for(
+    if type(scope) is not CompleteMetadataScope or not verify_complete_metadata_scope(
         scope, config
     ):
         raise SeasonalPreparationError("METADATA_SCOPE_INVALID")

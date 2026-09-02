@@ -134,6 +134,8 @@ def test_november_aggregation_publishes_explicit_physical_grid_qa() -> None:
         valid = result.qa[f"valid_bins_at_{threshold}"]
         assert valid / result.qa["generated_bins"] == 1.0
         assert 1 - valid / result.qa["generated_bins"] == 0.0
+        assert result.qa[f"valid_bin_rate_at_{threshold}"] == 1.0
+        assert result.qa[f"missing_bin_rate_at_{threshold}"] == 0.0
 
 
 def test_legacy_aggregation_qa_does_not_gain_seasonal_grid_fields() -> None:

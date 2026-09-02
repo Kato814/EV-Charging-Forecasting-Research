@@ -22,8 +22,21 @@ from numbers import Integral, Real
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
+
+from evcf.data.acn_jpl_issue_snapshots import (
+    IssueSnapshotResult,
+    SnapshotPolicy,
+    verified_issue_snapshot_sha256,
+)
+from evcf.data.acn_jpl_month_config import (
+    SEASONAL_MONTHS,
+    JPLMonthConfig,
+    is_canonical_jpl_month_config,
+    jpl_month_config,
+)
 
 EXPECTED_DATA_SNAPSHOT_SHA256 = "7066ffc8ba42a98f73246acfbc62352fe55a1433a43cba80957c6034e3aeaa5d"
 EXPECTED_SOURCE_INVENTORY_SHA256 = (
@@ -39,6 +52,15 @@ EXPECTED_STATION_BIN_COUNT = 2_976
 CAUSAL_MAX_WINDOW_SECONDS = 60 * 60
 CAUSAL_HOLD_CAP_SECONDS = 12
 _SNAPSHOT_VERIFICATION_SCHEMA = "acn-jpl-gate1-verified-snapshot/v1"
+_SEASONAL_SNAPSHOT_VERIFICATION_SCHEMA = "acn-jpl-seasonal-gate1-verified-snapshot/v1"
+
+SEASONAL_ARTIFACT_ROOTS = (
+    "station_15min.jsonl.gz",
+    "m1.jsonl.gz",
+    "m2.jsonl.gz",
+    "m3.jsonl.gz",
+    "labels.jsonl.gz",
+)
 
 ARTIFACT_ROOTS: Mapping[str, str] = MappingProxyType(
     {
@@ -85,6 +107,25 @@ class _SnapshotVerification:
     target_source_sha256: str
     feature_source_sha256: str
     causal_prefix_source_sha256: str | None
+    seal_sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class _SeasonalSnapshotVerification:
+    schema_version: str
+    month: str
+    timezone_name: str
+    utc_start_utc_s: int
+    utc_end_utc_s: int
+    expected_bins: int
+    expected_issue_count: int
+    tiers: tuple[str, ...]
+    issue_snapshot_sha256: str
+    data_snapshot_sha256: str
+    artifact_sha256: tuple[tuple[str, str], ...]
+    adapter_implementation_sha256: str
+    target_source_sha256: str
+    feature_source_sha256: str
     seal_sha256: str
 
 
@@ -177,6 +218,45 @@ _M4_KEYS = {
     "max_visible_timestamp_utc_s",
     "partial_current_trajectory_ref",
     "partial_pilot_trajectory_ref",
+}
+_SEASONAL_M1_KEYS = {
+    "issue_index",
+    "issue_time_utc_s",
+    "quarter_hour_index",
+    "day_of_week",
+    "is_weekend",
+    "history_station_current_mean_a",
+    "history_observed_mask",
+}
+_SEASONAL_M2_KEYS = _SEASONAL_M1_KEYS | {
+    "connected_session_count",
+    "active_charging_session_count",
+    "station_current_a",
+    "station_current_observed_ratio",
+    "pilot_sum_a",
+    "pilot_mean_a",
+}
+_SEASONAL_LABEL_KEYS = {"issue_index", "issue_time_utc_s", "labels"}
+_SEASONAL_ISSUE_QA_KEYS = {
+    "schema_version",
+    "lookback_minutes",
+    "horizons_minutes",
+    "issue_times",
+    "formal_issue_times",
+    "incomplete_label_issue_times",
+    "samples",
+    "ragged_rows",
+    "valid_labels_by_horizon",
+    "shapes",
+    "missing_rates",
+    "leakage_audit",
+    "future_fields_found",
+    "unexpected_feature_keys",
+    "temporal_violations",
+    "feature_whitelist_enforcement",
+    "occupancy_rate",
+    "user_inputs_issue_time_truncation",
+    "m4_generated",
 }
 _STATION_COLUMNS = (
     "timestamp_utc",
@@ -412,7 +492,7 @@ class Gate1Snapshot:
     station_current_mean_a: np.ndarray
     station_valid_90: np.ndarray
     feature_index_names: tuple[str, ...] = ("issue_time_utc_s",)
-    _verification: _SnapshotVerification | None = dataclass_field(
+    _verification: _SnapshotVerification | _SeasonalSnapshotVerification | None = dataclass_field(
         default=None,
         init=False,
         repr=False,
@@ -589,6 +669,92 @@ def _snapshot_feature_source_sha256(snapshot: Gate1Snapshot) -> str:
     return digest.hexdigest()
 
 
+def _seasonal_snapshot_feature_source_sha256(snapshot: Gate1Snapshot) -> str:
+    """Hash only the M1--M3 seasonal feature sources, with no M4 material."""
+
+    digest = hashlib.sha256()
+    digest.update(b"acn-jpl-seasonal-m1-m3-feature-source/v1\0")
+    digest.update(
+        _array_content_sha256(
+            (
+                np.asarray(snapshot.m1_history),
+                np.asarray(snapshot.m1_history_mask),
+                np.asarray(snapshot.m1_calendar),
+                np.asarray(snapshot.m2_current_state),
+                np.asarray(snapshot.station_times),
+                np.asarray(snapshot.station_current_mean_a),
+                np.asarray(snapshot.station_valid_90),
+            )
+        ).encode("ascii")
+    )
+    digest.update(
+        json.dumps(
+            list(snapshot.feature_index_names),
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        ).encode("ascii")
+    )
+    for name, groups in (
+        ("m3_rows", (snapshot.m3_rows,)),
+        ("m3_by_issue_time", snapshot.m3_by_issue_time),
+    ):
+        digest.update(name.encode("ascii"))
+        digest.update(np.asarray([len(groups)], dtype=np.int64).tobytes())
+        for group in groups:
+            digest.update(np.asarray([len(group)], dtype=np.int64).tobytes())
+            for row in group:
+                payload = json.dumps(
+                    dict(row),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=True,
+                    allow_nan=False,
+                ).encode("ascii")
+                digest.update(np.asarray([len(payload)], dtype=np.int64).tobytes())
+                digest.update(payload)
+    return digest.hexdigest()
+
+
+def _canonical_json_sha256(value: Any) -> str:
+    encoded = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("ascii")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _seasonal_config_payload(config: JPLMonthConfig) -> dict[str, Any]:
+    return {
+        "month": config.month,
+        "timezone_name": config.timezone_name,
+        "utc_start_utc_s": int(config.utc_start.timestamp()),
+        "utc_end_utc_s": int(config.utc_end.timestamp()),
+        "expected_bins": config.expected_bins,
+        "expected_issue_count": config.expected_scheduled_issue_times,
+        "tiers": list(config.tiers),
+    }
+
+
+def _seasonal_data_snapshot_sha256(
+    config: JPLMonthConfig,
+    *,
+    issue_snapshot_sha256: str,
+    artifacts: tuple[tuple[str, str], ...],
+) -> str:
+    return _canonical_json_sha256(
+        {
+            "schema_version": "acn-jpl-seasonal-m1-m3-data-snapshot/v1",
+            "month_config": _seasonal_config_payload(config),
+            "issue_snapshot_sha256": issue_snapshot_sha256,
+            "artifacts": [{"artifact_name": name, "sha256": digest} for name, digest in artifacts],
+        }
+    )
+
+
 def _snapshot_verification_payload(
     *,
     data_snapshot_sha256: str,
@@ -653,12 +819,247 @@ def _issue_snapshot_verification(
     )
 
 
+def _seasonal_snapshot_verification_payload(
+    *,
+    config: JPLMonthConfig,
+    issue_snapshot_sha256: str,
+    data_snapshot_sha256: str,
+    artifact_sha256: tuple[tuple[str, str], ...],
+    adapter_implementation_sha256: str,
+    target_source_sha256: str,
+    feature_source_sha256: str,
+) -> bytes:
+    value = {
+        "schema_version": _SEASONAL_SNAPSHOT_VERIFICATION_SCHEMA,
+        "month_config": _seasonal_config_payload(config),
+        "issue_snapshot_sha256": issue_snapshot_sha256,
+        "data_snapshot_sha256": data_snapshot_sha256,
+        "artifact_sha256": [
+            {"artifact_name": name, "sha256": digest} for name, digest in artifact_sha256
+        ],
+        "adapter_implementation_sha256": adapter_implementation_sha256,
+        "target_source_sha256": target_source_sha256,
+        "feature_source_sha256": feature_source_sha256,
+    }
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("ascii")
+
+
+def _issue_seasonal_snapshot_verification(
+    snapshot: Gate1Snapshot,
+    *,
+    config: JPLMonthConfig,
+    issue_snapshot_sha256: str,
+) -> None:
+    artifacts = tuple(
+        (name, str(snapshot.artifact_sha256[name])) for name in SEASONAL_ARTIFACT_ROOTS
+    )
+    implementation = _file_sha256(Path(__file__))
+    target_source = _snapshot_target_source_sha256(snapshot)
+    feature_source = _seasonal_snapshot_feature_source_sha256(snapshot)
+    payload = _seasonal_snapshot_verification_payload(
+        config=config,
+        issue_snapshot_sha256=issue_snapshot_sha256,
+        data_snapshot_sha256=snapshot.data_snapshot_sha256,
+        artifact_sha256=artifacts,
+        adapter_implementation_sha256=implementation,
+        target_source_sha256=target_source,
+        feature_source_sha256=feature_source,
+    )
+    object.__setattr__(
+        snapshot,
+        "_verification",
+        _SeasonalSnapshotVerification(
+            schema_version=_SEASONAL_SNAPSHOT_VERIFICATION_SCHEMA,
+            month=config.month,
+            timezone_name=config.timezone_name,
+            utc_start_utc_s=int(config.utc_start.timestamp()),
+            utc_end_utc_s=int(config.utc_end.timestamp()),
+            expected_bins=config.expected_bins,
+            expected_issue_count=config.expected_scheduled_issue_times,
+            tiers=config.tiers,
+            issue_snapshot_sha256=issue_snapshot_sha256,
+            data_snapshot_sha256=snapshot.data_snapshot_sha256,
+            artifact_sha256=artifacts,
+            adapter_implementation_sha256=implementation,
+            target_source_sha256=target_source,
+            feature_source_sha256=feature_source,
+            seal_sha256=hashlib.sha256(payload).hexdigest(),
+        ),
+    )
+
+
+def _validate_seasonal_snapshot_structure(
+    snapshot: Gate1Snapshot,
+    *,
+    config: JPLMonthConfig,
+) -> None:
+    if type(snapshot) is not Gate1Snapshot:
+        raise TypeError("seasonal verification requires an exact Gate1Snapshot")
+    if type(snapshot.artifact_sha256) is not _FrozenMapping:
+        raise ValueError("seasonal artifact hashes must use the sealed mapping type")
+    if snapshot.feature_index_names != ("issue_time_utc_s",):
+        raise ValueError("seasonal feature index schema is invalid")
+    issue_count = config.expected_scheduled_issue_times
+    expected_issues = np.arange(
+        int(config.utc_start.timestamp()) + 86_400,
+        int(config.utc_start.timestamp()) + 86_400 + issue_count * 900,
+        900,
+        dtype=np.int64,
+    )
+    expected_station = np.arange(
+        int(config.utc_start.timestamp()),
+        int(config.utc_end.timestamp()),
+        900,
+        dtype=np.int64,
+    )
+    arrays = {
+        "issue_times": np.asarray(snapshot.issue_times),
+        "horizons": np.asarray(snapshot.horizons),
+        "labels": np.asarray(snapshot.labels),
+        "m1_history": np.asarray(snapshot.m1_history),
+        "m1_history_mask": np.asarray(snapshot.m1_history_mask),
+        "m1_calendar": np.asarray(snapshot.m1_calendar),
+        "m2_current_state": np.asarray(snapshot.m2_current_state),
+        "station_times": np.asarray(snapshot.station_times),
+        "station_current_mean_a": np.asarray(snapshot.station_current_mean_a),
+        "station_valid_90": np.asarray(snapshot.station_valid_90),
+    }
+    expected_specs = {
+        "issue_times": (np.dtype(np.int64), (issue_count,)),
+        "horizons": (np.dtype(np.int16), (len(EXPECTED_HORIZONS_MINUTES),)),
+        "labels": (np.dtype(np.float32), (issue_count, len(EXPECTED_HORIZONS_MINUTES))),
+        "m1_history": (np.dtype(np.float32), (issue_count, 96)),
+        "m1_history_mask": (np.dtype(np.bool_), (issue_count, 96)),
+        "m1_calendar": (np.dtype(np.int16), (issue_count, 3)),
+        "m2_current_state": (np.dtype(np.float32), (issue_count, 6)),
+        "station_times": (np.dtype(np.int64), (config.expected_bins,)),
+        "station_current_mean_a": (np.dtype(np.float32), (config.expected_bins,)),
+        "station_valid_90": (np.dtype(np.bool_), (config.expected_bins,)),
+    }
+    for name, (dtype, shape) in expected_specs.items():
+        if arrays[name].dtype != dtype or arrays[name].shape != shape:
+            raise ValueError(f"seasonal {name} array schema is invalid")
+    if not np.array_equal(arrays["issue_times"], expected_issues):
+        raise ValueError("seasonal issue times do not match the canonical month boundary")
+    if not np.array_equal(arrays["station_times"], expected_station):
+        raise ValueError("seasonal station times do not match the continuous UTC grid")
+    if not np.array_equal(
+        arrays["horizons"], np.asarray(EXPECTED_HORIZONS_MINUTES, dtype=np.int16)
+    ):
+        raise ValueError("seasonal horizons do not match the canonical protocol")
+    if not np.all(np.isfinite(arrays["labels"])):
+        raise ValueError("seasonal labels must be finite")
+    if np.any(np.isinf(arrays["m1_history"])) or not np.array_equal(
+        np.isnan(arrays["m1_history"]), ~arrays["m1_history_mask"]
+    ):
+        raise ValueError("seasonal history values do not match their masks")
+    if np.any(np.isinf(arrays["m2_current_state"])) or np.any(
+        np.isinf(arrays["station_current_mean_a"])
+    ):
+        raise ValueError("seasonal numeric feature sources cannot contain infinity")
+    if len(snapshot.m3_by_issue_time) != issue_count:
+        raise ValueError("seasonal M3 groups do not cover every canonical issue time")
+    if any(type(row) is not _FrozenMapping for row in snapshot.m3_rows) or any(
+        type(row) is not _FrozenMapping for group in snapshot.m3_by_issue_time for row in group
+    ):
+        raise TypeError("seasonal M3 rows must use the sealed mapping type")
+
+
+def _verified_seasonal_snapshot_provenance(
+    snapshot: Gate1Snapshot,
+    verification: _SeasonalSnapshotVerification,
+) -> str:
+    if verification.schema_version != _SEASONAL_SNAPSHOT_VERIFICATION_SCHEMA:
+        raise ValueError("seasonal snapshot seal schema is invalid")
+    if verification.month not in SEASONAL_MONTHS:
+        raise ValueError("seasonal snapshot seal month is invalid")
+    config = jpl_month_config(verification.month)
+    if (
+        verification.timezone_name != config.timezone_name
+        or verification.utc_start_utc_s != int(config.utc_start.timestamp())
+        or verification.utc_end_utc_s != int(config.utc_end.timestamp())
+        or verification.expected_bins != config.expected_bins
+        or verification.expected_issue_count != config.expected_scheduled_issue_times
+        or verification.tiers != config.tiers
+        or verification.tiers != ("M1", "M2", "M3")
+    ):
+        raise ValueError("seasonal snapshot seal is not bound to its canonical month config")
+    if snapshot.m4_rows or snapshot.m4_by_issue_time:
+        raise ValueError("seasonal snapshot must not contain M4 material")
+    _validate_seasonal_snapshot_structure(snapshot, config=config)
+    if set(snapshot.artifact_sha256) != set(SEASONAL_ARTIFACT_ROOTS):
+        raise ValueError("seasonal snapshot artifact roots are invalid")
+    artifacts = tuple(
+        (name, str(snapshot.artifact_sha256[name])) for name in SEASONAL_ARTIFACT_ROOTS
+    )
+    if artifacts != verification.artifact_sha256 or any(
+        not _valid_sha256(digest) for _name, digest in artifacts
+    ):
+        raise ValueError("seasonal snapshot artifact hashes differ from its seal")
+    if not _valid_sha256(verification.issue_snapshot_sha256):
+        raise ValueError("seasonal issue snapshot provenance is invalid")
+    expected_data_snapshot = _seasonal_data_snapshot_sha256(
+        config,
+        issue_snapshot_sha256=verification.issue_snapshot_sha256,
+        artifacts=artifacts,
+    )
+    if (
+        snapshot.data_snapshot_sha256 != expected_data_snapshot
+        or verification.data_snapshot_sha256 != expected_data_snapshot
+    ):
+        raise ValueError("seasonal data snapshot differs from its sealed artifacts")
+    implementation = _file_sha256(Path(__file__))
+    if verification.adapter_implementation_sha256 != implementation:
+        raise ValueError("seasonal snapshot adapter provenance has changed")
+    target_source = _snapshot_target_source_sha256(snapshot)
+    if target_source != verification.target_source_sha256:
+        raise ValueError("seasonal target arrays differ from their seal")
+    feature_source = _seasonal_snapshot_feature_source_sha256(snapshot)
+    if feature_source != verification.feature_source_sha256:
+        raise ValueError("seasonal feature sources differ from their seal")
+    array_fields = (
+        "issue_times",
+        "horizons",
+        "labels",
+        "m1_history",
+        "m1_history_mask",
+        "m1_calendar",
+        "m2_current_state",
+        "station_times",
+        "station_current_mean_a",
+        "station_valid_90",
+    )
+    if any(np.asarray(getattr(snapshot, name)).flags.writeable for name in array_fields):
+        raise ValueError("seasonal snapshot arrays must remain immutable")
+    payload = _seasonal_snapshot_verification_payload(
+        config=config,
+        issue_snapshot_sha256=verification.issue_snapshot_sha256,
+        data_snapshot_sha256=expected_data_snapshot,
+        artifact_sha256=artifacts,
+        adapter_implementation_sha256=implementation,
+        target_source_sha256=target_source,
+        feature_source_sha256=feature_source,
+    )
+    expected_seal = hashlib.sha256(payload).hexdigest()
+    if verification.seal_sha256 != expected_seal:
+        raise ValueError("seasonal snapshot seal is inconsistent")
+    return expected_seal
+
+
 def verified_snapshot_provenance(snapshot: Gate1Snapshot) -> str:
     """Return loader-issued provenance, rejecting synthetic or replaced snapshots."""
 
     if not isinstance(snapshot, Gate1Snapshot):
         raise TypeError("verified snapshot provenance requires a Gate1Snapshot")
     verification = snapshot._verification
+    if isinstance(verification, _SeasonalSnapshotVerification):
+        return _verified_seasonal_snapshot_provenance(snapshot, verification)
     if not isinstance(verification, _SnapshotVerification):
         raise ValueError("snapshot has no verified loader seal")  # noqa: TRY004
     if verification.schema_version != _SNAPSHOT_VERIFICATION_SCHEMA:
@@ -1300,6 +1701,438 @@ def _audit_m4_references(
         if (issue, session_index) not in m3_pairs:
             raise ValueError(f"M4 row {ordinal} session is not in the M3 connected set")
         store._audit_reference(row, ordinal)
+
+
+def _strict_bool(value: Any, context: str) -> bool:
+    if not isinstance(value, (bool, np.bool_)):
+        raise TypeError(f"{context} must be boolean")
+    return bool(value)
+
+
+def _seasonal_optional_float(value: Any, context: str) -> float:
+    parsed = _as_optional_finite(value, context)
+    return math.nan if parsed is None else parsed
+
+
+def _validate_seasonal_station_rows(
+    station_rows: Sequence[Mapping[str, Any]],
+    *,
+    config: JPLMonthConfig,
+) -> tuple[tuple[dict[str, Any], ...], np.ndarray, np.ndarray, np.ndarray]:
+    if isinstance(station_rows, (str, bytes)) or not isinstance(station_rows, Sequence):
+        raise TypeError("seasonal station rows must be a sequence")
+    if len(station_rows) != config.expected_bins:
+        raise ValueError("seasonal station row length does not match the canonical grid")
+    start_epoch = int(config.utc_start.timestamp())
+    zone = ZoneInfo(config.timezone_name)
+    materialized: list[dict[str, Any]] = []
+    station_times: list[int] = []
+    station_current: list[float] = []
+    station_valid: list[bool] = []
+    for ordinal, source in enumerate(station_rows):
+        if not isinstance(source, Mapping):
+            raise TypeError(f"seasonal station row {ordinal} must be a mapping")
+        row = dict(source)
+        context = f"seasonal station row {ordinal}"
+        _require_exact_keys(row, set(_STATION_COLUMNS), context)
+        expected_epoch = start_epoch + ordinal * 900
+        if _parse_utc_epoch(row["timestamp_utc"], f"{context} timestamp_utc") != expected_epoch:
+            raise ValueError("seasonal station rows must follow the continuous physical UTC grid")
+        local = datetime.fromtimestamp(expected_epoch, tz=timezone.utc).astimezone(zone)
+        if (
+            row["timestamp_local"] != local.isoformat()
+            or row["local_date"] != local.date().isoformat()
+        ):
+            raise ValueError(f"{context} local timestamp does not match the canonical config")
+        quarter = _as_nonnegative_int(row["quarter_hour_index"], f"{context} quarter")
+        day_of_week = _as_nonnegative_int(row["day_of_week"], f"{context} day_of_week")
+        is_weekend = _strict_bool(row["is_weekend"], f"{context} is_weekend")
+        if (
+            quarter != local.hour * 4 + local.minute // 15
+            or day_of_week != local.weekday()
+            or is_weekend != (local.weekday() >= 5)
+        ):
+            raise ValueError(f"{context} calendar does not match its UTC timestamp")
+        current = _seasonal_optional_float(
+            row["station_current_mean_a"], f"{context} station current"
+        )
+        _seasonal_optional_float(row["station_current_peak_a"], f"{context} station peak")
+        for name in (
+            "connected_session_count",
+            "active_charging_session_count",
+            "active_charging_session_count_gt_1a",
+            "arrival_count",
+            "disconnect_count",
+        ):
+            _as_nonnegative_int(row[name], f"{context} {name}")
+        _seasonal_optional_float(row["pilot_sum_a"], f"{context} pilot_sum_a")
+        _seasonal_optional_float(row["pilot_mean_a"], f"{context} pilot_mean_a")
+        coverage = _validate_optional_ratio(
+            row["observed_coverage_ratio"], f"{context} observed coverage"
+        )
+        pilot_coverage = _validate_optional_ratio(
+            row["pilot_observed_coverage_ratio"], f"{context} pilot coverage"
+        )
+        if coverage is None or pilot_coverage is None:
+            raise ValueError(f"{context} coverage ratios cannot be missing")
+        validity = tuple(
+            _strict_bool(row[name], f"{context} {name}") for name in _STATION_VALIDITY_COLUMNS
+        )
+        expected_validity = tuple(coverage >= threshold for threshold in (0.80, 0.90, 0.95))
+        if validity != expected_validity:
+            raise ValueError(f"{context} validity flags do not match observed coverage")
+        materialized.append(row)
+        station_times.append(expected_epoch)
+        station_current.append(current)
+        station_valid.append(validity[1])
+    expected_end = start_epoch + len(materialized) * 900
+    if expected_end != int(config.utc_end.timestamp()):
+        raise ValueError("seasonal station grid does not reach the canonical UTC boundary")
+    return (
+        tuple(materialized),
+        np.asarray(station_times, dtype=np.int64),
+        np.asarray(station_current, dtype=np.float32),
+        np.asarray(station_valid, dtype=np.bool_),
+    )
+
+
+def _validate_seasonal_issue_qa(
+    result: IssueSnapshotResult,
+    *,
+    config: JPLMonthConfig,
+    m3_row_count: int,
+) -> None:
+    qa = result.qa
+    _require_exact_keys(qa, _SEASONAL_ISSUE_QA_KEYS, "seasonal issue snapshot QA")
+    issue_count = config.expected_scheduled_issue_times
+    expected_samples = {tier: issue_count for tier in config.tiers}
+    expected_shapes = {
+        "M1_history": [issue_count, 96],
+        "M2_dense": [issue_count, 6],
+        "M3_ragged_rows": m3_row_count,
+        "M3_session_feature_width": 11,
+        "labels": [issue_count, len(result.policy.horizons_minutes)],
+    }
+    expected_labels = {str(horizon): issue_count for horizon in result.policy.horizons_minutes}
+    if (
+        qa["schema_version"] != "acn-jpl-issue-snapshot-qa/v1"
+        or qa["lookback_minutes"] != result.policy.lookback_minutes
+        or qa["horizons_minutes"] != list(result.policy.horizons_minutes)
+        or qa["issue_times"] != issue_count
+        or qa["formal_issue_times"] != issue_count
+        or qa["incomplete_label_issue_times"] != 0
+        or qa["samples"] != expected_samples
+        or qa["ragged_rows"] != {"M3": m3_row_count}
+        or qa["valid_labels_by_horizon"] != expected_labels
+        or qa["shapes"] != expected_shapes
+        or qa["leakage_audit"] != "PASS"
+        or qa["future_fields_found"] != []
+        or qa["unexpected_feature_keys"] != []
+        or qa["temporal_violations"] != {"total": 0, "late_user_input_rows": 0}
+        or qa["feature_whitelist_enforcement"].get("status") != "PASS"
+        or qa["feature_whitelist_enforcement"].get("unexpected_key_count") != 0
+        or qa["m4_generated"] is not False
+    ):
+        raise ValueError("seasonal issue snapshot QA is inconsistent with its tables")
+
+
+def _validate_seasonal_table_schemas(result: IssueSnapshotResult) -> None:
+    for name, rows, keys in (
+        ("M1", result.m1_rows, _SEASONAL_M1_KEYS),
+        ("M2", result.m2_rows, _SEASONAL_M2_KEYS),
+        ("M3", result.m3_rows, _M3_KEYS),
+        ("label", result.label_rows, _SEASONAL_LABEL_KEYS),
+    ):
+        for ordinal, row in enumerate(rows):
+            _require_exact_keys(row, keys, f"seasonal {name} row {ordinal}")
+            if name == "label":
+                labels = row["labels"]
+                if not isinstance(labels, Mapping):
+                    raise TypeError(f"seasonal label row {ordinal} labels must be a mapping")
+                _require_exact_keys(
+                    labels,
+                    {str(value) for value in result.policy.horizons_minutes},
+                    f"seasonal label row {ordinal} values",
+                )
+
+
+def _validate_seasonal_dense_rows(
+    result: IssueSnapshotResult,
+    *,
+    config: JPLMonthConfig,
+    station_current: np.ndarray,
+    station_valid: np.ndarray,
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+]:
+    issue_count = config.expected_scheduled_issue_times
+    if not (len(result.m1_rows) == len(result.m2_rows) == len(result.label_rows) == issue_count):
+        raise ValueError("seasonal M1, M2, and label row counts must cover every issue time")
+    start_epoch = int(config.utc_start.timestamp())
+    first_issue = start_epoch + result.policy.lookback_minutes * 60
+    expected_issue_times = np.arange(
+        first_issue,
+        first_issue + issue_count * result.policy.issue_step_minutes * 60,
+        result.policy.issue_step_minutes * 60,
+        dtype=np.int64,
+    )
+    expected_last = int(config.utc_end.timestamp()) - max(result.policy.horizons_minutes) * 60
+    if len(expected_issue_times) != issue_count or int(expected_issue_times[-1]) != expected_last:
+        raise ValueError("canonical seasonal issue-time boundary is inconsistent")
+    histories: list[list[float]] = []
+    history_masks: list[list[bool]] = []
+    calendars: list[list[int]] = []
+    current_states: list[list[float]] = []
+    labels: list[list[float]] = []
+    horizon_keys = {str(value) for value in result.policy.horizons_minutes}
+    m1_shared_keys = _SEASONAL_M1_KEYS
+    zone = ZoneInfo(config.timezone_name)
+    for position, (m1_source, m2_source, label_source) in enumerate(
+        zip(result.m1_rows, result.m2_rows, result.label_rows, strict=True)
+    ):
+        m1 = dict(m1_source)
+        m2 = dict(m2_source)
+        label = dict(label_source)
+        _require_exact_keys(m1, _SEASONAL_M1_KEYS, f"seasonal M1 row {position}")
+        _require_exact_keys(m2, _SEASONAL_M2_KEYS, f"seasonal M2 row {position}")
+        _require_exact_keys(label, _SEASONAL_LABEL_KEYS, f"seasonal label row {position}")
+        issue = int(expected_issue_times[position])
+        for name, row in (("M1", m1), ("M2", m2), ("label", label)):
+            if (
+                _as_nonnegative_int(row["issue_index"], f"{name} issue index") != position
+                or _as_int(row["issue_time_utc_s"], f"{name} issue time") != issue
+            ):
+                raise ValueError(f"seasonal {name} row is not aligned to its issue time")
+        if any(m2[name] != m1[name] for name in m1_shared_keys):
+            raise ValueError("seasonal M1 and M2 shared fields differ")
+        local = datetime.fromtimestamp(issue, tz=timezone.utc).astimezone(zone)
+        quarter = _as_nonnegative_int(m1["quarter_hour_index"], "M1 quarter_hour_index")
+        day_of_week = _as_nonnegative_int(m1["day_of_week"], "M1 day_of_week")
+        is_weekend = _strict_bool(m1["is_weekend"], "M1 is_weekend")
+        if (
+            quarter != local.hour * 4 + local.minute // 15
+            or day_of_week != local.weekday()
+            or is_weekend != (local.weekday() >= 5)
+        ):
+            raise ValueError("seasonal M1 calendar does not match issue time")
+        history_raw = m1["history_station_current_mean_a"]
+        mask_raw = m1["history_observed_mask"]
+        if not isinstance(history_raw, list) or not isinstance(mask_raw, list):
+            raise TypeError("seasonal M1 history and mask must be lists")
+        if len(history_raw) != 96 or len(mask_raw) != 96:
+            raise ValueError("seasonal M1 history and mask must each have 96 values")
+        history = [
+            _seasonal_optional_float(value, f"M1 row {position} history") for value in history_raw
+        ]
+        mask = [_strict_bool(value, f"M1 row {position} history mask") for value in mask_raw]
+        station_position = (issue - start_epoch) // 900
+        expected_history = station_current[station_position - 96 : station_position]
+        expected_mask = station_valid[station_position - 96 : station_position] & ~np.isnan(
+            expected_history
+        )
+        if not np.array_equal(np.asarray(mask, dtype=np.bool_), expected_mask) or not np.allclose(
+            np.asarray(history, dtype=np.float64),
+            np.where(expected_mask, expected_history, np.nan),
+            rtol=1e-6,
+            atol=1e-6,
+            equal_nan=True,
+        ):
+            raise ValueError("seasonal M1 history does not match the station grid")
+        connected = _as_nonnegative_int(m2["connected_session_count"], "M2 connected count")
+        active = _as_nonnegative_int(m2["active_charging_session_count"], "M2 active count")
+        if active > connected:
+            raise ValueError("seasonal M2 active count exceeds connected count")
+        current_state = [
+            float(connected),
+            float(active),
+            _seasonal_optional_float(m2["station_current_a"], "M2 station current"),
+            _as_finite(m2["station_current_observed_ratio"], "M2 observed ratio"),
+            _seasonal_optional_float(m2["pilot_sum_a"], "M2 pilot sum"),
+            _seasonal_optional_float(m2["pilot_mean_a"], "M2 pilot mean"),
+        ]
+        if not 0.0 <= current_state[3] <= 1.0:
+            raise ValueError("seasonal M2 observed ratio must be in [0, 1]")
+        if connected == 0 and not np.array_equal(
+            np.asarray(current_state), np.asarray([0.0, 0.0, 0.0, 1.0, 0.0, 0.0])
+        ):
+            raise ValueError("seasonal M2 empty rows must use canonical zero/one semantics")
+        raw_labels = label["labels"]
+        if not isinstance(raw_labels, Mapping):
+            raise TypeError("seasonal labels must be a mapping")
+        _require_exact_keys(raw_labels, horizon_keys, f"seasonal label values {position}")
+        label_values: list[float] = []
+        for horizon in result.policy.horizons_minutes:
+            value = _as_finite(raw_labels[str(horizon)], f"label {position} horizon {horizon}")
+            target_position = station_position + horizon // 15 - 1
+            expected_value = float(station_current[target_position])
+            if not station_valid[target_position] or not math.isfinite(expected_value):
+                raise ValueError("seasonal labels require complete valid station targets")
+            if not math.isclose(value, expected_value, rel_tol=1e-6, abs_tol=1e-6):
+                raise ValueError("seasonal label does not match its station target")
+            label_values.append(value)
+        histories.append(history)
+        history_masks.append(mask)
+        calendars.append([quarter, day_of_week, int(is_weekend)])
+        current_states.append(current_state)
+        labels.append(label_values)
+    return (
+        expected_issue_times,
+        np.asarray(result.policy.horizons_minutes, dtype=np.int16),
+        np.asarray(labels, dtype=np.float32),
+        np.asarray(histories, dtype=np.float32),
+        np.asarray(history_masks, dtype=np.bool_),
+        np.asarray(calendars, dtype=np.int16),
+        np.asarray(current_states, dtype=np.float32),
+    )
+
+
+def _validate_seasonal_m3_rows(
+    result: IssueSnapshotResult,
+    *,
+    issue_times: np.ndarray,
+    current_states: np.ndarray,
+) -> tuple[tuple[Mapping[str, Any], ...], tuple[tuple[Mapping[str, Any], ...], ...]]:
+    normalized: list[Mapping[str, Any]] = []
+    previous: tuple[int, int] | None = None
+    for ordinal, source in enumerate(result.m3_rows):
+        row = _validate_m3_row(dict(source), ordinal)
+        issue_index = int(row["issue_index"])
+        if issue_index >= len(issue_times) or int(row["issue_time_utc_s"]) != int(
+            issue_times[issue_index]
+        ):
+            raise ValueError("seasonal M3 row is not aligned to its issue index")
+        key = (issue_index, int(row["anonymous_session_index"]))
+        if previous is not None and key <= previous:
+            raise ValueError("seasonal M3 rows must use canonical issue/session order")
+        previous = key
+        normalized.append(_FrozenMapping(row))
+    rows = tuple(normalized)
+    groups = group_by_canonical_issue_time(issue_times, rows)
+    for position, group in enumerate(groups):
+        currents = [
+            _as_optional_finite(row["current_current_a"], "seasonal M3 current") for row in group
+        ]
+        pilots = [_as_optional_finite(row["current_pilot_a"], "seasonal M3 pilot") for row in group]
+        finite_current = [value for value in currents if value is not None]
+        finite_pilot = [value for value in pilots if value is not None]
+        connected = len(group)
+        expected = np.asarray(
+            [
+                connected,
+                sum(value > result.policy.active_threshold_a for value in finite_current),
+                sum(finite_current) if len(finite_current) == connected else math.nan,
+                len(finite_current) / connected if connected else 1.0,
+                sum(finite_pilot) if len(finite_pilot) == connected else math.nan,
+                (
+                    sum(finite_pilot) / connected
+                    if connected and len(finite_pilot) == connected
+                    else (0.0 if not connected else math.nan)
+                ),
+            ],
+            dtype=np.float32,
+        )
+        if not np.allclose(
+            current_states[position], expected, rtol=2e-5, atol=2e-6, equal_nan=True
+        ):
+            raise ValueError("seasonal M2 state does not match the M3 connected set")
+    return rows, groups
+
+
+def build_seasonal_gate1_snapshot(
+    result: IssueSnapshotResult,
+    station_rows: Sequence[Mapping[str, Any]],
+    *,
+    config: JPLMonthConfig,
+) -> Gate1Snapshot:
+    """Validate and seal one canonical seasonal M1--M3 in-memory snapshot."""
+
+    if (
+        type(config) is not JPLMonthConfig
+        or not is_canonical_jpl_month_config(config)
+        or config.month not in SEASONAL_MONTHS
+        or config.tiers != ("M1", "M2", "M3")
+    ):
+        raise ValueError("seasonal snapshot requires a canonical seasonal month config")
+    if type(result) is not IssueSnapshotResult:
+        raise TypeError("seasonal snapshot requires an IssueSnapshotResult")
+    expected_policy = SnapshotPolicy(tiers=config.tiers)
+    if result.policy != expected_policy:
+        raise ValueError("seasonal snapshot policy does not match the canonical config")
+    if result.m4_rows:
+        raise ValueError("seasonal snapshots cannot contain M4 material")
+    _validate_seasonal_table_schemas(result)
+    issue_snapshot_sha256 = verified_issue_snapshot_sha256(result)
+    materialized_station, station_times, station_current, station_valid = (
+        _validate_seasonal_station_rows(station_rows, config=config)
+    )
+    (
+        issue_times,
+        horizons,
+        labels,
+        history,
+        history_mask,
+        calendar,
+        current_state,
+    ) = _validate_seasonal_dense_rows(
+        result,
+        config=config,
+        station_current=station_current,
+        station_valid=station_valid,
+    )
+    m3_rows, m3_groups = _validate_seasonal_m3_rows(
+        result,
+        issue_times=issue_times,
+        current_states=current_state,
+    )
+    _validate_seasonal_issue_qa(result, config=config, m3_row_count=len(m3_rows))
+    artifact_values: Mapping[str, Any] = {
+        "station_15min.jsonl.gz": materialized_station,
+        "m1.jsonl.gz": result.m1_rows,
+        "m2.jsonl.gz": result.m2_rows,
+        "m3.jsonl.gz": result.m3_rows,
+        "labels.jsonl.gz": result.label_rows,
+    }
+    if tuple(artifact_values) != SEASONAL_ARTIFACT_ROOTS:
+        raise AssertionError("internal seasonal artifact order drift")
+    artifacts = tuple(
+        (name, _canonical_json_sha256(artifact_values[name])) for name in SEASONAL_ARTIFACT_ROOTS
+    )
+    data_snapshot_sha256 = _seasonal_data_snapshot_sha256(
+        config,
+        issue_snapshot_sha256=issue_snapshot_sha256,
+        artifacts=artifacts,
+    )
+    snapshot = Gate1Snapshot(
+        data_snapshot_sha256=data_snapshot_sha256,
+        artifact_sha256=_FrozenMapping(dict(artifacts)),
+        issue_times=_readonly(issue_times),
+        horizons=_readonly(horizons),
+        labels=_readonly(labels),
+        m1_history=_readonly(history),
+        m1_history_mask=_readonly(history_mask),
+        m1_calendar=_readonly(calendar),
+        m2_current_state=_readonly(current_state),
+        m3_rows=m3_rows,
+        m4_rows=(),
+        m3_by_issue_time=m3_groups,
+        m4_by_issue_time=(),
+        station_times=_readonly(station_times),
+        station_current_mean_a=_readonly(station_current),
+        station_valid_90=_readonly(station_valid),
+    )
+    _issue_seasonal_snapshot_verification(
+        snapshot,
+        config=config,
+        issue_snapshot_sha256=issue_snapshot_sha256,
+    )
+    verified_snapshot_provenance(snapshot)
+    return snapshot
 
 
 def verify_and_load_snapshot(

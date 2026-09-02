@@ -451,6 +451,11 @@ def aggregate_station_15min(
         local_quarters = [(interval.local_date, interval.quarter_hour_index) for interval in grid]
         repeated_local_quarters = len(local_quarters) - len(set(local_quarters))
         local_day_count = len({interval.local_date for interval in grid})
+        for threshold in (80, 90, 95):
+            valid_count = int(qa[f"valid_bins_at_{threshold}"])
+            valid_rate = valid_count / len(rows)
+            qa[f"valid_bin_rate_at_{threshold}"] = round(valid_rate, 8)
+            qa[f"missing_bin_rate_at_{threshold}"] = round(1 - valid_rate, 8)
         qa.update(
             {
                 "grid_policy": grid_policy,

@@ -1,0 +1,70 @@
+{
+  "blocking_issues": [],
+  "daily_paired_error_count": 420,
+  "execution_ok": true,
+  "gate": {
+    "blocking_issues": [],
+    "classification": "PASS_ACTIVE_SESSION_DROP_M4",
+    "execution_ok": true,
+    "m2_classification_only_diagnostic": {
+      "improves": true,
+      "mean_mae_delta_a": 1.3505433373477835,
+      "rule": "strictly positive unrounded equal-weight mean of HGB 15/30/60-minute pooled MAE(M1)-MAE(M2); no added threshold"
+    },
+    "m3": {
+      "directional_ci": true,
+      "gain_horizon_count": 3,
+      "improvement_percent": [
+        11.226448054407578,
+        14.503295411590177,
+        18.938547556928537
+      ],
+      "no_degradation": true,
+      "pass": true,
+      "thresholds": {
+        "directional_ci_rule": "at least one lower endpoint strictly greater than zero",
+        "gain_percent": 3,
+        "maximum_regression_percent": 2,
+        "minimum_gain_horizons": 2,
+        "minimum_winning_days": 10
+      },
+      "winning_days": 12
+    },
+    "m4": {
+      "gain_horizon_count": 0,
+      "improvement_percent": [
+        -5.0553457510047339,
+        -2.5862615080783717,
+        -5.5810784248381466
+      ],
+      "keep": false,
+      "no_degradation": false,
+      "thresholds": {
+        "gain_percent": 1,
+        "maximum_regression_percent": 2,
+        "minimum_gain_horizons": 2
+      }
+    },
+    "near_horizons_minutes": [
+      15,
+      30,
+      60
+    ]
+  },
+  "metric_record_count": 55,
+  "privacy": {
+    "aggregate_only": true,
+    "bootstrap_draws_published": false,
+    "full_test_values_published": false,
+    "local_paths_published": false,
+    "private_identifiers_published": false
+  },
+  "schema_version": "acn-jpl-gate1-summary/v1",
+  "status": "PASS_ACTIVE_SESSION_DROP_M4",
+  "tier_comparison_count": 30,
+  "units": {
+    "nominal_reconstruction": "kW at fixed 0.208 kW/A; not directly measured power",
+    "primary": "A",
+    "wape": "dimensionless ratio"
+  }
+}

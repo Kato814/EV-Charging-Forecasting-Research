@@ -1,0 +1,32 @@
+{
+  "audits": {
+    "complete_task_count": true,
+    "formal_branch_verified": true,
+    "full_test_values_published": false,
+    "local_paths_published": false,
+    "models_serialized": false,
+    "tracked_worktree_clean": true
+  },
+  "bootstrap_repetitions": 10000,
+  "bootstrap_seed": 20260902,
+  "canonical_model_task_count": 40,
+  "config_contract_sha256": "86347905cf281363a1f4cf795f696ef91b62215935ee4be8ebf9be518080539e",
+  "config_file_sha256": "dad0bd2208e0d267d92d1c643547511807338a3e51240be83f90a3343fefe58f",
+  "data_snapshot_sha256": "7066ffc8ba42a98f73246acfbc62352fe55a1433a43cba80957c6034e3aeaa5d",
+  "execution_commit_sha": "43b397887744220ffb4d6e520b518f5c05592844",
+  "formal_implementation_sha256": "794d330ea00bb4b7192ce7cca2558e49512d335836fb974bc1245d106c4cbbf3",
+  "local_run_id": "jpl-2019-05-gate1-pilot-seed20260901",
+  "model_seed": 20260901,
+  "parallelism": {
+    "backend": "loky",
+    "inner_max_num_threads": 1,
+    "n_jobs": 4
+  },
+  "reproducibility": {
+    "public_comparison": "all 13 files byte-for-byte",
+    "repeat_policy": "recompute_all_40_then_byte_compare"
+  },
+  "schema_version": "acn-jpl-gate1-run/v1",
+  "snapshot_verification_sha256": "b0ac29532d5f7e947e6989c9cacdbfa3ed62390bd59d3084c8b9a202b511e4b8",
+  "split_sha256": "72bd2b4e9f5cf5a232c247335607cfbb9b125c45ab5bb670cf6f5426da84e1eb"
+}

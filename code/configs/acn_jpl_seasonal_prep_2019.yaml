@@ -1,0 +1,49 @@
+schema_version: acn-jpl-seasonal-preparation-protocol/v1
+months:
+  - 2019-02
+  - 2019-08
+  - 2019-11
+cleaning:
+  sampling_derivation: mode_of_positive_raw_timestamp_differences
+  locf_mode_multiplier: 3
+  locf_cap_seconds: 60
+  boundary_sensitivity_seconds: 60
+aggregation:
+  bin_minutes: 15
+  grid_policy: continuous_physical_utc
+  coverage_thresholds:
+    - 0.8
+    - 0.9
+    - 0.95
+  main_valid_bin_field: valid_bin_90
+  minimum_valid_bin_rate: 0.8
+  main_active_threshold_a: 0.1
+  comparison_active_threshold_a: 1.0
+acquisition_gate:
+  charging_current_invalid_rate_max: 0.1
+  pilot_signal_invalid_rate_max: 0.1
+snapshots:
+  lookback_minutes: 1440
+  horizons_minutes:
+    - 15
+    - 30
+    - 60
+    - 120
+    - 240
+  issue_step_minutes: 15
+  tiers:
+    - M1
+    - M2
+    - M3
+features:
+  raw_dimensions:
+    - 195
+    - 201
+    - 311
+  encoded_dimensions:
+    - 195
+    - 204
+    - 391
+publication:
+  aggregate_only: true
+  exact_file_count: 37

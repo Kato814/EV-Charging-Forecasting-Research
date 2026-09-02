@@ -138,6 +138,29 @@ def test_november_aggregation_publishes_explicit_physical_grid_qa() -> None:
         assert result.qa[f"missing_bin_rate_at_{threshold}"] == 0.0
 
 
+def test_current_and_pilot_use_independent_bounded_holds() -> None:
+    start = datetime(2019, 2, 1, 8, tzinfo=timezone.utc)
+    end = start + timedelta(minutes=15)
+    session = _session(
+        start,
+        end,
+        current_times=[start],
+        current_values=[2.0],
+        pilot_times=[start],
+        pilot_values=[8.0],
+    )
+
+    result = aggregate_station_15min(
+        [session],
+        start_utc=start,
+        end_utc=end,
+        policy=AggregationPolicy(max_hold_seconds=3, pilot_max_hold_seconds=12),
+    )
+
+    assert result.rows[0]["observed_coverage_ratio"] == pytest.approx(3 / 900, abs=1e-8)
+    assert result.rows[0]["pilot_observed_coverage_ratio"] == pytest.approx(12 / 900, abs=1e-8)
+
+
 def test_legacy_aggregation_qa_does_not_gain_seasonal_grid_fields() -> None:
     start = datetime(2019, 5, 1, 7, tzinfo=timezone.utc)
     result = aggregate_station_15min(

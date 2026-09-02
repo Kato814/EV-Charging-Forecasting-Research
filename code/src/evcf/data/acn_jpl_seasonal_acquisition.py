@@ -13,6 +13,7 @@ import hmac
 import inspect
 import json
 import os
+import re
 import weakref
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -42,7 +43,10 @@ from .acn_jpl_month_config import (
     is_canonical_jpl_month_config,
     jpl_month_config,
 )
-from .acn_jpl_official_reference import OfficialLocalMonthTotalResult
+from .acn_jpl_official_reference import (
+    OfficialLocalMonthTotalResult,
+    load_verified_official_local_month_total,
+)
 from .acn_jpl_preparation import (
     InventorySnapshot,
     canonical_seasonal_inventory,
@@ -114,6 +118,10 @@ class SeasonalAuthorizationError(PermissionError):
     """Raised before any read, client construction, or write without opt-in."""
 
 
+class ExistingMonthVerificationError(ValueError):
+    """Static, privacy-safe failure for read-only completed-month reconstruction."""
+
+
 @dataclass(frozen=True, slots=True, weakref_slot=True)
 class MonthAcquisitionResult:
     """Aggregate-only result for one approved month."""
@@ -179,9 +187,16 @@ class MonthAcquisitionResult:
             },
         }
 
+
 _VERIFIED_MONTH_RESULTS: dict[
     int,
-    tuple[weakref.ReferenceType[MonthAcquisitionResult], str, int],
+    tuple[
+        weakref.ReferenceType[MonthAcquisitionResult],
+        str,
+        int,
+        str | None,
+        str | None,
+    ],
 ] = {}
 
 
@@ -243,6 +258,8 @@ def _seal_month_result(
     *,
     config: JPLMonthConfig,
     scope: object,
+    official_reference_sha256: str | None = None,
+    existing_tree_sha256: str | None = None,
 ) -> MonthAcquisitionResult:
     if not (
         type(scope) is CompleteMetadataScope
@@ -262,6 +279,8 @@ def _seal_month_result(
         reference,
         _month_result_binding(result, config=config, scope=scope),
         id(scope),
+        official_reference_sha256,
+        existing_tree_sha256,
     )
     return result
 
@@ -295,6 +314,47 @@ def verify_month_acquisition_result(
     except (AttributeError, TypeError, ValueError):
         return False
     return hmac.compare_digest(entry[1], expected)
+
+
+def verified_existing_official_reference_sha256(
+    result: object,
+    *,
+    config: JPLMonthConfig,
+    scope: CompleteMetadataScope,
+    inventory: InventorySnapshot,
+    raw_root: str | Path,
+) -> str:
+    """Return the reference digest bound by the existing-tree verifier.
+
+    The digest is not rediscovered from a caller-selected path.  It is attached
+    to the exact current-process result seal only after a stable whole-tree
+    verification, and the whole tree must still match at this read boundary.
+    """
+
+    if not verify_month_acquisition_result(
+        result,
+        config=config,
+        scope=scope,
+        inventory=inventory,
+    ):
+        raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+    entry = _VERIFIED_MONTH_RESULTS.get(id(result))
+    if not (
+        entry is not None
+        and entry[0]() is result
+        and isinstance(entry[3], str)
+        and re.fullmatch(r"[0-9a-f]{64}", entry[3]) is not None
+        and isinstance(entry[4], str)
+        and re.fullmatch(r"[0-9a-f]{64}", entry[4]) is not None
+    ):
+        raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+    try:
+        current_tree_sha256 = _existing_tree_sha256(Path(raw_root))
+    except Exception as exc:
+        raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED") from exc
+    if not hmac.compare_digest(entry[4], current_tree_sha256):
+        raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+    return entry[3]
 
 
 @dataclass(frozen=True)
@@ -861,6 +921,238 @@ def _carry_layout_exact(root: Path, count: int) -> bool:
     return actual_data == expected_data and actual_manifests == expected_manifests
 
 
+def _existing_tree_sha256(root: Path) -> str:
+    """Hash every file and directory name, including current state evidence."""
+
+    if not root.is_dir() or root.is_symlink():
+        raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+    rows: list[tuple[str, str, int]] = []
+    for path in root.rglob("*"):
+        if path.is_symlink():
+            raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+        if path.is_dir():
+            continue
+        if not path.is_file():
+            raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+        relative = path.relative_to(root).as_posix()
+        if any(character in relative for character in ("\0", "\r", "\n")):
+            raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+        rows.append((relative, _sha256_file(path), path.stat().st_size))
+    digest = hashlib.sha256()
+    for relative, file_digest, size in sorted(rows):
+        digest.update(f"{relative}\0{file_digest}\0{size}\n".encode())
+    return digest.hexdigest()
+
+
+def _offline_raw_layout_exact(
+    root: Path,
+    config: JPLMonthConfig,
+    carry_count: int,
+    official: OfficialLocalMonthTotalResult,
+) -> bool:
+    """Validate the live-run layout using a freshly loaded offline reference."""
+
+    if not (
+        root.is_dir()
+        and not root.is_symlink()
+        and type(official) is OfficialLocalMonthTotalResult
+        and OfficialLocalMonthTotalResult.is_reference_valid_for(official, config)
+    ):
+        return False
+    expected_files = _expected_raw_paths(config, carry_count)
+    try:
+        resolved_root = root.resolve(strict=True)
+        state_root = (root / "state").resolve(strict=True)
+        reference = official.reference_path.resolve(strict=True)
+        if reference.parent != state_root or reference.name == "progress.json":
+            return False
+        reference_relative = reference.relative_to(resolved_root).as_posix()
+    except (OSError, RuntimeError, ValueError):
+        return False
+    expected_state = {"state/progress.json", reference_relative}
+    expected_directories = {
+        str(Path(relative).parent).replace("\\", "/") for relative in expected_files
+    }
+    expected_directories.update({"timeseries", "manifests", "state"})
+    actual_files: set[str] = set()
+    actual_directories: set[str] = set()
+    try:
+        for path in root.rglob("*"):
+            relative = path.relative_to(root).as_posix()
+            if path.is_symlink():
+                return False
+            if path.is_dir():
+                actual_directories.add(relative)
+            elif path.is_file():
+                actual_files.add(relative)
+            else:
+                return False
+    except OSError:
+        return False
+    return (
+        actual_files == set(expected_files) | expected_state
+        and actual_directories == expected_directories
+        and _progress_document_is_complete(root / "state" / "progress.json", config)
+    )
+
+
+def verify_existing_jpl_month(
+    *,
+    config: JPLMonthConfig,
+    scope: CompleteMetadataScope,
+    raw_root: str | Path,
+) -> MonthAcquisitionResult:
+    """Read, reconstruct, and seal one already-complete month without networking.
+
+    No persisted stdout or caller-supplied acquisition summary is trusted.  The
+    official reference, progress state, every daily/carry file, all linkage
+    relations, and both content and whole-tree inventories are read again in the
+    current process before a new sealed result is returned.
+    """
+
+    try:
+        if not (
+            type(config) is JPLMonthConfig
+            and is_canonical_jpl_month_config(config)
+            and config.month in SEASONAL_MONTHS
+            and type(scope) is CompleteMetadataScope
+            and CompleteMetadataScope.is_verified_for(scope, config)
+        ):
+            raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+        root = Path(raw_root)
+        whole_before = _existing_tree_sha256(root)
+        state = root / "state"
+        if not state.is_dir() or state.is_symlink():
+            raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+        references = tuple(
+            path
+            for path in state.iterdir()
+            if path.is_file() and path.suffix == ".json" and path.name != "progress.json"
+        )
+        if len(references) != 1:
+            raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+        reference_sha256 = _sha256_file(references[0])
+        official = load_verified_official_local_month_total(references[0], month=config)
+        if (
+            type(official) is not OfficialLocalMonthTotalResult
+            or not OfficialLocalMonthTotalResult.is_reference_valid_for(official, config)
+            or official.total != scope.local_month_session_count
+            or not hmac.compare_digest(reference_sha256, _sha256_file(references[0]))
+        ):
+            raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+
+        progress = load_closed_json_object(
+            state / "progress.json",
+            description="seasonal existing progress",
+        )
+        daily_sink = _load_daily_sink(root, config)
+        expected_daily = _expected_pairs(scope.local_month_records)
+        valid_days, failed_days, daily_linkage, daily_exact = _daily_summary(
+            progress,
+            config,
+            daily_sink,
+            expected_daily,
+        )
+        if not daily_exact:
+            raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+
+        ordered_carry = tuple(
+            sorted(
+                scope.carry_in_records,
+                key=lambda record: (record["sessionID"], record["_id"]),
+            )
+        )
+        carry_pairs: list[tuple[str, str]] = []
+        for ordinal, record in enumerate(ordered_carry, start=1):
+            transfer = _validated_carry(root, record, config, ordinal)
+            if transfer is None:
+                raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+            carry_pairs.append(transfer.pair)
+        expected_carry = _expected_pairs(ordered_carry)
+        carry_linkage = _linkage(
+            carry_pairs,
+            invalid_identifier_records=0,
+            expected_pairs=expected_carry,
+        )
+        if not (
+            carry_linkage.exact
+            and carry_linkage.record_count == len(expected_carry)
+            and _carry_layout_exact(root, len(ordered_carry))
+        ):
+            raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+
+        combined_pairs = tuple(expected_daily) + tuple(carry_pairs)
+        combined_expected = expected_daily | expected_carry
+        combined = _linkage(
+            combined_pairs,
+            invalid_identifier_records=0,
+            expected_pairs=combined_expected,
+        )
+        expected_total = scope.local_month_session_count + scope.carry_in_session_count
+        if not (
+            expected_daily.isdisjoint(expected_carry)
+            and combined.exact
+            and combined.record_count == expected_total
+            and combined.unique_object_count == expected_total
+            and combined.unique_session_count == expected_total
+            and combined.unique_pair_count == expected_total
+        ):
+            raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+        inventory = canonical_seasonal_inventory(root)
+        if not _offline_raw_layout_exact(root, config, len(ordered_carry), official) or any(
+            path.is_file() for path in root.rglob("*.partial")
+        ):
+            raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+        whole_after = _existing_tree_sha256(root)
+        if whole_before != whole_after:
+            raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+        result = _result(
+            config,
+            scope,
+            status="COMPLETE",
+            official_total=official.total,
+            valid_daily_chunks=valid_days,
+            failed_daily_chunks=failed_days,
+            daily_record_count=daily_linkage.record_count,
+            daily_unique_object_count=daily_linkage.unique_object_count,
+            daily_unique_session_count=daily_linkage.unique_session_count,
+            daily_unique_pair_count=daily_linkage.unique_pair_count,
+            carry_in_completed=len(carry_pairs),
+            carry_record_count=carry_linkage.record_count,
+            carry_unique_pair_count=carry_linkage.unique_pair_count,
+            combined_record_count=combined.record_count,
+            combined_unique_object_count=combined.unique_object_count,
+            combined_unique_session_count=combined.unique_session_count,
+            combined_unique_pair_count=combined.unique_pair_count,
+            missing_pairs=0,
+            orphan_pairs=0,
+            raw_file_count=inventory.file_count,
+            partial_file_count=0,
+            raw_inventory_sha256=inventory.digest,
+        )
+        if not verify_month_acquisition_result(
+            result,
+            config=config,
+            scope=scope,
+            inventory=inventory,
+        ):
+            raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+        if _existing_tree_sha256(root) != whole_after:
+            raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED")
+        _seal_month_result(
+            result,
+            config=config,
+            scope=scope,
+            official_reference_sha256=reference_sha256,
+            existing_tree_sha256=whole_after,
+        )
+        return result
+    except ExistingMonthVerificationError:
+        raise
+    except Exception as exc:
+        raise ExistingMonthVerificationError("EXISTING_MONTH_VERIFICATION_FAILED") from exc
+
+
 def _acquire_jpl_month_unbounded(
     *,
     authorized: bool,
@@ -1315,9 +1607,12 @@ def run_seasonal_acquisition(
 
 
 __all__ = [
+    "ExistingMonthVerificationError",
     "MonthAcquisitionResult",
     "SeasonalAuthorizationError",
     "acquire_jpl_month",
     "run_seasonal_acquisition",
+    "verified_existing_official_reference_sha256",
+    "verify_existing_jpl_month",
     "verify_month_acquisition_result",
 ]

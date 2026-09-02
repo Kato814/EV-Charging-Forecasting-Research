@@ -29,10 +29,17 @@ class AggregationPolicy:
     main_active_threshold_a: float = 0.1
     comparison_active_threshold_a: float = 1.0
     coverage_thresholds: tuple[float, float, float] = (0.80, 0.90, 0.95)
+    pilot_max_hold_seconds: int | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.max_hold_seconds, bool) or self.max_hold_seconds <= 0:
             raise ValueError("max_hold_seconds must be a positive integer")
+        if self.pilot_max_hold_seconds is not None and (
+            isinstance(self.pilot_max_hold_seconds, bool)
+            or not isinstance(self.pilot_max_hold_seconds, int)
+            or self.pilot_max_hold_seconds <= 0
+        ):
+            raise ValueError("pilot_max_hold_seconds must be a positive integer")
         if not math.isfinite(self.main_active_threshold_a):
             raise ValueError("main active threshold must be finite")
         if not math.isfinite(self.comparison_active_threshold_a):
@@ -314,7 +321,11 @@ def aggregate_station_15min(
             disconnect_epoch=disconnect,
             analysis_start_epoch=start_epoch,
             analysis_end_epoch=end_epoch,
-            max_hold_seconds=policy.max_hold_seconds,
+            max_hold_seconds=(
+                policy.pilot_max_hold_seconds
+                if policy.pilot_max_hold_seconds is not None
+                else policy.max_hold_seconds
+            ),
             value_difference=pilot_difference,
             observed_difference=pilot_observed_difference,
         )

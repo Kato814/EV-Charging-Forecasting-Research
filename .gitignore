@@ -92,6 +92,51 @@ outputs/runs/**
 !outputs/environment/
 !outputs/environment/local_rtx5080.json
 
+# Aggregate-only JPL seasonal preparation release. Every public file is
+# individually allowlisted; raw/interim/processed arrays remain ignored.
+!outputs/seasonal_prep/
+!outputs/seasonal_prep/jpl_2019/
+!outputs/seasonal_prep/jpl_2019/2019-02/
+!outputs/seasonal_prep/jpl_2019/2019-02/acquisition_summary.json
+!outputs/seasonal_prep/jpl_2019/2019-02/cleaning_qa.json
+!outputs/seasonal_prep/jpl_2019/2019-02/cleaning_sensitivity.json
+!outputs/seasonal_prep/jpl_2019/2019-02/boundary_current_audit.json
+!outputs/seasonal_prep/jpl_2019/2019-02/power_semantics_audit.json
+!outputs/seasonal_prep/jpl_2019/2019-02/station_15min_qa.json
+!outputs/seasonal_prep/jpl_2019/2019-02/issue_snapshot_qa.json
+!outputs/seasonal_prep/jpl_2019/2019-02/leakage_audit.json
+!outputs/seasonal_prep/jpl_2019/2019-02/data_snapshot_manifest.json
+!outputs/seasonal_prep/jpl_2019/2019-02/run_manifest.json
+!outputs/seasonal_prep/jpl_2019/2019-02/SHA256SUMS
+!outputs/seasonal_prep/jpl_2019/2019-08/
+!outputs/seasonal_prep/jpl_2019/2019-08/acquisition_summary.json
+!outputs/seasonal_prep/jpl_2019/2019-08/cleaning_qa.json
+!outputs/seasonal_prep/jpl_2019/2019-08/cleaning_sensitivity.json
+!outputs/seasonal_prep/jpl_2019/2019-08/boundary_current_audit.json
+!outputs/seasonal_prep/jpl_2019/2019-08/power_semantics_audit.json
+!outputs/seasonal_prep/jpl_2019/2019-08/station_15min_qa.json
+!outputs/seasonal_prep/jpl_2019/2019-08/issue_snapshot_qa.json
+!outputs/seasonal_prep/jpl_2019/2019-08/leakage_audit.json
+!outputs/seasonal_prep/jpl_2019/2019-08/data_snapshot_manifest.json
+!outputs/seasonal_prep/jpl_2019/2019-08/run_manifest.json
+!outputs/seasonal_prep/jpl_2019/2019-08/SHA256SUMS
+!outputs/seasonal_prep/jpl_2019/2019-11/
+!outputs/seasonal_prep/jpl_2019/2019-11/acquisition_summary.json
+!outputs/seasonal_prep/jpl_2019/2019-11/cleaning_qa.json
+!outputs/seasonal_prep/jpl_2019/2019-11/cleaning_sensitivity.json
+!outputs/seasonal_prep/jpl_2019/2019-11/boundary_current_audit.json
+!outputs/seasonal_prep/jpl_2019/2019-11/power_semantics_audit.json
+!outputs/seasonal_prep/jpl_2019/2019-11/station_15min_qa.json
+!outputs/seasonal_prep/jpl_2019/2019-11/issue_snapshot_qa.json
+!outputs/seasonal_prep/jpl_2019/2019-11/leakage_audit.json
+!outputs/seasonal_prep/jpl_2019/2019-11/data_snapshot_manifest.json
+!outputs/seasonal_prep/jpl_2019/2019-11/run_manifest.json
+!outputs/seasonal_prep/jpl_2019/2019-11/SHA256SUMS
+!outputs/seasonal_prep/jpl_2019/seasonal_prep_summary.csv
+!outputs/seasonal_prep/jpl_2019/seasonal_snapshot_manifest.json
+!outputs/seasonal_prep/jpl_2019/seasonal_prep_report.md
+!outputs/seasonal_prep/jpl_2019/SHA256SUMS
+
 # Literature full text: metadata/notes only by default
 literature/fulltext/**
 !literature/fulltext/README.md

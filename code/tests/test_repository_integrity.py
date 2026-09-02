@@ -15,6 +15,49 @@ def rows(relative: str) -> list[dict[str, str]]:
 
 
 class RepositoryIntegrityTest(unittest.TestCase):
+    def test_seasonal_prep_gitignore_allowlist_is_literal_and_exact(self) -> None:
+        months = ("2019-02", "2019-08", "2019-11")
+        month_files = (
+            "acquisition_summary.json",
+            "cleaning_qa.json",
+            "cleaning_sensitivity.json",
+            "boundary_current_audit.json",
+            "power_semantics_audit.json",
+            "station_15min_qa.json",
+            "issue_snapshot_qa.json",
+            "leakage_audit.json",
+            "data_snapshot_manifest.json",
+            "run_manifest.json",
+            "SHA256SUMS",
+        )
+        root_files = (
+            "seasonal_prep_summary.csv",
+            "seasonal_snapshot_manifest.json",
+            "seasonal_prep_report.md",
+            "SHA256SUMS",
+        )
+        expected = (
+            "!outputs/seasonal_prep/",
+            "!outputs/seasonal_prep/jpl_2019/",
+            *(
+                item
+                for month in months
+                for item in (
+                    f"!outputs/seasonal_prep/jpl_2019/{month}/",
+                    *(f"!outputs/seasonal_prep/jpl_2019/{month}/{name}" for name in month_files),
+                )
+            ),
+            *(f"!outputs/seasonal_prep/jpl_2019/{name}" for name in root_files),
+        )
+        lines = tuple(
+            line
+            for line in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+            if line.startswith("!outputs/seasonal_prep")
+        )
+        self.assertEqual(lines, expected)
+        self.assertEqual(sum(not line.endswith("/") for line in lines), 37)
+        self.assertFalse(any("*" in line for line in lines))
+
     def test_literature_ids_and_identifiers_are_unique(self) -> None:
         records = rows("literature/core_library.csv") + rows(
             "literature/frontier_watchlist.csv"

@@ -11,7 +11,11 @@ from pathlib import Path
 from typing import Literal
 
 from .acn_api import ACNClient, ACNQuery
-from .acn_jpl_month_config import MAY_2019, JPLMonthConfig
+from .acn_jpl_month_config import (
+    MAY_2019,
+    JPLMonthConfig,
+    is_canonical_jpl_month_config,
+)
 
 _REFERENCE_KEYS = frozenset(
     {
@@ -32,7 +36,8 @@ _REFERENCE_KEYS = frozenset(
         "token_stored",
     }
 )
-_VERIFIED_RESULT_SEAL = object()
+_REFERENCE_VALID_SEAL = object()
+_LIVE_PROBE_SEAL = object()
 
 
 class OfficialLocalMonthReferenceError(ValueError):
@@ -51,7 +56,7 @@ class OfficialLocalMonthTotalResult:
     utc_start_inclusive: str
     utc_end_exclusive: str
     request_count: Literal[1]
-    _verification_seal: object | None = field(
+    _reference_validation_seal: object | None = field(
         default=None,
         init=False,
         repr=False,
@@ -69,12 +74,24 @@ class OfficialLocalMonthTotalResult:
         repr=False,
         compare=False,
     )
+    _live_probe_seal: object | None = field(
+        default=None,
+        init=False,
+        repr=False,
+        compare=False,
+    )
+    _live_probe_binding: str | None = field(
+        default=None,
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
-    def is_verified_for(self, month: JPLMonthConfig) -> bool:
-        """Return whether this sealed result and saved file exactly match ``month``."""
+    def is_reference_valid_for(self, month: JPLMonthConfig) -> bool:
+        """Return whether the saved v1 JSON is sealed and exact for ``month``."""
 
         if not (
-            self._verification_seal is _VERIFIED_RESULT_SEAL
+            self._reference_validation_seal is _REFERENCE_VALID_SEAL
             and isinstance(self.reference_path, Path)
             and _result_matches_month(self, month)
         ):
@@ -89,6 +106,20 @@ class OfficialLocalMonthTotalResult:
         except (OSError, TypeError, ValueError):
             return False
         return current_sha256 == self._verified_reference_sha256
+
+    def is_live_verified_for(self, month: JPLMonthConfig) -> bool:
+        """Return whether this process completed the one-request official probe."""
+
+        return (
+            self.is_reference_valid_for(month)
+            and self._live_probe_seal is _LIVE_PROBE_SEAL
+            and self._live_probe_binding == _live_probe_binding(self)
+        )
+
+    def is_verified_for(self, month: JPLMonthConfig) -> bool:
+        """Compatibility name for the stronger live-probe verification level."""
+
+        return self.is_live_verified_for(month)
 
 
 def _reference_payload(month: JPLMonthConfig, total: int) -> dict[str, object]:
@@ -122,7 +153,7 @@ def _result_matches_month(
     month: JPLMonthConfig,
 ) -> bool:
     return (
-        isinstance(month, JPLMonthConfig)
+        is_canonical_jpl_month_config(month)
         and isinstance(result.total, int)
         and not isinstance(result.total, bool)
         and result.total >= 0
@@ -152,14 +183,32 @@ def _result_binding(result: OfficialLocalMonthTotalResult) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _seal_result(
+def _seal_reference_result(
     result: OfficialLocalMonthTotalResult,
     *,
     reference_sha256: str,
 ) -> OfficialLocalMonthTotalResult:
     object.__setattr__(result, "_verified_reference_sha256", reference_sha256)
     object.__setattr__(result, "_verified_result_binding", _result_binding(result))
-    object.__setattr__(result, "_verification_seal", _VERIFIED_RESULT_SEAL)
+    object.__setattr__(result, "_reference_validation_seal", _REFERENCE_VALID_SEAL)
+    return result
+
+
+def _live_probe_binding(result: OfficialLocalMonthTotalResult) -> str:
+    encoded = (f"{_result_binding(result)}\0{result._verified_reference_sha256 or ''}").encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _seal_live_probe_result(
+    result: OfficialLocalMonthTotalResult,
+    month: JPLMonthConfig,
+) -> OfficialLocalMonthTotalResult:
+    if not result.is_reference_valid_for(month):
+        raise OfficialLocalMonthReferenceError(
+            "live probe reference is not valid for the requested month"
+        )
+    object.__setattr__(result, "_live_probe_binding", _live_probe_binding(result))
+    object.__setattr__(result, "_live_probe_seal", _LIVE_PROBE_SEAL)
     return result
 
 
@@ -206,8 +255,12 @@ def load_verified_official_local_month_total(
     *,
     month: JPLMonthConfig = MAY_2019,
 ) -> OfficialLocalMonthTotalResult:
-    """Strictly validate an existing v1 aggregate reference without networking."""
+    """Validate saved v1 JSON without granting live-probe provenance."""
 
+    if not is_canonical_jpl_month_config(month):
+        raise OfficialLocalMonthReferenceError(
+            "official reference requires a canonical approved JPL month config"
+        )
     reference_path = Path(path)
     partial = reference_path.with_suffix(reference_path.suffix + ".partial")
     if partial.exists() or not reference_path.is_file():
@@ -237,8 +290,8 @@ def load_verified_official_local_month_total(
         utc_end_exclusive=month.utc_end.isoformat(),
         request_count=1,
     )
-    _seal_result(result, reference_sha256=hashlib.sha256(raw).hexdigest())
-    if not result.is_verified_for(month):
+    _seal_reference_result(result, reference_sha256=hashlib.sha256(raw).hexdigest())
+    if not result.is_reference_valid_for(month):
         raise OfficialLocalMonthReferenceError(
             "official local-month reference changed during validation"
         )
@@ -268,6 +321,10 @@ def probe_official_local_month_total(
 ) -> OfficialLocalMonthTotalResult:
     """Query one complete LA-local month exactly once and persist only total."""
 
+    if not is_canonical_jpl_month_config(month):
+        raise OfficialLocalMonthReferenceError(
+            "official probe requires a canonical approved JPL month config"
+        )
     reference_path = Path(destination)
     if (
         reference_path.exists()
@@ -286,7 +343,13 @@ def probe_official_local_month_total(
     total = client.fetch_total_once(query)
     payload = _reference_payload(month, total)
     _atomic_write_reference(reference_path, payload)
-    return load_verified_official_local_month_total(
+    result = load_verified_official_local_month_total(
         reference_path,
         month=month,
     )
+    _seal_live_probe_result(result, month)
+    if not result.is_live_verified_for(month):
+        raise OfficialLocalMonthReferenceError(
+            "official live probe provenance could not be verified"
+        )
+    return result

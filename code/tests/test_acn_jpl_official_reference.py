@@ -90,6 +90,8 @@ def test_probe_reads_one_meta_total_and_writes_secret_free_contract(
     assert result.utc_start_inclusive == MAY_2019.utc_start.isoformat()
     assert result.utc_end_exclusive == MAY_2019.utc_end.isoformat()
     assert result.request_count == 1
+    assert result.is_reference_valid_for(MAY_2019) is True
+    assert result.is_live_verified_for(MAY_2019) is True
     assert result.is_verified_for(MAY_2019) is True
     assert len(fake.calls) == 1
     call = fake.calls[0]
@@ -266,6 +268,8 @@ def test_manual_and_replaced_official_results_are_never_verified(tmp_path: Path)
         request_count=1,
     )
 
+    assert forged.is_reference_valid_for(MAY_2019) is False
+    assert forged.is_live_verified_for(MAY_2019) is False
     assert forged.is_verified_for(MAY_2019) is False
     assert str(destination) not in repr(forged)
 
@@ -275,7 +279,11 @@ def test_manual_and_replaced_official_results_are_never_verified(tmp_path: Path)
         ACNClient("token", session=fake),  # type: ignore[arg-type]
         authentic_path,
     )
+    assert authentic.is_reference_valid_for(MAY_2019) is True
+    assert authentic.is_live_verified_for(MAY_2019) is True
     assert authentic.is_verified_for(MAY_2019) is True
+    assert replace(authentic).is_reference_valid_for(MAY_2019) is False
+    assert replace(authentic).is_live_verified_for(MAY_2019) is False
     assert replace(authentic).is_verified_for(MAY_2019) is False
     assert replace(authentic, total=18).is_verified_for(MAY_2019) is False
     assert authentic.is_verified_for(jpl_month_config("2019-08")) is False
@@ -289,7 +297,9 @@ def test_strict_loader_verifies_existing_reference_without_network(tmp_path: Pat
 
     assert loaded.total == 23
     assert loaded.reference_path == destination
-    assert loaded.is_verified_for(MAY_2019) is True
+    assert loaded.is_reference_valid_for(MAY_2019) is True
+    assert loaded.is_live_verified_for(MAY_2019) is False
+    assert loaded.is_verified_for(MAY_2019) is False
     assert str(destination) not in repr(loaded)
 
 

@@ -352,6 +352,14 @@ def test_verified_scope_is_bound_to_the_exact_summarized_scope(
     verified = load_verified_complete_metadata(tmp_path, MAY_2019)
 
     assert verified.source_inventory_verified is True
+    assert verified.is_verified_for(MAY_2019) is True
+    assert verified.is_verified_for(jpl_month_config("2019-08")) is False
+    assert verified.month == MAY_2019.month
+    assert verified.local_start_inclusive == MAY_2019.local_start.isoformat()
+    assert verified.local_end_exclusive == MAY_2019.local_end.isoformat()
+    assert verified.utc_start_inclusive == MAY_2019.utc_start.isoformat()
+    assert verified.utc_end_exclusive == MAY_2019.utc_end.isoformat()
+    assert len(verified.config_fingerprint) == 64
     synthetic = summarize_complete_metadata([], MAY_2019)
     assert (
         replace(synthetic, source_evidence=verified.source_evidence).source_inventory_verified
@@ -372,3 +380,14 @@ def test_verified_scope_is_bound_to_the_exact_summarized_scope(
     assert isinstance(retained_record, dict)
     retained_record["sessionID"] = "tampered-after-verification"
     assert verified.source_inventory_verified is False
+
+
+def test_production_loader_rejects_replaced_month_config_before_source_scan(
+    tmp_path: Path,
+) -> None:
+    transferred = replace(MAY_2019, month="2019-08")
+
+    assert month_config_module.is_canonical_jpl_month_config(MAY_2019) is True
+    assert month_config_module.is_canonical_jpl_month_config(transferred) is False
+    with pytest.raises(CompleteMetadataError, match="canonical approved"):
+        load_verified_complete_metadata(tmp_path, transferred)

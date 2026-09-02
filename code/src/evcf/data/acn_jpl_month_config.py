@@ -38,6 +38,7 @@ CANONICAL_RECORD_INVENTORY_ALGORITHM = "sha256(sorted canonical-json(record)\\n)
 _GRID_SECONDS = 900
 _SCHEDULED_ISSUE_EDGE_BINS = 111
 _APPROVED_MONTHS = ("2019-02", "2019-05", "2019-08", "2019-11")
+_CANONICAL_MONTH_CONFIG_SEAL = object()
 _VERIFIED_SOURCE_EVIDENCE_SEAL = object()
 _VERIFIED_SCOPE_SEAL = object()
 
@@ -62,6 +63,18 @@ class JPLMonthConfig:
     expected_scheduled_issue_times: int
     grid_policy: str = "continuous_physical_utc"
     tiers: tuple[str, ...] = ("M1", "M2", "M3")
+    _factory_seal: object | None = field(
+        default=None,
+        init=False,
+        repr=False,
+        compare=False,
+    )
+    _factory_binding: str | None = field(
+        default=None,
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
 
 @dataclass(frozen=True)
@@ -93,6 +106,13 @@ class CompleteMetadataScope:
     right_boundary_count: int
     carry_in_session_count: int
     record_inventory_sha256: str
+    month: str
+    timezone_name: str
+    local_start_inclusive: str
+    local_end_exclusive: str
+    utc_start_inclusive: str
+    utc_end_exclusive: str
+    config_fingerprint: str
     source_evidence: CompleteMetadataSourceEvidence | None = None
     _verification_seal: object | None = field(
         default=None,
@@ -134,6 +154,21 @@ class CompleteMetadataScope:
         except (TypeError, ValueError):
             return False
 
+    def is_verified_for(self, config: JPLMonthConfig) -> bool:
+        """Return whether this production scope is bound to ``config`` exactly."""
+
+        return (
+            self.source_inventory_verified
+            and is_canonical_jpl_month_config(config)
+            and self.month == config.month
+            and self.timezone_name == config.timezone_name
+            and self.local_start_inclusive == config.local_start.isoformat()
+            and self.local_end_exclusive == config.local_end.isoformat()
+            and self.utc_start_inclusive == config.utc_start.isoformat()
+            and self.utc_end_exclusive == config.utc_end.isoformat()
+            and self.config_fingerprint == _month_config_binding(config)
+        )
+
 
 def _parse_month(month: str) -> tuple[int, int]:
     if (
@@ -155,6 +190,48 @@ def _following_month(year: int, month_number: int) -> tuple[int, int]:
     if month_number == 12:
         return year + 1, 1
     return year, month_number + 1
+
+
+def _month_config_binding(config: JPLMonthConfig) -> str:
+    payload = {
+        "month": config.month,
+        "timezone_name": config.timezone_name,
+        "local_start": config.local_start.isoformat(),
+        "local_end": config.local_end.isoformat(),
+        "utc_start": config.utc_start.isoformat(),
+        "utc_end": config.utc_end.isoformat(),
+        "day_count": config.day_count,
+        "day_windows": [
+            {
+                "local_start": window.local_start.isoformat(),
+                "local_end": window.local_end.isoformat(),
+                "utc_start": window.utc_start.isoformat(),
+                "utc_end": window.utc_end.isoformat(),
+            }
+            for window in config.day_windows
+        ],
+        "expected_bins": config.expected_bins,
+        "expected_scheduled_issue_times": config.expected_scheduled_issue_times,
+        "grid_policy": config.grid_policy,
+        "tiers": list(config.tiers),
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def is_canonical_jpl_month_config(config: object) -> bool:
+    """Return whether ``config`` is an unmodified approved factory contract."""
+
+    if not isinstance(config, JPLMonthConfig):
+        return False
+    try:
+        return (
+            config.month in _APPROVED_MONTHS
+            and config._factory_seal is _CANONICAL_MONTH_CONFIG_SEAL
+            and config._factory_binding == _month_config_binding(config)
+        )
+    except (AttributeError, TypeError, ValueError):
+        return False
 
 
 def _make_month_config(month: str) -> JPLMonthConfig:
@@ -180,7 +257,7 @@ def _make_month_config(month: str) -> JPLMonthConfig:
     if duration_seconds % _GRID_SECONDS:
         raise ValueError("JPL month does not align to the 900-second physical grid")
     expected_bins = duration_seconds // _GRID_SECONDS
-    return JPLMonthConfig(
+    config = JPLMonthConfig(
         month=month,
         timezone_name=JPL_TIMEZONE,
         local_start=local_start,
@@ -192,6 +269,9 @@ def _make_month_config(month: str) -> JPLMonthConfig:
         expected_bins=expected_bins,
         expected_scheduled_issue_times=expected_bins - _SCHEDULED_ISSUE_EDGE_BINS,
     )
+    object.__setattr__(config, "_factory_binding", _month_config_binding(config))
+    object.__setattr__(config, "_factory_seal", _CANONICAL_MONTH_CONFIG_SEAL)
+    return config
 
 
 FEB_2019 = _make_month_config("2019-02")
@@ -265,6 +345,13 @@ def _scope_binding(scope: CompleteMetadataScope) -> str:
         "left_boundary_count": scope.left_boundary_count,
         "right_boundary_count": scope.right_boundary_count,
         "carry_in_session_count": scope.carry_in_session_count,
+        "month": scope.month,
+        "timezone_name": scope.timezone_name,
+        "local_start_inclusive": scope.local_start_inclusive,
+        "local_end_exclusive": scope.local_end_exclusive,
+        "utc_start_inclusive": scope.utc_start_inclusive,
+        "utc_end_exclusive": scope.utc_end_exclusive,
+        "config_fingerprint": scope.config_fingerprint,
         "source_file_count": evidence.file_count,
         "source_valid_manifest_count": evidence.valid_manifest_count,
         "source_record_count": evidence.record_count,
@@ -352,6 +439,13 @@ def summarize_complete_metadata(
         right_boundary_count=len(local_keys - utc_keys),
         carry_in_session_count=len(ordered_carry),
         record_inventory_sha256=_canonical_record_inventory_sha256(materialized),
+        month=config.month,
+        timezone_name=config.timezone_name,
+        local_start_inclusive=config.local_start.isoformat(),
+        local_end_exclusive=config.local_end.isoformat(),
+        utc_start_inclusive=config.utc_start.isoformat(),
+        utc_end_exclusive=config.utc_end.isoformat(),
+        config_fingerprint=_month_config_binding(config),
     )
 
 
@@ -393,6 +487,8 @@ def load_verified_complete_metadata(
 ) -> CompleteMetadataScope:
     """Load only the frozen 42-file complete source and return a verified scope."""
 
+    if not is_canonical_jpl_month_config(config):
+        raise CompleteMetadataError("full metadata requires a canonical approved JPL month config")
     directory = Path(metadata_root)
     files = sorted(directory.glob("*.jsonl.gz")) if directory.is_dir() else []
     if len(files) != EXPECTED_COMPLETE_METADATA_FILE_COUNT:

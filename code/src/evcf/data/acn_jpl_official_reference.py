@@ -1,19 +1,15 @@
-"""One-request official count reference for the JPL May 2019 local month."""
+"""One-request official count reference for an approved JPL local month."""
 
 from __future__ import annotations
 
 import json
 import os
 from dataclasses import dataclass
-from datetime import timezone
 from pathlib import Path
+from typing import Literal
 
 from .acn_api import ACNClient, ACNQuery
-from .acn_jpl_gate0 import (
-    JPL_ANALYSIS_END,
-    JPL_ANALYSIS_START,
-    JPL_TIMEZONE,
-)
+from .acn_jpl_month_config import MAY_2019, JPLMonthConfig
 
 
 @dataclass(frozen=True)
@@ -22,6 +18,12 @@ class OfficialLocalMonthTotalResult:
 
     total: int
     reference_path: Path
+    month: str
+    local_start_inclusive: str
+    local_end_exclusive: str
+    utc_start_inclusive: str
+    utc_end_exclusive: str
+    request_count: Literal[1]
 
 
 def _atomic_write_reference(path: Path, payload: dict[str, object]) -> None:
@@ -42,21 +44,24 @@ def _atomic_write_reference(path: Path, payload: dict[str, object]) -> None:
 def probe_official_local_month_total(
     client: ACNClient,
     destination: str | Path,
+    *,
+    month: JPLMonthConfig = MAY_2019,
 ) -> OfficialLocalMonthTotalResult:
-    """Query the complete LA-local May window exactly once and persist only total."""
+    """Query one complete LA-local month exactly once and persist only total."""
 
     reference_path = Path(destination)
-    if reference_path.exists() or reference_path.with_suffix(
-        reference_path.suffix + ".partial"
-    ).exists():
+    if (
+        reference_path.exists()
+        or reference_path.with_suffix(reference_path.suffix + ".partial").exists()
+    ):
         raise FileExistsError(
             f"Refusing to overwrite existing official count reference: {reference_path}"
         )
 
     query = ACNQuery(
         site="jpl",
-        start=JPL_ANALYSIS_START,
-        end=JPL_ANALYSIS_END,
+        start=month.local_start,
+        end=month.local_end,
         timeseries=False,
     )
     total = client.fetch_total_once(query)
@@ -65,12 +70,12 @@ def probe_official_local_month_total(
         "source": "ACN-Data official REST API",
         "endpoint": query.endpoint,
         "site": "jpl",
-        "timezone": JPL_TIMEZONE,
+        "timezone": month.timezone_name,
         "interval_semantics": "[start,end)",
-        "local_start_inclusive": JPL_ANALYSIS_START.isoformat(),
-        "local_end_exclusive": JPL_ANALYSIS_END.isoformat(),
-        "utc_start_inclusive": JPL_ANALYSIS_START.astimezone(timezone.utc).isoformat(),
-        "utc_end_exclusive": JPL_ANALYSIS_END.astimezone(timezone.utc).isoformat(),
+        "local_start_inclusive": month.local_start.isoformat(),
+        "local_end_exclusive": month.local_end.isoformat(),
+        "utc_start_inclusive": month.utc_start.isoformat(),
+        "utc_end_exclusive": month.utc_end.isoformat(),
         "query_condition": query.condition,
         "official_meta_total": total,
         "request_count": 1,
@@ -78,4 +83,13 @@ def probe_official_local_month_total(
         "token_stored": False,
     }
     _atomic_write_reference(reference_path, payload)
-    return OfficialLocalMonthTotalResult(total=total, reference_path=reference_path)
+    return OfficialLocalMonthTotalResult(
+        total=total,
+        reference_path=reference_path,
+        month=month.month,
+        local_start_inclusive=month.local_start.isoformat(),
+        local_end_exclusive=month.local_end.isoformat(),
+        utc_start_inclusive=month.utc_start.isoformat(),
+        utc_end_exclusive=month.utc_end.isoformat(),
+        request_count=1,
+    )

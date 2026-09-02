@@ -103,7 +103,7 @@ class CompleteMetadataScope:
     inventory_sha256: str
 ```
 
-`jpl_month_config()` must derive offsets with `ZoneInfo`, derive bin counts from UTC duration, enforce the approved 2,884-bin November contract, and reject months outside the fixed allowlist in the seasonal controller. `summarize_complete_metadata()` must validate the frozen 42-file/33,638-record metadata inventory. Local-month membership is exactly `local_start <= connectionTime < local_end`; UTC-month diagnostics use the corresponding UTC calendar-month bounds; left/right differences are the two set differences; carry-in is exactly `connectionTime < local_start < disconnectTime`. The function returns private record tuples only to ignored local code.
+`jpl_month_config()` must derive offsets with `ZoneInfo`, derive bin counts from UTC duration, enforce the approved 2,884-bin November contract, and reject months outside the fixed allowlist in the seasonal controller. `summarize_complete_metadata()` is the pure classifier; the production loader separately validates the frozen 42-file/33,638-record metadata inventory and seals the resulting scope to the canonical month config, source digest, record digest, selected records, and counts. Only `scope.is_verified_for(config)` may cross the production acquisition gate; a synthetic, replaced, or wrong-month scope must fail. Local-month membership is exactly `local_start <= connectionTime < local_end`; UTC-month diagnostics use the corresponding UTC calendar-month bounds; left/right differences are the two set differences; carry-in is exactly `connectionTime < local_start < disconnectTime`. The function returns private record tuples only to ignored local code.
 
 - [ ] **Step 4: Generalize the official local-month total probe**
 
@@ -159,7 +159,7 @@ def probe_official_local_month_total(
     )
 ```
 
-The existing positional `destination` argument and May default must remain compatible. The probe may consume only `_meta.total`, and the existing atomic writer may persist only the secret-free aggregate reference—not the response body or token. Its returned month, exact bounds, and request count form a non-bypassable gate input; a result for another interval, or any request count other than one, is invalid.
+The existing positional `destination` argument and May default must remain compatible. The probe may consume only `_meta.total`, and the existing atomic writer may persist only the secret-free aggregate reference—not the response body or token. Trust is deliberately split: the strict offline loader may prove only that a saved reference has the exact closed schema/hash for a month; it cannot create live provenance. Only a successful current-process `fetch_total_once` followed by atomic reference validation may set the live-probe seal. Acquisition requires `result.is_live_verified_for(config)` (the compatibility alias `is_verified_for` has the same live meaning); synthetic JSON, a reloaded old reference, a replaced result, another interval, or any request count other than one is invalid.
 
 - [ ] **Step 5: Run focused and May regression tests**
 
@@ -241,13 +241,12 @@ def acquire_jpl_month(*, config: JPLMonthConfig, scope: CompleteMetadataScope,
                       raw_root: Path,
                       ts_client_factory: Callable[[], ACNClient]) -> MonthAcquisitionResult:
     official = official_probe(config)
-    reference_is_exact = (
-        official.month == config.month
-        and official.local_start_inclusive == config.local_start.isoformat()
-        and official.local_end_exclusive == config.local_end.isoformat()
-        and official.request_count == 1
+    gate_is_exact = (
+        scope.is_verified_for(config)
+        and official.is_live_verified_for(config)
+        and official.total == scope.local_month_session_count
     )
-    if not reference_is_exact or official.total != scope.local_month_session_count:
+    if not gate_is_exact:
         return MonthAcquisitionResult(
             month=config.month,
             status="METADATA_GATE_FAIL",
@@ -261,7 +260,7 @@ def acquire_jpl_month(*, config: JPLMonthConfig, scope: CompleteMetadataScope,
     # Only after this equality gate: create the /ts client and resumable daily/carry chunks.
 ```
 
-Tests must also reject probe results reporting zero or two requests, a result bound to a different month or interval, and a production controller that tries to omit the probe. Reuse HATEOAS iteration, `Retry-After`, five bounded attempts, exponential backoff, `.partial` replacement, SHA-256, manifest validation, and completed-chunk skipping. Default to one request stream and reject concurrency above two. Carry files use stable private ordinals such as `carry-0001.jsonl.gz`; no identifier appears in a file name or public output.
+Tests must also reject an offline-reference-only result, probe results reporting zero or two requests, a result bound to a different month or interval, an unsealed/wrong-month metadata scope, and a production controller that tries to omit the live probe. Reuse HATEOAS iteration, `Retry-After`, five bounded attempts, exponential backoff, `.partial` replacement, SHA-256, manifest validation, and completed-chunk skipping. Default to one request stream and reject concurrency above two. Carry files use stable private ordinals such as `carry-0001.jsonl.gz`; no identifier appears in a file name or public output.
 
 - [ ] **Step 4: Parameterize full-month QA without changing May defaults**
 
@@ -565,15 +564,15 @@ Require 42 JPL gzip files, 42 valid manifests, 33,638 records, unique `_id` and 
 
 - [ ] **Step 2: Run 2019-02 metadata probe then acquisition**
 
-Compute the local count from the validated complete metadata, invoke the official probe exactly once, and require exact equality before creating the `/ts` client; do not compare against a predeclared numeric expectation. Download 28 daily chunks and every independently identified carry-in ordinal, validate SHA/JSON/remote counts/linkage, and freeze the raw inventory.
+Compute the local count from the validated complete metadata, invoke the official probe exactly once in the current execution, require live provenance and exact equality before creating the `/ts` client, and do not compare against a predeclared numeric expectation. Download 28 daily chunks and every independently identified carry-in ordinal, validate SHA/JSON/remote counts/linkage, and freeze the raw inventory.
 
 - [ ] **Step 3: Run 2019-08 metadata probe then acquisition**
 
-Recompute the August local and carry-in counts from the validated complete metadata, invoke the official probe exactly once, and require exact equality without a predeclared numeric expectation. Download 31 daily chunks and the computed carry-in set, validate independently, and do not touch February.
+Recompute the August local and carry-in counts from the validated complete metadata, invoke the official probe exactly once in the current execution, and require live provenance plus exact equality without a predeclared numeric expectation. Download 31 daily chunks and the computed carry-in set, validate independently, and do not touch February.
 
 - [ ] **Step 4: Run 2019-11 metadata probe then acquisition**
 
-Recompute the November local and carry-in counts from the validated complete metadata, invoke the official probe exactly once, and require exact equality without a predeclared numeric expectation. Download 30 daily chunks and the computed carry-in set, validate independently, and do not touch February or August.
+Recompute the November local and carry-in counts from the validated complete metadata, invoke the official probe exactly once in the current execution, and require live provenance plus exact equality without a predeclared numeric expectation. Download 30 daily chunks and the computed carry-in set, validate independently, and do not touch February or August.
 
 - [ ] **Step 5: Independently audit all raw trees**
 

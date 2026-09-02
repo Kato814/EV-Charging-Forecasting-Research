@@ -54,6 +54,40 @@ def test_unauthorized_stops_before_environment_executor_or_directories(tmp_path:
     assert not raw_root.exists()
 
 
+def test_production_main_has_no_stdout_side_effect_before_literal_authorization(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[bool] = []
+
+    class _ForbiddenReconfigure:
+        def reconfigure(self, **kwargs: Any) -> None:
+            raise AssertionError(f"stdout must not be reconfigured: {kwargs}")
+
+    def fake_run(**kwargs: Any) -> int:
+        calls.append(kwargs["authorized"])
+        return 2
+
+    monkeypatch.setattr(seasonal_cli_module.sys, "stdout", _ForbiddenReconfigure())
+    monkeypatch.setattr(seasonal_cli_module, "run_seasonal_cli", fake_run)
+    metadata_root = tmp_path / "metadata-must-not-be-read"
+    raw_root = tmp_path / "raw-must-not-be-created"
+
+    status = seasonal_cli_module.main(
+        [
+            "--metadata-root",
+            str(metadata_root),
+            "--raw-root",
+            str(raw_root),
+        ]
+    )
+
+    assert status == 2
+    assert calls == [False]
+    assert not metadata_root.exists()
+    assert not raw_root.exists()
+
+
 def test_missing_token_is_static_and_stops_before_executor_or_files(tmp_path: Path) -> None:
     stdout = io.StringIO()
     calls: list[str] = []
@@ -175,6 +209,18 @@ def test_parser_has_literal_authorization_and_no_month_or_order_override() -> No
                 "2019-08",
             ]
         )
+
+
+def test_parser_uses_the_frozen_seasonal_raw_root_default() -> None:
+    args = build_parser().parse_args(
+        [
+            "--authorize-seasonal",
+            "--metadata-root",
+            "metadata",
+        ]
+    )
+
+    assert args.raw_root == Path("data/raw/acn/jpl/seasonal")
 
 
 @pytest.mark.parametrize("concurrency", [0, 3, True])

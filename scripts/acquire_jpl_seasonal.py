@@ -223,15 +223,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="literal opt-in required before any credential, metadata, client, or file access",
     )
     parser.add_argument("--metadata-root", type=Path, required=True)
-    parser.add_argument("--raw-root", type=Path, required=True)
+    parser.add_argument(
+        "--raw-root",
+        type=Path,
+        default=Path("data/raw/acn/jpl/seasonal"),
+    )
     parser.add_argument("--concurrency", type=int, choices=(1, 2), default=1)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
     args = build_parser().parse_args(argv)
+    if args.authorize_seasonal and hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     return run_seasonal_cli(
         authorized=args.authorize_seasonal,
         metadata_root=args.metadata_root,

@@ -41,7 +41,7 @@ from .acn_jpl_month_config import (
     jpl_month_config,
 )
 from .acn_jpl_official_reference import OfficialLocalMonthTotalResult
-from .acn_jpl_preparation import canonical_seasonal_inventory
+from .acn_jpl_preparation import canonical_seasonal_inventory, load_closed_json_object
 
 _CARRY_SCHEMA = "acn-jpl-seasonal-carry-in/v1"
 _RUN_SCHEMA = "acn-jpl-seasonal-month-ts-run/v1"
@@ -250,22 +250,6 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _closed_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    payload: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in payload:
-            raise ValueError("JSON object contains duplicate keys")
-        payload[key] = value
-    return payload
-
-
-def _load_closed_json(path: Path) -> object:
-    return json.loads(
-        path.read_text(encoding="utf-8"),
-        object_pairs_hook=_closed_json_object,
-    )
-
-
 def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".partial")
@@ -350,7 +334,10 @@ def _load_daily_sink(
             _private_identity_capture=capture,
         )
         try:
-            manifest = _load_closed_json(manifest_path)
+            manifest = load_closed_json_object(
+                manifest_path,
+                description="seasonal daily manifest",
+            )
         except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
             manifest = None
         if (
@@ -483,9 +470,12 @@ def _validated_carry(
     ):
         return None
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = load_closed_json_object(
+            manifest_path,
+            description="seasonal carry-in manifest",
+        )
         count, observed_pair = _read_carry(data_path)
-    except (OSError, EOFError, UnicodeError, json.JSONDecodeError, ACNSchemaError):
+    except (OSError, EOFError, UnicodeError, json.JSONDecodeError, ValueError, ACNSchemaError):
         return None
     expected = _carry_context(record, config, ordinal, data_path)
     expected_keys = set(expected) | {
@@ -653,7 +643,10 @@ def _official_reference_is_direct_state_file(
 
 def _progress_document_is_complete(path: Path, config: JPLMonthConfig) -> bool:
     try:
-        payload = _load_closed_json(path)
+        payload = load_closed_json_object(
+            path,
+            description="seasonal progress document",
+        )
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
         return False
     if not isinstance(payload, dict) or set(payload) != _PROGRESS_DOCUMENT_KEYS:

@@ -59,6 +59,7 @@ from .acn_jpl_preparation import (
     assert_raw_snapshot_unchanged,
     canonical_seasonal_inventory,
     iter_validated_raw_records,
+    load_closed_json_object,
     validate_raw_snapshot,
 )
 from .acn_jpl_seasonal_acquisition import (
@@ -550,22 +551,6 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _closed_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    payload: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in payload:
-            raise ValueError("JSON object contains duplicate keys")
-        payload[key] = value
-    return payload
-
-
-def _load_closed_json(path: Path) -> object:
-    return json.loads(
-        path.read_text(encoding="utf-8"),
-        object_pairs_hook=_closed_json_object,
-    )
-
-
 @dataclass
 class _ChunkScan:
     local_date: str
@@ -613,7 +598,10 @@ def _scan_daily_chunk(raw_root: Path, window: Any) -> _ChunkScan:
     manifest: dict[str, Any] | None = None
     if manifest_present:
         try:
-            candidate = _load_closed_json(manifest_path)
+            candidate = load_closed_json_object(
+                manifest_path,
+                description="daily chunk manifest",
+            )
         except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
             candidate = None
         if isinstance(candidate, dict):

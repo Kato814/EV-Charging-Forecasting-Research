@@ -1252,6 +1252,49 @@ def test_generic_month_qa_requires_closed_raw_and_state_documents(
     assert sentinel not in repr(result)
 
 
+@pytest.mark.parametrize(
+    "first_record_count",
+    [1, 999],
+    ids=["same-value", "last-value-correct"],
+)
+def test_generic_month_qa_rejects_duplicate_key_carry_manifests(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    first_record_count: int,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=1,
+    )
+    manifest = raw_root / "manifests" / "carry_in" / "carry-0001.manifest.json"
+    original = manifest.read_text(encoding="utf-8")
+    manifest.write_text(
+        original.replace(
+            "{",
+            f'{{\n  "record_count": {first_record_count},',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    acquisition_payload = acquisition.public_dict()
+    acquisition_payload["raw_inventory_sha256"] = (
+        full_qa_module.canonical_seasonal_inventory(raw_root).digest
+    )
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition_payload,
+    )
+
+    assert result.gate_status == "FAIL"
+    assert result.qa["gate"]["checks"]["raw_snapshot_valid"] is False
+    assert "RAW_SNAPSHOT_INVALID" in result.qa["gate"]["reason_codes"]
+
+
 def test_generic_month_qa_detects_raw_mutation_during_read_only_audit(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

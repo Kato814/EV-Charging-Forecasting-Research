@@ -548,6 +548,34 @@ def _is_nonnegative_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
+def _closed_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in payload:
+            raise ValueError("JSON object contains duplicate keys")
+        payload[key] = value
+    return payload
+
+
+def load_closed_json_object(
+    path: str | Path,
+    *,
+    description: str,
+) -> dict[str, Any]:
+    """Load one UTF-8 JSON object while rejecting every duplicate key."""
+
+    try:
+        payload = json.loads(
+            Path(path).read_text(encoding="utf-8"),
+            object_pairs_hook=_closed_json_object,
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+        raise RawSnapshotError(f"{description} is not valid closed JSON") from exc
+    if not isinstance(payload, dict):
+        raise RawSnapshotError(f"{description} root is not an object")
+    return payload
+
+
 def _read_json_object(path: Path, *, description: str) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -660,7 +688,10 @@ def _validate_seasonal_carry_chunk(
     data_path, manifest_path = _seasonal_carry_paths(raw_root, stem)
     if not data_path.is_file() or not manifest_path.is_file():
         raise RawSnapshotError("seasonal carry-in data or manifest is missing")
-    manifest = _read_json_object(manifest_path, description="seasonal carry-in manifest")
+    manifest = load_closed_json_object(
+        manifest_path,
+        description="seasonal carry-in manifest",
+    )
     records = list(_iter_gzip_objects(data_path))
     if len(records) != 1:
         raise RawSnapshotError("seasonal carry-in must contain exactly one record")

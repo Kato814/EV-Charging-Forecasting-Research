@@ -631,6 +631,62 @@ def test_default_daily_chunks_and_carry_resume_without_network_or_byte_changes(
     assert not list(root.rglob("*.partial"))
 
 
+@pytest.mark.parametrize(
+    "first_record_count",
+    [1, 999],
+    ids=["same-value", "last-value-correct"],
+)
+def test_carry_resume_redownloads_a_duplicate_key_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    first_record_count: int,
+) -> None:
+    config = jpl_month_config("2019-02")
+    scope = _verified_scope(
+        tmp_path / "metadata",
+        monkeypatch,
+        month=config.month,
+        carry_count=1,
+    )
+    root = tmp_path / config.month
+    reference = root / "state" / "official.json"
+    first = acquire_jpl_month(
+        authorized=True,
+        config=config,
+        scope=scope,
+        official_probe=_LiveProbe(reference, 3),
+        raw_root=root,
+        ts_client_factory=lambda: _FullClient(scope),
+    )
+    assert first.status == "COMPLETE"
+    manifest = root / "manifests" / "carry_in" / "carry-0001.manifest.json"
+    original = manifest.read_text(encoding="utf-8")
+    manifest.write_text(
+        original.replace(
+            "{",
+            f'{{\n  "record_count": {first_record_count},',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    reference.unlink()
+    resumed_client = _FullClient(scope)
+
+    resumed = acquire_jpl_month(
+        authorized=True,
+        config=config,
+        scope=scope,
+        official_probe=_LiveProbe(reference, 3),
+        raw_root=root,
+        ts_client_factory=lambda: resumed_client,
+    )
+
+    assert resumed.status == "COMPLETE"
+    assert len(resumed_client.queries) == 1
+    assert resumed_client.queries[0].session_id is not None
+    assert manifest.read_text(encoding="utf-8").count('"record_count"') == 1
+
+
 def test_unexpected_carry_ordinal_cannot_be_ignored_as_complete(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

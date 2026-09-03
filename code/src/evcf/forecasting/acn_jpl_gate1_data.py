@@ -338,9 +338,14 @@ _SEASONAL_MISSING_RATE_FIELDS = {
     "M2_pilot_sum": ("m2_rows", "pilot_sum_a"),
     "M2_pilot_mean": ("m2_rows", "pilot_mean_a"),
     "M3_current_current": ("m3_rows", "current_current_a"),
+    "M3_elapsed_charging_time_proxy": (
+        "m3_rows",
+        "elapsed_charging_time_proxy_s",
+    ),
     "M3_recent_current_mean": ("m3_rows", "recent_current_mean_a"),
     "M3_recent_current_peak": ("m3_rows", "recent_current_peak_a"),
     "M3_current_pilot": ("m3_rows", "current_pilot_a"),
+    "M3_cumulative_current_ah": ("m3_rows", "cumulative_current_ah"),
     "M3_known_requested_departure": (
         "m3_rows",
         "requested_departure_minutes_from_issue",
@@ -1593,8 +1598,16 @@ def _validate_m3_row(raw: dict[str, Any], ordinal: int) -> dict[str, Any]:
     row["anonymous_session_index"] = _as_nonnegative_int(
         row["anonymous_session_index"], f"{context} anonymous session"
     )
-    for name in ("elapsed_connection_s", "elapsed_charging_time_proxy_s"):
-        row[name] = _as_nonnegative_int(row[name], f"{context} {name}")
+    row["elapsed_connection_s"] = _as_nonnegative_int(
+        row["elapsed_connection_s"], f"{context} elapsed_connection_s"
+    )
+    elapsed_charging = _as_optional_int(
+        row["elapsed_charging_time_proxy_s"],
+        f"{context} elapsed_charging_time_proxy_s",
+    )
+    if elapsed_charging is not None and elapsed_charging < 0:
+        raise ValueError(f"{context} elapsed_charging_time_proxy_s must be nonnegative")
+    row["elapsed_charging_time_proxy_s"] = elapsed_charging
     for name in (
         "current_current_a",
         "recent_current_mean_a",
@@ -1604,9 +1617,14 @@ def _validate_m3_row(raw: dict[str, Any], ordinal: int) -> dict[str, Any]:
         "known_kwh_requested",
     ):
         row[name] = _as_optional_finite(row[name], f"{context} {name}")
-    row["cumulative_current_ah"] = _as_finite(
+    cumulative_current = _as_optional_finite(
         row["cumulative_current_ah"], f"{context} cumulative_current_ah"
     )
+    if cumulative_current is not None and cumulative_current < 0:
+        raise ValueError(f"{context} cumulative_current_ah must be nonnegative")
+    row["cumulative_current_ah"] = cumulative_current
+    if (elapsed_charging is None) != (cumulative_current is None):
+        raise ValueError(f"{context} cumulative trajectory missing fields disagree")
     for name in ("recent_current_observed_ratio", "cumulative_current_observed_ratio"):
         row[name] = _validate_optional_ratio(row[name], f"{context} {name}")
     modified = _as_optional_int(row["user_input_modified_utc_s"], f"{context} user input cutoff")

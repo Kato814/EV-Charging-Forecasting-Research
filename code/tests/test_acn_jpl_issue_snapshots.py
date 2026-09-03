@@ -113,6 +113,8 @@ def test_future_samples_and_late_user_inputs_are_not_visible() -> None:
     assert m3["known_kwh_requested"] == 10.0
     assert m3["requested_departure_minutes_from_issue"] == 120.0
     assert m3["user_input_modified_utc_s"] <= m3["issue_time_utc_s"]
+    assert m3["elapsed_charging_time_proxy_s"] == 10
+    assert m3["cumulative_current_ah"] == pytest.approx(20 / 3600)
     assert 999.0 not in tuple(value for value in m3.values() if isinstance(value, float))
 
 

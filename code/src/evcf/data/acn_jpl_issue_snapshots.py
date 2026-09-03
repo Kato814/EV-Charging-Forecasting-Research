@@ -976,6 +976,7 @@ def build_issue_snapshots(
                 session["connection"],
                 issue_epoch,
             )
+            cumulative_observed_seconds = int(cumulative["covered_seconds"])
             current_pilot = _held_value_at(
                 session["pilot_times"],
                 session["pilot_values"],
@@ -1007,7 +1008,11 @@ def build_issue_snapshots(
                     "issue_time_utc_s": issue_epoch,
                     "anonymous_session_index": session["anonymous_index"],
                     "elapsed_connection_s": issue_epoch - session["connection"],
-                    "elapsed_charging_time_proxy_s": cumulative["active_seconds"],
+                    "elapsed_charging_time_proxy_s": (
+                        cumulative["active_seconds"]
+                        if cumulative_observed_seconds
+                        else None
+                    ),
                     "current_current_a": session_current[session["anonymous_index"]],
                     "recent_current_mean_a": (
                         float(recent["area"]) / int(recent["covered_seconds"])
@@ -1016,9 +1021,13 @@ def build_issue_snapshots(
                     ),
                     "recent_current_peak_a": recent["peak"],
                     "recent_current_observed_ratio": (int(recent["covered_seconds"]) / BIN_SECONDS),
-                    "cumulative_current_ah": float(cumulative["area"]) / 3600,
+                    "cumulative_current_ah": (
+                        float(cumulative["area"]) / 3600
+                        if cumulative_observed_seconds
+                        else None
+                    ),
                     "cumulative_current_observed_ratio": (
-                        int(cumulative["covered_seconds"]) / (issue_epoch - session["connection"])
+                        cumulative_observed_seconds / (issue_epoch - session["connection"])
                         if issue_epoch > session["connection"]
                         else 0.0
                     ),
@@ -1180,9 +1189,15 @@ def build_issue_snapshots(
         missing_rates.update(
             {
                 "M3_current_current": _missing_rate(m3_rows, "current_current_a"),
+                "M3_elapsed_charging_time_proxy": _missing_rate(
+                    m3_rows, "elapsed_charging_time_proxy_s"
+                ),
                 "M3_recent_current_mean": _missing_rate(m3_rows, "recent_current_mean_a"),
                 "M3_recent_current_peak": _missing_rate(m3_rows, "recent_current_peak_a"),
                 "M3_current_pilot": _missing_rate(m3_rows, "current_pilot_a"),
+                "M3_cumulative_current_ah": _missing_rate(
+                    m3_rows, "cumulative_current_ah"
+                ),
                 "M3_known_requested_departure": _missing_rate(
                     m3_rows, "requested_departure_minutes_from_issue"
                 ),

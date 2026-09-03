@@ -1076,9 +1076,7 @@ def test_generic_month_qa_closes_dynamic_days_carry_linkage_and_raw_inventory(
     )
 
     integrity = result.qa["integrity"]
-    assert result.gate_status == (
-        "PASS_WITH_TRAJECTORY_QUARANTINE" if month == "2019-11" else "PASS"
-    )
+    assert result.gate_status == "PASS"
     assert result.artifact_names == ()
     assert integrity["daily_chunks"]["expected"] == config.day_count
     assert integrity["daily_chunks"]["valid"] == config.day_count
@@ -1118,7 +1116,7 @@ def test_november_generic_qa_accepts_one_synchronized_trajectory_quarantine(
         acquisition_result=acquisition,
     )
 
-    assert result.gate_status == "PASS_WITH_TRAJECTORY_QUARANTINE"
+    assert result.gate_status == "PASS"
     assert result.qa["integrity"]["combined"]["observed_records"] == 4
     quarantine = result.qa["trajectory_quarantine"]
     assert quarantine == {
@@ -1148,6 +1146,11 @@ def test_november_generic_qa_accepts_one_synchronized_trajectory_quarantine(
             "rate": 1.0,
         }
         assert series["field_coverage"] == {
+            "count": 4,
+            "denominator": 4,
+            "rate": 1.0,
+        }
+        assert series["analysis_field_coverage"] == {
             "count": 3,
             "denominator": 4,
             "rate": 0.75,
@@ -1207,9 +1210,15 @@ def test_generic_month_qa_fails_when_both_invalid_container_rates_exceed_limit(
     assert checks["current_invalid_rate_at_most_limit"] is False
     assert checks["pilot_invalid_rate_at_most_limit"] is False
     for field in ("chargingCurrent", "pilotSignal"):
-        rate = result.qa["quality"]["series"][field]["invalid_container_rate"]
+        series = result.qa["quality"]["series"][field]
+        rate = series["invalid_container_rate"]
         assert rate == pytest.approx(1 / 3, abs=1e-8)
         assert math.isfinite(rate)
+        assert series["field_coverage"]["count"] == 2
+        assert series["raw_field_coverage"]["count"] == 2
+        assert series["raw_field_coverage"]["denominator"] == 3
+        assert series["raw_field_coverage"]["rate"] == pytest.approx(2 / 3)
+        assert series["analysis_field_coverage"] == series["raw_field_coverage"]
 
 
 @pytest.mark.parametrize(

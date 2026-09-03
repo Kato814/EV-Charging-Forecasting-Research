@@ -297,6 +297,9 @@ def test_m3_retains_connected_quarantine_row_with_missing_trajectory_features() 
     assert row["recent_current_mean_a"] is None
     assert row["recent_current_peak_a"] is None
     assert row["recent_current_observed_ratio"] == 0.0
-    assert row["cumulative_current_ah"] == 0.0
+    assert row["elapsed_charging_time_proxy_s"] is None
+    assert row["cumulative_current_ah"] is None
     assert row["cumulative_current_observed_ratio"] == 0.0
     assert row["current_pilot_a"] is None
+    assert snapshots.qa["missing_rates"]["M3_elapsed_charging_time_proxy"] > 0
+    assert snapshots.qa["missing_rates"]["M3_cumulative_current_ah"] > 0

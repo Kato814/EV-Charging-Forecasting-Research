@@ -4,6 +4,7 @@ import gzip
 import hashlib
 import io
 import json
+import math
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
 from pathlib import Path
@@ -141,11 +142,7 @@ def test_authorized_cli_uses_fixed_order_continues_after_failure_and_redacts(
         return {
             "month": month,
             "acquisition_status": "COMPLETE",
-            "qa_status": (
-                "PASS_WITH_TRAJECTORY_QUARANTINE"
-                if trajectory_count
-                else "PASS"
-            ),
+            "qa_status": "PASS",
             "valid_daily_chunks": day_count,
             "local_records": 3,
             "carry_records": 1,
@@ -173,7 +170,7 @@ def test_authorized_cli_uses_fixed_order_continues_after_failure_and_redacts(
     assert [item["status"] for item in payload["months"]] == [
         "PASS",
         "FAIL",
-        "PASS_WITH_TRAJECTORY_QUARANTINE",
+        "PASS",
     ]
     assert payload["months"][1]["reason_codes"] == ["UNEXPECTED_ERROR"]
     assert payload["status"] == "INCOMPLETE"
@@ -235,7 +232,7 @@ def test_parser_uses_the_frozen_seasonal_raw_root_default() -> None:
     assert args.raw_root == Path("data/raw/acn/jpl/seasonal")
 
 
-def test_november_safe_result_propagates_trajectory_quarantine_status() -> None:
+def test_november_safe_result_keeps_acquisition_status_pass() -> None:
     config = jpl_month_config("2019-11")
 
     result = seasonal_cli_module._safe_month_result(
@@ -243,7 +240,7 @@ def test_november_safe_result_propagates_trajectory_quarantine_status() -> None:
         {
             "month": config.month,
             "acquisition_status": "COMPLETE",
-            "qa_status": "PASS_WITH_TRAJECTORY_QUARANTINE",
+            "qa_status": "PASS",
             "valid_daily_chunks": config.day_count,
             "local_records": 1353,
             "carry_records": 1,
@@ -255,10 +252,58 @@ def test_november_safe_result_propagates_trajectory_quarantine_status() -> None:
         },
     )
 
-    assert result["status"] == "PASS_WITH_TRAJECTORY_QUARANTINE"
+    assert result["status"] == "PASS"
+    assert result["qa_status"] == "PASS"
     assert result["trajectory_quarantine_count"] == 1
     assert result["trajectory_quarantine_rate"] == 1 / 1354
     assert result["full_session_quarantine_count"] == 0
+
+
+_MISSING = object()
+
+
+@pytest.mark.parametrize(
+    "field",
+    (
+        "trajectory_quarantine_count",
+        "trajectory_quarantine_rate",
+        "full_session_quarantine_count",
+    ),
+)
+@pytest.mark.parametrize(
+    "bad_value",
+    (_MISSING, "1", True, -1, float("nan"), float("inf"), float("-inf")),
+    ids=("missing", "string", "bool", "negative", "nan", "positive_inf", "negative_inf"),
+)
+def test_safe_month_result_fails_closed_on_malformed_quarantine_fields(
+    field: str,
+    bad_value: object,
+) -> None:
+    config = jpl_month_config("2019-02")
+    payload: dict[str, object] = {
+        "month": config.month,
+        "acquisition_status": "COMPLETE",
+        "qa_status": "PASS",
+        "valid_daily_chunks": config.day_count,
+        "local_records": 3,
+        "carry_records": 0,
+        "combined_records": 3,
+        "trajectory_quarantine_count": 0,
+        "trajectory_quarantine_rate": 0.0,
+        "full_session_quarantine_count": 0,
+        "reason_codes": [],
+    }
+    if bad_value is _MISSING:
+        payload.pop(field)
+    else:
+        payload[field] = bad_value
+
+    result = seasonal_cli_module._safe_month_result(config, payload)
+
+    assert result["status"] == "FAIL"
+    assert result["qa_status"] == "FAIL"
+    assert result["reason_codes"] == ["UNEXPECTED_ERROR"]
+    assert math.isfinite(float(result["trajectory_quarantine_rate"]))
 
 
 @pytest.mark.parametrize("concurrency", [0, 3, True])
@@ -468,7 +513,7 @@ def test_default_cli_pipeline_is_fully_offline_and_never_persists_token(
     assert [item["status"] for item in payload["months"]] == [
         "PASS",
         "PASS",
-        "PASS_WITH_TRAJECTORY_QUARANTINE",
+        "PASS",
     ]
     assert client.official_calls == 3
     immutable_paths = tuple(

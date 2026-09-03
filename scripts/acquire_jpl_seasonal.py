@@ -59,6 +59,20 @@ def _nonnegative(value: object) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
 
 
+def _validated_nonnegative(value: object) -> tuple[int, bool]:
+    valid = type(value) is int and value >= 0
+    return (int(value), True) if valid else (0, False)
+
+
+def _validated_rate(value: object) -> tuple[float, bool]:
+    valid = (
+        type(value) in (int, float)
+        and math.isfinite(float(value))
+        and 0.0 <= float(value) <= 1.0
+    )
+    return (float(value), True) if valid else (0.0, False)
+
+
 def _default_month_executor(
     *,
     config: JPLMonthConfig,
@@ -138,20 +152,17 @@ def _safe_month_result(config: JPLMonthConfig, value: object) -> dict[str, Any]:
     local_records = _nonnegative(payload.get("local_records"))
     carry_records = _nonnegative(payload.get("carry_records"))
     combined_records = _nonnegative(payload.get("combined_records"))
-    trajectory_count = _nonnegative(payload.get("trajectory_quarantine_count"))
-    full_count = _nonnegative(payload.get("full_session_quarantine_count"))
-    raw_rate = payload.get("trajectory_quarantine_rate")
-    trajectory_rate = (
-        float(raw_rate)
-        if type(raw_rate) in (int, float) and math.isfinite(float(raw_rate))
-        else 0.0
+    trajectory_count, trajectory_count_valid = _validated_nonnegative(
+        payload.get("trajectory_quarantine_count")
+    )
+    full_count, full_count_valid = _validated_nonnegative(
+        payload.get("full_session_quarantine_count")
+    )
+    trajectory_rate, trajectory_rate_valid = _validated_rate(
+        payload.get("trajectory_quarantine_rate")
     )
     expected_trajectory_count = 1 if config.month == "2019-11" else 0
-    expected_qa_status = (
-        "PASS_WITH_TRAJECTORY_QUARANTINE"
-        if expected_trajectory_count
-        else "PASS"
-    )
+    expected_qa_status = "PASS"
     expected_rate = (
         expected_trajectory_count / combined_records if combined_records else 0.0
     )
@@ -159,6 +170,9 @@ def _safe_month_result(config: JPLMonthConfig, value: object) -> dict[str, Any]:
         payload.get("month") == config.month
         and acquisition_status == "COMPLETE"
         and qa_status == expected_qa_status
+        and trajectory_count_valid
+        and full_count_valid
+        and trajectory_rate_valid
         and valid_daily == config.day_count
         and combined_records == local_records + carry_records
         and trajectory_count == expected_trajectory_count
@@ -170,7 +184,7 @@ def _safe_month_result(config: JPLMonthConfig, value: object) -> dict[str, Any]:
         reasons = ["UNEXPECTED_ERROR"]
     return {
         "month": config.month,
-        "status": expected_qa_status if passed else "FAIL",
+        "status": "PASS" if passed else "FAIL",
         "qa_status": qa_status if passed else "FAIL",
         "valid_daily_chunks": valid_daily,
         "failed_daily_chunks": config.day_count - min(valid_daily, config.day_count),
@@ -244,10 +258,7 @@ def run_seasonal_cli(
     payload = {
         "status": (
             "COMPLETE"
-            if all(
-                item["status"] in {"PASS", "PASS_WITH_TRAJECTORY_QUARANTINE"}
-                for item in results
-            )
+            if all(item["status"] == "PASS" for item in results)
             else "INCOMPLETE"
         ),
         "months": results,

@@ -486,9 +486,11 @@ def _month_documents(month: str, expected_bins: int, scheduled: int) -> dict[str
                     "M2_pilot_sum",
                     "M2_pilot_mean",
                     "M3_current_current",
+                    "M3_elapsed_charging_time_proxy",
                     "M3_recent_current_mean",
                     "M3_recent_current_peak",
                     "M3_current_pilot",
+                    "M3_cumulative_current_ah",
                     "M3_known_requested_departure",
                     "M3_known_requested_energy",
                 )
@@ -1135,7 +1137,7 @@ def test_prepare_month_runs_real_clean_station_snapshot_feature_projection(
                                     "denominator": 3,
                                     "rate": 1.0,
                                 },
-                                "field_coverage": {
+                                "analysis_field_coverage": {
                                     "count": 3,
                                     "denominator": 3,
                                     "rate": 1.0,
@@ -1151,7 +1153,7 @@ def test_prepare_month_runs_real_clean_station_snapshot_feature_projection(
                                     "denominator": 3,
                                     "rate": 1.0,
                                 },
-                                "field_coverage": {
+                                "analysis_field_coverage": {
                                     "count": 3,
                                     "denominator": 3,
                                     "rate": 1.0,

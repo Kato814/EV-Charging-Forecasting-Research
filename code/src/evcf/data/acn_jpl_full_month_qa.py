@@ -2188,14 +2188,21 @@ def generate_month_timeseries_qa(
     excluded_trajectories = (
         quarantine.trajectory_quarantine_count + quarantine.full_session_quarantine_count
     )
-    for series_public in (current, pilot):
-        raw_coverage = dict(series_public["field_coverage"])
-        adjusted_count = int(raw_coverage["count"]) - excluded_trajectories
-        series_public["raw_field_coverage"] = raw_coverage
-        series_public["field_coverage"] = {
-            "count": adjusted_count,
+    for accumulator, series_public in (
+        (quality.current, current),
+        (quality.pilot, pilot),
+    ):
+        raw_count = expected_total - accumulator.invalid_containers
+        analysis_count = raw_count - excluded_trajectories
+        series_public["raw_field_coverage"] = {
+            "count": raw_count,
             "denominator": expected_total,
-            "rate": _safe_rate(adjusted_count, expected_total),
+            "rate": _safe_rate(raw_count, expected_total),
+        }
+        series_public["analysis_field_coverage"] = {
+            "count": analysis_count,
+            "denominator": expected_total,
+            "rate": _safe_rate(analysis_count, expected_total),
         }
     acquisition_valid = _seasonal_acquisition_matches(
         acquisition_result,
@@ -2307,14 +2314,7 @@ def generate_month_timeseries_qa(
         reasons.append("TRAJECTORY_QUARANTINE_POLICY_FAIL")
     if not checks["full_session_quarantine_absent"]:
         reasons.append("FULL_SESSION_QUARANTINE_REQUIRED")
-    if all(checks.values()):
-        gate_status = (
-            "PASS_WITH_TRAJECTORY_QUARANTINE"
-            if quarantine.trajectory_quarantine_count
-            else "PASS"
-        )
-    else:
-        gate_status = "FAIL"
+    gate_status = "PASS" if all(checks.values()) else "FAIL"
     inventory_for_public = after if after is not None else before
     integrity_status = (
         "PASS"
@@ -2371,13 +2371,10 @@ def generate_month_timeseries_qa(
             },
             "checks": checks,
             "reason_codes": reasons,
-            "ready_for_cleaning": gate_status in {
-                "PASS",
-                "PASS_WITH_TRAJECTORY_QUARANTINE",
-            },
+            "ready_for_cleaning": gate_status == "PASS",
             "ready_for_15_min": (
                 "YES_CURRENT_PROXY_ONLY"
-                if gate_status in {"PASS", "PASS_WITH_TRAJECTORY_QUARANTINE"}
+                if gate_status == "PASS"
                 else "NO"
             ),
             "gate1_ready": "NO",

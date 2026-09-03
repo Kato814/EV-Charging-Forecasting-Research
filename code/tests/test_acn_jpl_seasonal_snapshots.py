@@ -89,7 +89,7 @@ def _full_station_rows(config: JPLMonthConfig) -> list[dict[str, object]]:
     ]
 
 
-def _seasonal_adapter_inputs() -> tuple[
+def _seasonal_adapter_inputs(*, empty_trajectory: bool = False) -> tuple[
     JPLMonthConfig,
     list[dict[str, object]],
     IssueSnapshotResult,
@@ -111,6 +111,9 @@ def _seasonal_adapter_inputs() -> tuple[
         },
         "user_inputs": [],
     }
+    if empty_trajectory:
+        session["current"] = {"timestamps_utc_s": [], "values": []}
+        session["pilot"] = {"timestamps_utc_s": [], "values": []}
     result = build_issue_snapshots(
         station_rows,
         [session],
@@ -324,6 +327,27 @@ def test_seasonal_adapter_builds_a_sealed_readonly_m1_to_m3_snapshot() -> None:
         snapshot.artifact_sha256["manual"] = "f" * 64
     with pytest.raises(TypeError):
         snapshot.m3_rows[0]["current_current_a"] = 10.0
+
+
+def test_empty_connected_trajectory_stays_missing_through_gate1_pooling() -> None:
+    config, station_rows, result = _seasonal_adapter_inputs(empty_trajectory=True)
+
+    row = result.m3_rows[0]
+    assert row["elapsed_charging_time_proxy_s"] is None
+    assert row["cumulative_current_ah"] is None
+    assert result.qa["missing_rates"]["M3_elapsed_charging_time_proxy"] > 0
+    assert result.qa["missing_rates"]["M3_cumulative_current_ah"] > 0
+
+    snapshot = gate1_data.build_seasonal_gate1_snapshot(result, station_rows, config=config)
+    block = build_feature_blocks(snapshot, tiers=config.tiers)["M3"]
+    for field in ("elapsed_charging_time_proxy_s", "cumulative_current_ah"):
+        count = block.feature_names.index(f"m3_{field}_count")
+        mean = block.feature_names.index(f"m3_{field}_mean")
+        missing = block.feature_names.index(f"m3_{field}_missing_count")
+        assert block.values[0, count] == 0.0
+        assert block.values[0, missing] == 1.0
+        assert block.values[0, mean] != block.values[0, mean]
+        assert bool(block.nullable_mask[mean]) is True
 
 
 def test_seasonal_adapter_compacts_scheduled_incomplete_issue_rows() -> None:

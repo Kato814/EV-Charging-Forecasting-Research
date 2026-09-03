@@ -80,9 +80,11 @@ _SNAPSHOT_MISSING_RATE_NAMES = (
     "M2_pilot_sum",
     "M2_pilot_mean",
     "M3_current_current",
+    "M3_elapsed_charging_time_proxy",
     "M3_recent_current_mean",
     "M3_recent_current_peak",
     "M3_current_pilot",
+    "M3_cumulative_current_ah",
     "M3_known_requested_departure",
     "M3_known_requested_energy",
 )
@@ -3159,8 +3161,8 @@ def _compact_month_documents(
                 "pilot": pilot_quality.get("raw_field_coverage"),
             },
             "analysis_field_coverage": {
-                "current": current_quality.get("field_coverage"),
-                "pilot": pilot_quality.get("field_coverage"),
+                "current": current_quality.get("analysis_field_coverage"),
+                "pilot": pilot_quality.get("analysis_field_coverage"),
             },
         },
         "analysis_window": {
@@ -3612,7 +3614,7 @@ def _prepare_verified_month(
         raw_root=raw,
         acquisition_result=acquisition,
     )
-    if full_qa.gate_status not in {"PASS", "PASS_WITH_TRAJECTORY_QUARANTINE"}:
+    if full_qa.gate_status != "PASS":
         raise SeasonalPreparationError("ACQUISITION_QA_GATE_FAILED")
     acquisition_qa = full_qa.qa
 
@@ -3649,15 +3651,10 @@ def _prepare_verified_month(
         ),
         denominator_sessions=expected_sessions,
     )
-    expected_qa_status = (
-        "PASS_WITH_TRAJECTORY_QUARANTINE"
-        if quarantine_audit.trajectory_quarantine_count
-        else "PASS"
-    )
     if (
         not quarantine_audit.approved
         or quarantine_audit.full_session_quarantine_count
-        or full_qa.gate_status != expected_qa_status
+        or full_qa.gate_status != "PASS"
         or acquisition_qa.get("trajectory_quarantine")
         != quarantine_audit.public_dict()
     ):

@@ -1013,10 +1013,10 @@ def _validate_seasonal_snapshot_structure(
         raise ValueError("seasonal artifact hashes must use the sealed mapping type")
     if snapshot.feature_index_names != ("issue_time_utc_s",):
         raise ValueError("seasonal feature index schema is invalid")
-    issue_count = config.expected_scheduled_issue_times
+    scheduled_issue_count = config.expected_scheduled_issue_times
     expected_issues = np.arange(
         int(config.utc_start.timestamp()) + 86_400,
-        int(config.utc_start.timestamp()) + 86_400 + issue_count * 900,
+        int(config.utc_start.timestamp()) + 86_400 + scheduled_issue_count * 900,
         900,
         dtype=np.int64,
     )
@@ -1038,14 +1038,23 @@ def _validate_seasonal_snapshot_structure(
         "station_current_mean_a": np.asarray(snapshot.station_current_mean_a),
         "station_valid_90": np.asarray(snapshot.station_valid_90),
     }
+    issue_times = arrays["issue_times"]
+    if issue_times.ndim != 1:
+        raise ValueError("seasonal issue_times array schema is invalid")
+    formal_issue_count = len(issue_times)
+    if not 0 < formal_issue_count <= scheduled_issue_count:
+        raise ValueError("seasonal formal issue count is outside the scheduled universe")
     expected_specs = {
-        "issue_times": (np.dtype(np.int64), (issue_count,)),
+        "issue_times": (np.dtype(np.int64), (formal_issue_count,)),
         "horizons": (np.dtype(np.int16), (len(EXPECTED_HORIZONS_MINUTES),)),
-        "labels": (np.dtype(np.float32), (issue_count, len(EXPECTED_HORIZONS_MINUTES))),
-        "m1_history": (np.dtype(np.float32), (issue_count, 96)),
-        "m1_history_mask": (np.dtype(np.bool_), (issue_count, 96)),
-        "m1_calendar": (np.dtype(np.int16), (issue_count, 3)),
-        "m2_current_state": (np.dtype(np.float32), (issue_count, 6)),
+        "labels": (
+            np.dtype(np.float32),
+            (formal_issue_count, len(EXPECTED_HORIZONS_MINUTES)),
+        ),
+        "m1_history": (np.dtype(np.float32), (formal_issue_count, 96)),
+        "m1_history_mask": (np.dtype(np.bool_), (formal_issue_count, 96)),
+        "m1_calendar": (np.dtype(np.int16), (formal_issue_count, 3)),
+        "m2_current_state": (np.dtype(np.float32), (formal_issue_count, 6)),
         "station_times": (np.dtype(np.int64), (config.expected_bins,)),
         "station_current_mean_a": (np.dtype(np.float32), (config.expected_bins,)),
         "station_valid_90": (np.dtype(np.bool_), (config.expected_bins,)),
@@ -1053,8 +1062,13 @@ def _validate_seasonal_snapshot_structure(
     for name, (dtype, shape) in expected_specs.items():
         if arrays[name].dtype != dtype or arrays[name].shape != shape:
             raise ValueError(f"seasonal {name} array schema is invalid")
-    if not np.array_equal(arrays["issue_times"], expected_issues):
-        raise ValueError("seasonal issue times do not match the canonical month boundary")
+    if np.any(np.diff(issue_times) <= 0):
+        raise ValueError("seasonal formal issue times must be strictly increasing")
+    scheduled_positions = np.searchsorted(expected_issues, issue_times)
+    if np.any(scheduled_positions >= scheduled_issue_count) or not np.array_equal(
+        expected_issues[scheduled_positions], issue_times
+    ):
+        raise ValueError("seasonal issue times are outside the canonical scheduled grid")
     if not np.array_equal(arrays["station_times"], expected_station):
         raise ValueError("seasonal station times do not match the continuous UTC grid")
     if not np.array_equal(
@@ -1071,8 +1085,8 @@ def _validate_seasonal_snapshot_structure(
         np.isinf(arrays["station_current_mean_a"])
     ):
         raise ValueError("seasonal numeric feature sources cannot contain infinity")
-    if len(snapshot.m3_by_issue_time) != issue_count:
-        raise ValueError("seasonal M3 groups do not cover every canonical issue time")
+    if len(snapshot.m3_by_issue_time) != formal_issue_count:
+        raise ValueError("seasonal M3 groups do not cover every formal issue time")
     if any(type(row) is not _FrozenMapping for row in snapshot.m3_rows) or any(
         type(row) is not _FrozenMapping for group in snapshot.m3_by_issue_time for row in group
     ):
@@ -1911,17 +1925,25 @@ def _validate_seasonal_issue_qa(
     *,
     config: JPLMonthConfig,
     m3_row_count: int,
+    station_current: np.ndarray,
+    station_valid: np.ndarray,
 ) -> None:
     qa = result.qa
     _require_exact_keys(qa, _SEASONAL_ISSUE_QA_KEYS, "seasonal issue snapshot QA")
-    issue_count = config.expected_scheduled_issue_times
-    for name in (
-        "issue_times",
-        "formal_issue_times",
-        "incomplete_label_issue_times",
-    ):
-        _as_nonnegative_int(qa[name], f"seasonal issue snapshot QA {name}")
-    expected_samples = {tier: issue_count for tier in config.tiers}
+    scheduled_issue_count = config.expected_scheduled_issue_times
+    reported_issue_count = _as_nonnegative_int(
+        qa["issue_times"], "seasonal issue snapshot QA issue_times"
+    )
+    formal_issue_count = _as_nonnegative_int(
+        qa["formal_issue_times"], "seasonal issue snapshot QA formal_issue_times"
+    )
+    incomplete_issue_count = _as_nonnegative_int(
+        qa["incomplete_label_issue_times"],
+        "seasonal issue snapshot QA incomplete_label_issue_times",
+    )
+    if not 0 < formal_issue_count <= scheduled_issue_count:
+        raise ValueError("seasonal formal issue count is outside the scheduled universe")
+    expected_samples = {tier: formal_issue_count for tier in config.tiers}
     samples = qa["samples"]
     if not isinstance(samples, Mapping):
         raise TypeError("seasonal issue snapshot QA samples must be a mapping")
@@ -1929,13 +1951,32 @@ def _validate_seasonal_issue_qa(
     for tier in config.tiers:
         _as_nonnegative_int(samples[tier], f"seasonal issue snapshot QA {tier} samples")
     expected_shapes = {
-        "M1_history": [issue_count, 96],
-        "M2_dense": [issue_count, 6],
+        "M1_history": [formal_issue_count, 96],
+        "M2_dense": [formal_issue_count, 6],
         "M3_ragged_rows": m3_row_count,
         "M3_session_feature_width": 11,
-        "labels": [issue_count, len(result.policy.horizons_minutes)],
+        "labels": [formal_issue_count, len(result.policy.horizons_minutes)],
     }
-    expected_labels = {str(horizon): issue_count for horizon in result.policy.horizons_minutes}
+    lookback_bins = result.policy.lookback_minutes // 15
+    label_validity = {
+        str(horizon): np.asarray(
+            [
+                bool(station_valid[lookback_bins + issue_index + horizon // 15 - 1])
+                and math.isfinite(
+                    float(station_current[lookback_bins + issue_index + horizon // 15 - 1])
+                )
+                for issue_index in range(scheduled_issue_count)
+            ],
+            dtype=np.bool_,
+        )
+        for horizon in result.policy.horizons_minutes
+    }
+    expected_labels = {
+        horizon: int(np.count_nonzero(validity)) for horizon, validity in label_validity.items()
+    }
+    expected_formal_count = int(
+        np.count_nonzero(np.logical_and.reduce(tuple(label_validity.values())))
+    )
     ragged = qa["ragged_rows"]
     labels_by_horizon = qa["valid_labels_by_horizon"]
     shapes = qa["shapes"]
@@ -2051,9 +2092,9 @@ def _validate_seasonal_issue_qa(
         qa["schema_version"] != "acn-jpl-issue-snapshot-qa/v1"
         or qa["lookback_minutes"] != result.policy.lookback_minutes
         or qa["horizons_minutes"] != list(result.policy.horizons_minutes)
-        or qa["issue_times"] != issue_count
-        or qa["formal_issue_times"] != issue_count
-        or qa["incomplete_label_issue_times"] != 0
+        or reported_issue_count != scheduled_issue_count
+        or formal_issue_count != expected_formal_count
+        or incomplete_issue_count != scheduled_issue_count - formal_issue_count
         or qa["samples"] != expected_samples
         or qa["ragged_rows"] != {"M3": m3_row_count}
         or qa["valid_labels_by_horizon"] != expected_labels
@@ -2111,21 +2152,32 @@ def _validate_seasonal_dense_rows(
     np.ndarray,
     np.ndarray,
     np.ndarray,
+    np.ndarray,
 ]:
-    issue_count = config.expected_scheduled_issue_times
-    if not (len(result.m1_rows) == len(result.m2_rows) == len(result.label_rows) == issue_count):
-        raise ValueError("seasonal M1, M2, and label row counts must cover every issue time")
+    scheduled_issue_count = config.expected_scheduled_issue_times
+    formal_issue_count = len(result.m1_rows)
+    if not (
+        formal_issue_count > 0
+        and len(result.m2_rows) == formal_issue_count
+        and len(result.label_rows) == formal_issue_count
+    ):
+        raise ValueError("seasonal M1, M2, and label rows must cover the formal issue subset")
     start_epoch = int(config.utc_start.timestamp())
     first_issue = start_epoch + result.policy.lookback_minutes * 60
-    expected_issue_times = np.arange(
+    scheduled_issue_times = np.arange(
         first_issue,
-        first_issue + issue_count * result.policy.issue_step_minutes * 60,
+        first_issue + scheduled_issue_count * result.policy.issue_step_minutes * 60,
         result.policy.issue_step_minutes * 60,
         dtype=np.int64,
     )
     expected_last = int(config.utc_end.timestamp()) - max(result.policy.horizons_minutes) * 60
-    if len(expected_issue_times) != issue_count or int(expected_issue_times[-1]) != expected_last:
+    if (
+        len(scheduled_issue_times) != scheduled_issue_count
+        or int(scheduled_issue_times[-1]) != expected_last
+    ):
         raise ValueError("canonical seasonal issue-time boundary is inconsistent")
+    formal_issue_times: list[int] = []
+    scheduled_issue_indexes: list[int] = []
     histories: list[list[float]] = []
     history_masks: list[list[bool]] = []
     calendars: list[list[int]] = []
@@ -2143,13 +2195,23 @@ def _validate_seasonal_dense_rows(
         _require_exact_keys(m1, _SEASONAL_M1_KEYS, f"seasonal M1 row {position}")
         _require_exact_keys(m2, _SEASONAL_M2_KEYS, f"seasonal M2 row {position}")
         _require_exact_keys(label, _SEASONAL_LABEL_KEYS, f"seasonal label row {position}")
-        issue = int(expected_issue_times[position])
+        row_issue_indexes = tuple(
+            _as_nonnegative_int(row["issue_index"], f"{name} issue index")
+            for name, row in (("M1", m1), ("M2", m2), ("label", label))
+        )
+        scheduled_issue_index = row_issue_indexes[0]
+        if (
+            any(value != scheduled_issue_index for value in row_issue_indexes[1:])
+            or scheduled_issue_index >= scheduled_issue_count
+            or (scheduled_issue_indexes and scheduled_issue_index <= scheduled_issue_indexes[-1])
+        ):
+            raise ValueError("seasonal dense rows must use one strictly increasing scheduled index")
+        issue = int(scheduled_issue_times[scheduled_issue_index])
         for name, row in (("M1", m1), ("M2", m2), ("label", label)):
-            if (
-                _as_nonnegative_int(row["issue_index"], f"{name} issue index") != position
-                or _as_int(row["issue_time_utc_s"], f"{name} issue time") != issue
-            ):
+            if _as_int(row["issue_time_utc_s"], f"{name} issue time") != issue:
                 raise ValueError(f"seasonal {name} row is not aligned to its issue time")
+        scheduled_issue_indexes.append(scheduled_issue_index)
+        formal_issue_times.append(issue)
         if any(m2[name] != m1[name] for name in m1_shared_keys):
             raise ValueError("seasonal M1 and M2 shared fields differ")
         local = datetime.fromtimestamp(issue, tz=timezone.utc).astimezone(zone)
@@ -2223,7 +2285,8 @@ def _validate_seasonal_dense_rows(
         current_states.append(current_state)
         labels.append(label_values)
     return (
-        expected_issue_times,
+        np.asarray(formal_issue_times, dtype=np.int64),
+        np.asarray(scheduled_issue_indexes, dtype=np.int64),
         np.asarray(result.policy.horizons_minutes, dtype=np.int16),
         np.asarray(labels, dtype=np.float32),
         np.asarray(histories, dtype=np.float32),
@@ -2237,15 +2300,27 @@ def _validate_seasonal_m3_rows(
     result: IssueSnapshotResult,
     *,
     issue_times: np.ndarray,
+    scheduled_issue_indexes: np.ndarray,
     current_states: np.ndarray,
 ) -> tuple[tuple[Mapping[str, Any], ...], tuple[tuple[Mapping[str, Any], ...], ...]]:
+    if scheduled_issue_indexes.dtype != np.dtype(np.int64) or scheduled_issue_indexes.shape != (
+        len(issue_times),
+    ):
+        raise ValueError("seasonal scheduled issue-index mapping is invalid")
+    compact_positions = {
+        int(scheduled_index): position
+        for position, scheduled_index in enumerate(scheduled_issue_indexes)
+    }
+    if len(compact_positions) != len(issue_times):
+        raise ValueError("seasonal scheduled issue-index mapping contains duplicates")
     normalized: list[Mapping[str, Any]] = []
     previous: tuple[int, int] | None = None
     for ordinal, source in enumerate(result.m3_rows):
         row = _validate_m3_row(dict(source), ordinal)
         issue_index = int(row["issue_index"])
-        if issue_index >= len(issue_times) or int(row["issue_time_utc_s"]) != int(
-            issue_times[issue_index]
+        compact_position = compact_positions.get(issue_index)
+        if compact_position is None or int(row["issue_time_utc_s"]) != int(
+            issue_times[compact_position]
         ):
             raise ValueError("seasonal M3 row is not aligned to its issue index")
         key = (issue_index, int(row["anonymous_session_index"]))
@@ -2333,16 +2408,23 @@ def build_seasonal_gate1_snapshot(
     if result.m4_rows:
         raise ValueError("seasonal snapshots cannot contain M4 material")
     _validate_seasonal_table_schemas(result)
-    try:
-        _validate_seasonal_issue_qa(result, config=config, m3_row_count=len(result.m3_rows))
-    except TypeError as exc:
-        raise ValueError("seasonal issue snapshot QA schema is invalid") from exc
     issue_snapshot_sha256 = verified_issue_snapshot_sha256(result)
     materialized_station, station_times, station_current, station_valid = (
         _validate_seasonal_station_rows(station_rows, config=config)
     )
+    try:
+        _validate_seasonal_issue_qa(
+            result,
+            config=config,
+            m3_row_count=len(result.m3_rows),
+            station_current=station_current,
+            station_valid=station_valid,
+        )
+    except TypeError as exc:
+        raise ValueError("seasonal issue snapshot QA schema is invalid") from exc
     (
         issue_times,
+        scheduled_issue_indexes,
         horizons,
         labels,
         history,
@@ -2358,6 +2440,7 @@ def build_seasonal_gate1_snapshot(
     m3_rows, m3_groups = _validate_seasonal_m3_rows(
         result,
         issue_times=issue_times,
+        scheduled_issue_indexes=scheduled_issue_indexes,
         current_states=current_state,
     )
     artifact_values: Mapping[str, Any] = {

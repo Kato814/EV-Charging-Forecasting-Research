@@ -121,6 +121,49 @@ def _seasonal_adapter_inputs() -> tuple[
     return config, station_rows, result
 
 
+def _seasonal_subset_adapter_inputs() -> tuple[
+    JPLMonthConfig,
+    list[dict[str, object]],
+    IssueSnapshotResult,
+]:
+    config = jpl_month_config("2019-02")
+    station_rows = _full_station_rows(config)
+    invalid_target_position = 96 + 10
+    station_rows[invalid_target_position].update(
+        {
+            "station_current_mean_a": None,
+            "station_current_peak_a": None,
+            "observed_coverage_ratio": 0.0,
+            "valid_bin_80": False,
+            "valid_bin_90": False,
+            "valid_bin_95": False,
+        }
+    )
+    first_issue = config.utc_start + timedelta(hours=24)
+    session = {
+        "anonymous_session_index": 7,
+        "connection_utc_s": _epoch(first_issue - timedelta(hours=1)),
+        "disconnect_utc_s": _epoch(config.utc_end),
+        "current": {
+            "timestamps_utc_s": [_epoch(first_issue - timedelta(seconds=10))],
+            "values": [2.0],
+        },
+        "pilot": {
+            "timestamps_utc_s": [_epoch(first_issue - timedelta(seconds=10))],
+            "values": [8.0],
+        },
+        "user_inputs": [],
+    }
+    result = build_issue_snapshots(
+        station_rows,
+        [session],
+        start_utc=config.utc_start,
+        end_utc=config.utc_end,
+        policy=SnapshotPolicy(tiers=config.tiers),
+    )
+    return config, station_rows, result
+
+
 def _m4_mentions(value: object, path: tuple[str, ...] = ()) -> list[tuple[str, Any]]:
     found: list[tuple[str, Any]] = []
     if isinstance(value, Mapping):
@@ -281,6 +324,117 @@ def test_seasonal_adapter_builds_a_sealed_readonly_m1_to_m3_snapshot() -> None:
         snapshot.artifact_sha256["manual"] = "f" * 64
     with pytest.raises(TypeError):
         snapshot.m3_rows[0]["current_current_a"] = 10.0
+
+
+def test_seasonal_adapter_compacts_scheduled_incomplete_issue_rows() -> None:
+    config, station_rows, result = _seasonal_subset_adapter_inputs()
+    scheduled_count = config.expected_scheduled_issue_times
+    scheduled_indexes = [int(row["issue_index"]) for row in result.m1_rows]
+
+    assert result.qa["issue_times"] == scheduled_count
+    assert result.qa["formal_issue_times"] == scheduled_count - 4
+    assert result.qa["incomplete_label_issue_times"] == 4
+    assert set(range(scheduled_count)) - set(scheduled_indexes) == {3, 7, 9, 10}
+    assert result.qa["valid_labels_by_horizon"] == {
+        "15": scheduled_count - 1,
+        "30": scheduled_count - 1,
+        "60": scheduled_count - 1,
+        "120": scheduled_count - 1,
+        "240": scheduled_count,
+    }
+
+    snapshot = gate1_data.build_seasonal_gate1_snapshot(
+        result,
+        station_rows,
+        config=config,
+    )
+    blocks = build_feature_blocks(snapshot, tiers=config.tiers)
+    expected_issue_times = [int(row["issue_time_utc_s"]) for row in result.m1_rows]
+
+    assert len(gate1_data.verified_snapshot_provenance(snapshot)) == 64
+    assert list(snapshot.issue_times) == expected_issue_times
+    assert snapshot.labels.shape == (scheduled_count - 4, 5)
+    assert {tier: block.values.shape[0] for tier, block in blocks.items()} == {
+        "M1": scheduled_count - 4,
+        "M2": scheduled_count - 4,
+        "M3": scheduled_count - 4,
+    }
+    compact_position = scheduled_indexes.index(11)
+    assert snapshot.m3_by_issue_time[compact_position][0]["issue_index"] == 11
+    assert (
+        snapshot.m3_by_issue_time[compact_position][0]["issue_time_utc_s"]
+        == snapshot.issue_times[compact_position]
+    )
+    attacked_issue_times = snapshot.issue_times.copy()
+    attacked_issue_times[1] = attacked_issue_times[0]
+    attacked_issue_times.flags.writeable = False
+    object.__setattr__(snapshot, "issue_times", attacked_issue_times)
+    with pytest.raises(ValueError, match="strictly increasing"):
+        gate1_data.verified_snapshot_provenance(snapshot)
+
+
+def test_seasonal_dense_rows_reject_duplicate_scheduled_issue_indexes() -> None:
+    config, station_rows, result = _seasonal_subset_adapter_inputs()
+    _materialized, _times, station_current, station_valid = (
+        gate1_data._validate_seasonal_station_rows(station_rows, config=config)
+    )
+    duplicate_position = next(
+        position for position, row in enumerate(result.m1_rows) if int(row["issue_index"]) == 11
+    )
+    previous_index = int(result.m1_rows[duplicate_position - 1]["issue_index"])
+    previous_time = int(result.m1_rows[duplicate_position - 1]["issue_time_utc_s"])
+    replacements: dict[str, tuple[dict[str, object], ...]] = {}
+    for table_name in ("m1_rows", "m2_rows", "label_rows"):
+        rows = [dict(row) for row in getattr(result, table_name)]
+        rows[duplicate_position]["issue_index"] = previous_index
+        rows[duplicate_position]["issue_time_utc_s"] = previous_time
+        replacements[table_name] = tuple(rows)
+
+    with pytest.raises(ValueError, match="strictly increasing scheduled index"):
+        gate1_data._validate_seasonal_dense_rows(
+            replace(result, **replacements),
+            config=config,
+            station_current=station_current,
+            station_valid=station_valid,
+        )
+
+
+def test_seasonal_m3_rows_reject_an_excluded_scheduled_issue_index() -> None:
+    config, station_rows, result = _seasonal_subset_adapter_inputs()
+    _materialized, _times, station_current, station_valid = (
+        gate1_data._validate_seasonal_station_rows(station_rows, config=config)
+    )
+    (
+        issue_times,
+        scheduled_issue_indexes,
+        _horizons,
+        _labels,
+        _history,
+        _history_mask,
+        _calendar,
+        current_states,
+    ) = gate1_data._validate_seasonal_dense_rows(
+        result,
+        config=config,
+        station_current=station_current,
+        station_valid=station_valid,
+    )
+    rows = [dict(row) for row in result.m3_rows]
+    attacked_position = next(
+        position for position, row in enumerate(rows) if int(row["issue_index"]) == 11
+    )
+    rows[attacked_position]["issue_index"] = 10
+    rows[attacked_position]["issue_time_utc_s"] = (
+        int(config.utc_start.timestamp()) + 86_400 + 10 * 900
+    )
+
+    with pytest.raises(ValueError, match="not aligned to its issue index"):
+        gate1_data._validate_seasonal_m3_rows(
+            replace(result, m3_rows=tuple(rows)),
+            issue_times=issue_times,
+            scheduled_issue_indexes=scheduled_issue_indexes,
+            current_states=current_states,
+        )
 
 
 @pytest.mark.parametrize(

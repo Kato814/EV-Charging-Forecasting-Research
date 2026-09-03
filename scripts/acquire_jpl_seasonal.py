@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 from collections.abc import Callable, Mapping
@@ -47,6 +48,8 @@ _SAFE_REASON_CODES = frozenset(
         "ACQUISITION_INCOMPLETE",
         "INVALID_CONTAINER_RATE_EXCEEDED",
         "TIMESTAMP_QUALITY_FAIL",
+        "TRAJECTORY_QUARANTINE_POLICY_FAIL",
+        "FULL_SESSION_QUARANTINE_REQUIRED",
         "UNEXPECTED_ERROR",
     }
 )
@@ -98,6 +101,7 @@ def _default_month_executor(
     carry = integrity.get("carry_in", {})
     combined = integrity.get("combined", {})
     qa_gate = qa_result.qa.get("gate", {})
+    quarantine = qa_result.qa.get("trajectory_quarantine", {})
     reasons = tuple(acquisition.reason_codes) + tuple(qa_gate.get("reason_codes", ()))
     return {
         "month": config.month,
@@ -107,6 +111,11 @@ def _default_month_executor(
         "local_records": local.get("observed_records"),
         "carry_records": carry.get("observed_records"),
         "combined_records": combined.get("observed_records"),
+        "trajectory_quarantine_count": quarantine.get("trajectory_quarantine_count"),
+        "trajectory_quarantine_rate": quarantine.get("trajectory_quarantine_rate"),
+        "full_session_quarantine_count": quarantine.get(
+            "full_session_quarantine_count"
+        ),
         "reason_codes": reasons,
     }
 
@@ -129,24 +138,48 @@ def _safe_month_result(config: JPLMonthConfig, value: object) -> dict[str, Any]:
     local_records = _nonnegative(payload.get("local_records"))
     carry_records = _nonnegative(payload.get("carry_records"))
     combined_records = _nonnegative(payload.get("combined_records"))
+    trajectory_count = _nonnegative(payload.get("trajectory_quarantine_count"))
+    full_count = _nonnegative(payload.get("full_session_quarantine_count"))
+    raw_rate = payload.get("trajectory_quarantine_rate")
+    trajectory_rate = (
+        float(raw_rate)
+        if type(raw_rate) in (int, float) and math.isfinite(float(raw_rate))
+        else 0.0
+    )
+    expected_trajectory_count = 1 if config.month == "2019-11" else 0
+    expected_qa_status = (
+        "PASS_WITH_TRAJECTORY_QUARANTINE"
+        if expected_trajectory_count
+        else "PASS"
+    )
+    expected_rate = (
+        expected_trajectory_count / combined_records if combined_records else 0.0
+    )
     passed = (
         payload.get("month") == config.month
         and acquisition_status == "COMPLETE"
-        and qa_status == "PASS"
+        and qa_status == expected_qa_status
         and valid_daily == config.day_count
         and combined_records == local_records + carry_records
+        and trajectory_count == expected_trajectory_count
+        and full_count == 0
+        and math.isclose(trajectory_rate, expected_rate, rel_tol=1e-12, abs_tol=1e-12)
         and not reasons
     )
     if not passed and not reasons:
         reasons = ["UNEXPECTED_ERROR"]
     return {
         "month": config.month,
-        "status": "PASS" if passed else "FAIL",
+        "status": expected_qa_status if passed else "FAIL",
+        "qa_status": qa_status if passed else "FAIL",
         "valid_daily_chunks": valid_daily,
         "failed_daily_chunks": config.day_count - min(valid_daily, config.day_count),
         "local_records": local_records,
         "carry_records": carry_records,
         "combined_records": combined_records,
+        "trajectory_quarantine_count": trajectory_count,
+        "trajectory_quarantine_rate": trajectory_rate,
+        "full_session_quarantine_count": full_count,
         "reason_codes": reasons,
     }
 
@@ -201,12 +234,22 @@ def run_seasonal_cli(
                 "local_records": 0,
                 "carry_records": 0,
                 "combined_records": 0,
+                "trajectory_quarantine_count": 0,
+                "trajectory_quarantine_rate": 0.0,
+                "full_session_quarantine_count": 0,
                 "reason_codes": ["UNEXPECTED_ERROR"],
             }
         results.append(safe_result)
 
     payload = {
-        "status": "COMPLETE" if all(item["status"] == "PASS" for item in results) else "INCOMPLETE",
+        "status": (
+            "COMPLETE"
+            if all(
+                item["status"] in {"PASS", "PASS_WITH_TRAJECTORY_QUARANTINE"}
+                for item in results
+            )
+            else "INCOMPLETE"
+        ),
         "months": results,
     }
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True), file=stdout)

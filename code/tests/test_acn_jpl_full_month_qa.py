@@ -953,6 +953,7 @@ def _generic_scope_and_acquisition(
     month: str,
     carry_count: int,
     invalid_first: bool = False,
+    anomaly_mode: str | None = None,
 ) -> tuple[Any, CompleteMetadataScope, Path, Any]:
     config = jpl_month_config(month)
     local_records = [
@@ -962,6 +963,23 @@ def _generic_scope_and_acquisition(
     if invalid_first:
         local_records[0].pop("chargingCurrent")
         local_records[0].pop("pilotSignal")
+    if anomaly_mode is not None:
+        base = config.utc_start + timedelta(days=1, minutes=1)
+        current_times = [base, base + timedelta(hours=1), base + timedelta(seconds=4)]
+        pilot_times = (
+            list(current_times)
+            if anomaly_mode == "synchronized"
+            else [base, base + timedelta(seconds=4), base + timedelta(seconds=8)]
+        )
+        local_records[0]["disconnectTime"] = _stamp(base + timedelta(hours=2))
+        local_records[0]["chargingCurrent"] = {
+            "timestamps": [_stamp(value) for value in current_times],
+            "current": [16.0] * 3,
+        }
+        local_records[0]["pilotSignal"] = {
+            "timestamps": [_stamp(value) for value in pilot_times],
+            "pilot": [16.0] * 3,
+        }
     carry_records = [
         _record(index + 500, config.utc_start - timedelta(hours=index + 1))
         for index in range(carry_count)
@@ -1047,6 +1065,7 @@ def test_generic_month_qa_closes_dynamic_days_carry_linkage_and_raw_inventory(
         monkeypatch,
         month=month,
         carry_count=carry_count,
+        anomaly_mode="synchronized" if month == "2019-11" else None,
     )
 
     result = generate_month_timeseries_qa(
@@ -1057,7 +1076,9 @@ def test_generic_month_qa_closes_dynamic_days_carry_linkage_and_raw_inventory(
     )
 
     integrity = result.qa["integrity"]
-    assert result.gate_status == "PASS"
+    assert result.gate_status == (
+        "PASS_WITH_TRAJECTORY_QUARANTINE" if month == "2019-11" else "PASS"
+    )
     assert result.artifact_names == ()
     assert integrity["daily_chunks"]["expected"] == config.day_count
     assert integrity["daily_chunks"]["valid"] == config.day_count
@@ -1076,6 +1097,90 @@ def test_generic_month_qa_closes_dynamic_days_carry_linkage_and_raw_inventory(
         rate = result.qa["quality"]["series"][field]["invalid_container_rate"]
         assert math.isfinite(rate)
         assert rate <= 0.10
+
+
+def test_november_generic_qa_accepts_one_synchronized_trajectory_quarantine(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-11",
+        carry_count=1,
+        anomaly_mode="synchronized",
+    )
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+    assert result.gate_status == "PASS_WITH_TRAJECTORY_QUARANTINE"
+    assert result.qa["integrity"]["combined"]["observed_records"] == 4
+    quarantine = result.qa["trajectory_quarantine"]
+    assert quarantine == {
+        "denominator_sessions": 4,
+        "trajectory_quarantine_count": 1,
+        "trajectory_quarantine_rate": 0.25,
+        "full_session_quarantine_count": 0,
+        "full_session_quarantine_rate": 0.0,
+        "synchronized_utc_nonmonotonic_sessions": 1,
+        "raw_trajectory_anomalies_retained": True,
+        "raw_manifest_modified": False,
+        "raw_timestamps_modified": False,
+        "sort_repair_applied": False,
+        "timestamp_shift_seconds": 0,
+        "interpolation_applied": False,
+        "whole_current_pilot_trajectory_unobservable": True,
+        "coverage_denominator_includes_quarantined": True,
+        "structural_metadata_retained_count": 1,
+        "connected_state_retained_count": 1,
+    }
+    quality = result.qa["quality"]
+    for field in ("chargingCurrent", "pilotSignal"):
+        series = quality["series"][field]
+        assert series["raw_field_coverage"] == {
+            "count": 4,
+            "denominator": 4,
+            "rate": 1.0,
+        }
+        assert series["field_coverage"] == {
+            "count": 3,
+            "denominator": 4,
+            "rate": 0.75,
+        }
+        assert series["nonmonotonic_pairs"] == 1
+        assert series["nonmonotonic_affected_sessions"] == 1
+    assert result.qa["gate"]["checks"]["approved_trajectory_quarantine"] is True
+    assert result.qa["gate"]["checks"]["zero_unquarantined_nonmonotonic_anomalies"] is True
+    assert result.qa["gate"]["reason_codes"] == []
+
+
+def test_unsynchronized_utc_reversal_remains_a_fail_closed_timestamp_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-11",
+        carry_count=0,
+        anomaly_mode="unsynchronized",
+    )
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+    assert result.gate_status == "FAIL"
+    assert result.qa["trajectory_quarantine"]["trajectory_quarantine_count"] == 0
+    assert "TIMESTAMP_QUALITY_FAIL" in result.qa["gate"]["reason_codes"]
 
 
 def test_generic_month_qa_fails_when_both_invalid_container_rates_exceed_limit(

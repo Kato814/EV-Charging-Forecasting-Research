@@ -68,6 +68,11 @@ from .acn_jpl_seasonal_acquisition import (
     _progress_document_is_complete,
     verify_month_acquisition_result,
 )
+from .acn_jpl_trajectory_quarantine import (
+    NO_QUARANTINE,
+    build_trajectory_quarantine_audit,
+    quarantine_record_for_analysis,
+)
 
 EXPECTED_TOTAL_SESSION_COUNT = EXPECTED_ANALYSIS_SESSION_COUNT + EXPECTED_CARRY_IN_SESSION_COUNT
 INVALID_CHARGING_CURRENT_RATE_LIMIT = 0.10
@@ -2090,6 +2095,10 @@ def generate_month_timeseries_qa(
     expected_local = scope.local_month_session_count
     expected_carry = scope.carry_in_session_count
     expected_total = expected_local + expected_carry
+    metadata_by_pair = {
+        (str(record["_id"]), str(record["sessionID"])): record
+        for record in (*scope.local_month_records, *scope.carry_in_records)
+    }
     root = Path(raw_root)
     before: InventorySnapshot | None = None
     after: InventorySnapshot | None = None
@@ -2101,6 +2110,7 @@ def generate_month_timeseries_qa(
     local_inventory = _PrivateInventory()
     carry_inventory = _PrivateInventory()
     quality = _QualityAccumulator()
+    quarantine_decisions = []
     try:
         partial_count = sum(path.is_file() for path in root.rglob("*.partial"))
         before = canonical_seasonal_inventory(root)
@@ -2117,6 +2127,16 @@ def generate_month_timeseries_qa(
             inventory = carry_inventory if raw_record.chunk_kind == "carry_in" else local_inventory
             inventory.add(raw_record.payload)
             quality.add(raw_record.payload)
+            pair = (
+                raw_record.payload.get("_id"),
+                raw_record.payload.get("sessionID"),
+            )
+            decision, _projected = quarantine_record_for_analysis(
+                raw_record.payload,
+                expected_metadata=metadata_by_pair.get(pair),
+            )
+            if decision.action != NO_QUARANTINE:
+                quarantine_decisions.append(decision)
         after = canonical_seasonal_inventory(root)
         assert_raw_snapshot_unchanged(before, after)
         inventory_unchanged = True
@@ -2158,8 +2178,25 @@ def generate_month_timeseries_qa(
         "failed_or_incomplete": config.day_count - valid_daily,
     }
     quality_public = quality.public_dict(expected_total)
+    quarantine = build_trajectory_quarantine_audit(
+        config,
+        tuple(quarantine_decisions),
+        denominator_sessions=expected_total,
+    )
     current = quality_public["series"][_CURRENT_FIELD]
     pilot = quality_public["series"][_PILOT_FIELD]
+    excluded_trajectories = (
+        quarantine.trajectory_quarantine_count + quarantine.full_session_quarantine_count
+    )
+    for series_public in (current, pilot):
+        raw_coverage = dict(series_public["field_coverage"])
+        adjusted_count = int(raw_coverage["count"]) - excluded_trajectories
+        series_public["raw_field_coverage"] = raw_coverage
+        series_public["field_coverage"] = {
+            "count": adjusted_count,
+            "denominator": expected_total,
+            "rate": _safe_rate(adjusted_count, expected_total),
+        }
     acquisition_valid = _seasonal_acquisition_matches(
         acquisition_result,
         config=config,
@@ -2232,8 +2269,13 @@ def generate_month_timeseries_qa(
         "zero_timestamp_parse_anomalies": (
             current["timestamp_parse_errors"] + pilot["timestamp_parse_errors"] == 0
         ),
-        "zero_timestamp_nonmonotonic_anomalies": (
-            current["nonmonotonic_pairs"] + pilot["nonmonotonic_pairs"] == 0
+        "approved_trajectory_quarantine": quarantine.approved,
+        "full_session_quarantine_absent": quarantine.full_session_quarantine_count == 0,
+        "zero_unquarantined_nonmonotonic_anomalies": (
+            current["nonmonotonic_pairs"]
+            == quarantine.quarantined_current_nonmonotonic_pairs
+            and pilot["nonmonotonic_pairs"]
+            == quarantine.quarantined_pilot_nonmonotonic_pairs
         ),
         "acquisition_complete_and_consistent": acquisition_valid,
     }
@@ -2257,10 +2299,22 @@ def generate_month_timeseries_qa(
     ):
         reasons.append("INVALID_CONTAINER_RATE_EXCEEDED")
     if not (
-        checks["zero_timestamp_parse_anomalies"] and checks["zero_timestamp_nonmonotonic_anomalies"]
+        checks["zero_timestamp_parse_anomalies"]
+        and checks["zero_unquarantined_nonmonotonic_anomalies"]
     ):
         reasons.append("TIMESTAMP_QUALITY_FAIL")
-    gate_status = "PASS" if all(checks.values()) else "FAIL"
+    if not checks["approved_trajectory_quarantine"]:
+        reasons.append("TRAJECTORY_QUARANTINE_POLICY_FAIL")
+    if not checks["full_session_quarantine_absent"]:
+        reasons.append("FULL_SESSION_QUARANTINE_REQUIRED")
+    if all(checks.values()):
+        gate_status = (
+            "PASS_WITH_TRAJECTORY_QUARANTINE"
+            if quarantine.trajectory_quarantine_count
+            else "PASS"
+        )
+    else:
+        gate_status = "FAIL"
     inventory_for_public = after if after is not None else before
     integrity_status = (
         "PASS"
@@ -2306,6 +2360,7 @@ def generate_month_timeseries_qa(
             "partial_file_count": partial_count,
         },
         "quality": quality_public,
+        "trajectory_quarantine": quarantine.public_dict(),
         "gate": {
             "status": gate_status,
             "thresholds": {
@@ -2316,8 +2371,15 @@ def generate_month_timeseries_qa(
             },
             "checks": checks,
             "reason_codes": reasons,
-            "ready_for_cleaning": gate_status == "PASS",
-            "ready_for_15_min": ("YES_CURRENT_PROXY_ONLY" if gate_status == "PASS" else "NO"),
+            "ready_for_cleaning": gate_status in {
+                "PASS",
+                "PASS_WITH_TRAJECTORY_QUARANTINE",
+            },
+            "ready_for_15_min": (
+                "YES_CURRENT_PROXY_ONLY"
+                if gate_status in {"PASS", "PASS_WITH_TRAJECTORY_QUARANTINE"}
+                else "NO"
+            ),
             "gate1_ready": "NO",
         },
         "power_semantics": _power_semantics(),

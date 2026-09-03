@@ -137,14 +137,22 @@ def test_authorized_cli_uses_fixed_order_continues_after_failure_and_redacts(
         if month == "2019-08":
             raise RuntimeError(auth_url)
         day_count = kwargs["config"].day_count
+        trajectory_count = 1 if month == "2019-11" else 0
         return {
             "month": month,
             "acquisition_status": "COMPLETE",
-            "qa_status": "PASS",
+            "qa_status": (
+                "PASS_WITH_TRAJECTORY_QUARANTINE"
+                if trajectory_count
+                else "PASS"
+            ),
             "valid_daily_chunks": day_count,
             "local_records": 3,
             "carry_records": 1,
             "combined_records": 4,
+            "trajectory_quarantine_count": trajectory_count,
+            "trajectory_quarantine_rate": trajectory_count / 4,
+            "full_session_quarantine_count": 0,
             "reason_codes": [],
         }
 
@@ -162,7 +170,11 @@ def test_authorized_cli_uses_fixed_order_continues_after_failure_and_redacts(
     assert status == 1
     assert calls == list(SEASONAL_MONTHS)
     assert [item["month"] for item in payload["months"]] == list(SEASONAL_MONTHS)
-    assert [item["status"] for item in payload["months"]] == ["PASS", "FAIL", "PASS"]
+    assert [item["status"] for item in payload["months"]] == [
+        "PASS",
+        "FAIL",
+        "PASS_WITH_TRAJECTORY_QUARANTINE",
+    ]
     assert payload["months"][1]["reason_codes"] == ["UNEXPECTED_ERROR"]
     assert payload["status"] == "INCOMPLETE"
     assert stderr.getvalue() == ""
@@ -223,6 +235,32 @@ def test_parser_uses_the_frozen_seasonal_raw_root_default() -> None:
     assert args.raw_root == Path("data/raw/acn/jpl/seasonal")
 
 
+def test_november_safe_result_propagates_trajectory_quarantine_status() -> None:
+    config = jpl_month_config("2019-11")
+
+    result = seasonal_cli_module._safe_month_result(
+        config,
+        {
+            "month": config.month,
+            "acquisition_status": "COMPLETE",
+            "qa_status": "PASS_WITH_TRAJECTORY_QUARANTINE",
+            "valid_daily_chunks": config.day_count,
+            "local_records": 1353,
+            "carry_records": 1,
+            "combined_records": 1354,
+            "trajectory_quarantine_count": 1,
+            "trajectory_quarantine_rate": 1 / 1354,
+            "full_session_quarantine_count": 0,
+            "reason_codes": [],
+        },
+    )
+
+    assert result["status"] == "PASS_WITH_TRAJECTORY_QUARANTINE"
+    assert result["trajectory_quarantine_count"] == 1
+    assert result["trajectory_quarantine_rate"] == 1 / 1354
+    assert result["full_session_quarantine_count"] == 0
+
+
 @pytest.mark.parametrize("concurrency", [0, 3, True])
 def test_cli_rejects_invalid_concurrency_before_environment(
     tmp_path: Path,
@@ -275,8 +313,14 @@ def test_executor_malformed_reason_values_and_inconsistent_counts_fail_staticall
     assert private_url not in stdout.getvalue()
 
 
-def _cli_record(index: int, connection: datetime, disconnect: datetime) -> dict[str, Any]:
-    return {
+def _cli_record(
+    index: int,
+    connection: datetime,
+    disconnect: datetime,
+    *,
+    trajectory_anomaly: bool = False,
+) -> dict[str, Any]:
+    record = {
         "_id": f"private-object-{index}",
         "sessionID": f"private-session-{index}",
         "connectionTime": format_datetime(connection.astimezone(timezone.utc), usegmt=True),
@@ -284,6 +328,21 @@ def _cli_record(index: int, connection: datetime, disconnect: datetime) -> dict[
         "chargingCurrent": {"timestamps": [], "current": []},
         "pilotSignal": {"timestamps": [], "pilot": []},
     }
+    if trajectory_anomaly:
+        timestamps = [
+            connection,
+            connection + timedelta(hours=1),
+            connection + timedelta(seconds=4),
+        ]
+        record["chargingCurrent"] = {
+            "timestamps": [format_datetime(value, usegmt=True) for value in timestamps],
+            "current": [16.0, 16.0, 16.0],
+        }
+        record["pilotSignal"] = {
+            "timestamps": [format_datetime(value, usegmt=True) for value in timestamps],
+            "pilot": [16.0, 16.0, 16.0],
+        }
+    return record
 
 
 class _OfflineSeasonalClient:
@@ -328,7 +387,15 @@ def test_default_cli_pipeline_is_fully_offline_and_never_persists_token(
         config = jpl_month_config(month)
         for day in range(2):
             connection = config.utc_start + timedelta(days=day, minutes=1)
-            records.append(_cli_record(index, connection, connection + timedelta(minutes=2)))
+            anomaly = month == "2019-11" and day == 0
+            records.append(
+                _cli_record(
+                    index,
+                    connection,
+                    connection + timedelta(hours=2 if anomaly else 0, minutes=2),
+                    trajectory_anomaly=anomaly,
+                )
+            )
             index += 1
         for carry_index in range(carry_count):
             connection = config.utc_start - timedelta(hours=carry_index + 1)
@@ -398,7 +465,11 @@ def test_default_cli_pipeline_is_fully_offline_and_never_persists_token(
     assert status == 0
     assert payload["status"] == "COMPLETE"
     assert [item["month"] for item in payload["months"]] == list(SEASONAL_MONTHS)
-    assert [item["status"] for item in payload["months"]] == ["PASS", "PASS", "PASS"]
+    assert [item["status"] for item in payload["months"]] == [
+        "PASS",
+        "PASS",
+        "PASS_WITH_TRAJECTORY_QUARANTINE",
+    ]
     assert client.official_calls == 3
     immutable_paths = tuple(
         path

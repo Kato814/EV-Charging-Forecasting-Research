@@ -67,9 +67,25 @@ def test_seasonal_public_allowlist_is_literal_unique_and_exactly_37() -> None:
     assert len(EXPECTED_RELEASE_PATHS) == len(set(EXPECTED_RELEASE_PATHS)) == 37
 
 
+def test_protocol_freezes_the_narrow_trajectory_quarantine_policy() -> None:
+    protocol = prep_module.load_seasonal_preparation_protocol()
+
+    assert protocol.trajectory_quarantine_month == "2019-11"
+    assert protocol.trajectory_quarantine_expected_counts == (0, 0, 1)
+    assert protocol.trajectory_quarantine_backward_seconds == 3596
+    assert protocol.trajectory_quarantine_preserves_raw is True
+    assert protocol.trajectory_quarantine_preserves_connected is True
+
+
 def _month_documents(month: str, expected_bins: int, scheduled: int) -> dict[str, object]:
     valid_90 = (4 * expected_bins + 4) // 5
     day_count = {"2019-02": 28, "2019-08": 31, "2019-11": 30}[month]
+    trajectory_quarantine_count = 1 if month == "2019-11" else 0
+    month_status = (
+        "PASS_WITH_TRAJECTORY_QUARANTINE"
+        if trajectory_quarantine_count
+        else "CONDITIONAL_PASS"
+    )
     sha = {
         "config": "1" * 64,
         "metadata_source": "2" * 64,
@@ -115,6 +131,9 @@ def _month_documents(month: str, expected_bins: int, scheduled: int) -> dict[str
             "local_session_count": 9,
             "carry_in_count": 1,
             "combined_session_count": 10,
+            "trajectory_quarantine_count": trajectory_quarantine_count,
+            "trajectory_quarantine_rate": trajectory_quarantine_count / 10,
+            "full_session_quarantine_count": 0,
             "metadata_scope": {
                 "local_calendar_session_count": 9,
                 "utc_calendar_session_count": 10,
@@ -182,6 +201,40 @@ def _month_documents(month: str, expected_bins: int, scheduled: int) -> dict[str
             "expected_sessions": 10,
             "cleaned_session_count": 9,
             "invalid_skipped_session_count": 1,
+            "trajectory_quarantine": {
+                "denominator_sessions": 10,
+                "trajectory_quarantine_count": trajectory_quarantine_count,
+                "trajectory_quarantine_rate": trajectory_quarantine_count / 10,
+                "full_session_quarantine_count": 0,
+                "full_session_quarantine_rate": 0.0,
+                "synchronized_utc_nonmonotonic_sessions": trajectory_quarantine_count,
+                "raw_trajectory_anomalies_retained": True,
+                "raw_manifest_modified": False,
+                "raw_timestamps_modified": False,
+                "sort_repair_applied": False,
+                "timestamp_shift_seconds": 0,
+                "interpolation_applied": False,
+                "whole_current_pilot_trajectory_unobservable": True,
+                "coverage_denominator_includes_quarantined": True,
+                "structural_metadata_retained_count": trajectory_quarantine_count,
+                "connected_state_retained_count": trajectory_quarantine_count,
+                "raw_field_coverage": {
+                    "current": {"count": 9, "denominator": 10, "rate": 0.9},
+                    "pilot": {"count": 10, "denominator": 10, "rate": 1.0},
+                },
+                "analysis_field_coverage": {
+                    "current": {
+                        "count": 9 - trajectory_quarantine_count,
+                        "denominator": 10,
+                        "rate": (9 - trajectory_quarantine_count) / 10,
+                    },
+                    "pilot": {
+                        "count": 10 - trajectory_quarantine_count,
+                        "denominator": 10,
+                        "rate": (10 - trajectory_quarantine_count) / 10,
+                    },
+                },
+            },
             "analysis_window": common_window,
             "sampling": {
                 "derivation": "mode_of_positive_raw_timestamp_differences",
@@ -215,8 +268,8 @@ def _month_documents(month: str, expected_bins: int, scheduled: int) -> dict[str
                     "exact_duplicate_extras": 0,
                     "conflicting_timestamps": 0,
                     "conflict_affected_sessions": 0,
-                    "nonmonotonic_pairs": 0,
-                    "nonmonotonic_sessions": 0,
+                    "nonmonotonic_pairs": trajectory_quarantine_count,
+                    "nonmonotonic_sessions": trajectory_quarantine_count,
                     "bounded_observation_coverage": 1.0,
                     "bounded_value_hours": 0.0,
                 }
@@ -370,6 +423,8 @@ def _month_documents(month: str, expected_bins: int, scheduled: int) -> dict[str
             "valid_bin_90_rate": valid_90 / expected_bins,
             "valid_bin_90_rate_min": 0.8,
             "valid_bin_90_gate": "PASS",
+            "trajectory_quarantine_count": trajectory_quarantine_count,
+            "coverage_denominator_includes_quarantined": True,
             "missing_bin_rate": 1 - valid_90 / expected_bins,
             "longest_missing_run": 0,
             "peak_current_proxy_a": 0.0,
@@ -472,13 +527,15 @@ def _month_documents(month: str, expected_bins: int, scheduled: int) -> dict[str
             "raw_dimensions": [195, 201, 311],
             "encoded_dimensions": [195, 204, 391],
             "local_artifact_count": 14,
+            "trajectory_quarantine_count": trajectory_quarantine_count,
+            "full_session_quarantine_count": 0,
             "anonymous_local_indexes_published": False,
             "large_arrays_published": False,
         },
         "run_manifest.json": {
             "schema_version": "acn-jpl-seasonal-preparation-run/v1",
             "month": month,
-            "status": "CONDITIONAL_PASS",
+            "status": month_status,
             "raw_unchanged": True,
             "official_total": 9,
             "local_session_count": 9,
@@ -486,6 +543,8 @@ def _month_documents(month: str, expected_bins: int, scheduled: int) -> dict[str
             "sessions_processed": 10,
             "cleaned_session_count": 9,
             "invalid_skipped_session_count": 1,
+            "trajectory_quarantine_count": trajectory_quarantine_count,
+            "full_session_quarantine_count": 0,
             "station_bins": expected_bins,
             "valid_bin_90_count": valid_90,
             "scheduled_issue_times": scheduled,
@@ -545,6 +604,16 @@ def test_month_result_is_slots_frozen_and_enforces_both_main_gates() -> None:
     }
     cleaning["cleaned_session_count"] = 10  # type: ignore[index]
     cleaning["invalid_skipped_session_count"] = 0  # type: ignore[index]
+    cleaning["trajectory_quarantine"]["raw_field_coverage"]["current"] = {  # type: ignore[index]
+        "count": 10,
+        "denominator": 10,
+        "rate": 1.0,
+    }
+    cleaning["trajectory_quarantine"]["analysis_field_coverage"]["current"] = {  # type: ignore[index]
+        "count": 10,
+        "denominator": 10,
+        "rate": 1.0,
+    }
     run["cleaned_session_count"] = 10  # type: ignore[index]
     run["invalid_skipped_session_count"] = 0  # type: ignore[index]
     assert (
@@ -569,6 +638,14 @@ def test_release_is_exactly_37_files_deterministic_and_strictly_verified(
     assert first == {name: (tmp_path / name).read_bytes() for name in EXPECTED_RELEASE_PATHS}
     publish_seasonal_release(results, tmp_path)
     assert first == {name: (tmp_path / name).read_bytes() for name in EXPECTED_RELEASE_PATHS}
+
+    root_manifest = json.loads(
+        (tmp_path / "seasonal_snapshot_manifest.json").read_text(encoding="utf-8")
+    )
+    november = root_manifest["month_snapshots"][2]
+    assert november["status"] == "PASS_WITH_TRAJECTORY_QUARANTINE"
+    assert november["trajectory_quarantine_count"] == 1
+    assert november["full_session_quarantine_count"] == 0
 
     manifest = tmp_path / "2019-02" / "run_manifest.json"
     payload = json.loads(manifest.read_text(encoding="utf-8"))
@@ -755,6 +832,20 @@ def test_root_summary_and_report_cover_required_monthly_evidence_and_are_closed(
         "matched_metadata_pairs",
         "missing_metadata_pairs",
         "orphan_timeseries_pairs",
+        "trajectory_quarantine_count",
+        "trajectory_quarantine_rate",
+        "full_session_quarantine_count",
+        "full_session_quarantine_rate",
+        "trajectory_current_raw_coverage_count",
+        "trajectory_current_analysis_coverage_count",
+        "trajectory_pilot_raw_coverage_count",
+        "trajectory_pilot_analysis_coverage_count",
+        "coverage_denominator_includes_quarantined",
+        "whole_current_pilot_trajectory_unobservable",
+        "raw_trajectory_anomalies_retained",
+        "sort_repair_applied",
+        "timestamp_shift_seconds",
+        "interpolation_applied",
         "sessions_processed",
         "cleaned_session_count",
         "invalid_skipped_session_count",
@@ -842,6 +933,9 @@ def test_root_summary_and_report_cover_required_monthly_evidence_and_are_closed(
     assert rows[0]["official_reference_sha256"] == "7" * 64
     assert rows[0]["raw_inventory_sha256"] == "4" * 64
     assert rows[0]["snapshot_sha256"] == "6" * 64
+    assert rows[2]["trajectory_quarantine_count"] == "1"
+    assert rows[2]["trajectory_current_raw_coverage_count"] == "9"
+    assert rows[2]["trajectory_current_analysis_coverage_count"] == "8"
 
     report = (tmp_path / "seasonal_prep_report.md").read_text(encoding="utf-8")
     headings = [line for line in report.splitlines() if line.startswith("## ")]
@@ -855,6 +949,8 @@ def test_root_summary_and_report_cover_required_monthly_evidence_and_are_closed(
         "## Decision",
     ]
     assert report.count("M4 generated: NO") == 1
+    assert "PASS_WITH_TRAJECTORY_QUARANTINE" in report
+    assert "Trajectory quarantine" in report
     for result in results:
         assert result.raw_inventory_sha256 in report
         assert result.processed_snapshot_sha256 in report
@@ -907,7 +1003,9 @@ def test_implementation_binding_covers_dependencies_and_detects_each_drift(
         "code/src/evcf/data/acn_jpl_preparation.py",
         "code/src/evcf/data/acn_jpl_official_reference.py",
         "code/src/evcf/data/acn_jpl_full_month_ts.py",
+        "code/src/evcf/data/acn_jpl_trajectory_quarantine.py",
         "code/src/evcf/forecasting/__init__.py",
+        "scripts/acquire_jpl_seasonal.py",
     }
     assert set(prep_module.IMPLEMENTATION_PATHS) >= required
 
@@ -1029,21 +1127,59 @@ def test_prepare_month_runs_real_clean_station_snapshot_feature_projection(
             qa={
                 "quality": {
                     "series": {
-                        "chargingCurrent": {
-                            "invalid_container_count": 0,
-                            "usable_samples": 0,
-                            "nonmonotonic_pairs": 0,
-                            "nonmonotonic_sessions": 0,
-                        },
-                        "pilotSignal": {
-                            "invalid_container_count": 0,
-                            "usable_samples": 0,
-                            "nonmonotonic_pairs": 0,
-                            "nonmonotonic_sessions": 0,
+                            "chargingCurrent": {
+                                "invalid_container_count": 0,
+                                "usable_samples": 0,
+                                "raw_field_coverage": {
+                                    "count": 3,
+                                    "denominator": 3,
+                                    "rate": 1.0,
+                                },
+                                "field_coverage": {
+                                    "count": 3,
+                                    "denominator": 3,
+                                    "rate": 1.0,
+                                },
+                                "nonmonotonic_pairs": 0,
+                                "nonmonotonic_sessions": 0,
+                            },
+                            "pilotSignal": {
+                                "invalid_container_count": 0,
+                                "usable_samples": 0,
+                                "raw_field_coverage": {
+                                    "count": 3,
+                                    "denominator": 3,
+                                    "rate": 1.0,
+                                },
+                                "field_coverage": {
+                                    "count": 3,
+                                    "denominator": 3,
+                                    "rate": 1.0,
+                                },
+                                "nonmonotonic_pairs": 0,
+                                "nonmonotonic_sessions": 0,
                         },
                     }
-                },
-                "integrity": {
+                    },
+                    "trajectory_quarantine": {
+                        "denominator_sessions": 3,
+                        "trajectory_quarantine_count": 0,
+                        "trajectory_quarantine_rate": 0.0,
+                        "full_session_quarantine_count": 0,
+                        "full_session_quarantine_rate": 0.0,
+                        "synchronized_utc_nonmonotonic_sessions": 0,
+                        "raw_trajectory_anomalies_retained": True,
+                        "raw_manifest_modified": False,
+                        "raw_timestamps_modified": False,
+                        "sort_repair_applied": False,
+                        "timestamp_shift_seconds": 0,
+                        "interpolation_applied": False,
+                        "whole_current_pilot_trajectory_unobservable": True,
+                        "coverage_denominator_includes_quarantined": True,
+                        "structural_metadata_retained_count": 0,
+                        "connected_state_retained_count": 0,
+                    },
+                    "integrity": {
                     "daily_chunks": {
                         "expected": 28,
                         "data_files_present": 28,

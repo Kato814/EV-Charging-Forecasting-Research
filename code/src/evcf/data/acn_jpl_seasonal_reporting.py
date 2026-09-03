@@ -20,6 +20,20 @@ SUMMARY_COLUMNS = (
     "right_boundary_count",
     "carry_in_count",
     "combined_session_count",
+    "trajectory_quarantine_count",
+    "trajectory_quarantine_rate",
+    "full_session_quarantine_count",
+    "full_session_quarantine_rate",
+    "trajectory_current_raw_coverage_count",
+    "trajectory_current_analysis_coverage_count",
+    "trajectory_pilot_raw_coverage_count",
+    "trajectory_pilot_analysis_coverage_count",
+    "coverage_denominator_includes_quarantined",
+    "whole_current_pilot_trajectory_unobservable",
+    "raw_trajectory_anomalies_retained",
+    "sort_repair_applied",
+    "timestamp_shift_seconds",
+    "interpolation_applied",
     "official_probe_request_count",
     "official_probe_timeseries",
     "official_probe_total_matches_local",
@@ -260,6 +274,9 @@ def build_month_summary_row(
         chunks = acquisition["chunk_integrity"]
         linkage = acquisition["linkage"]
         integrity = acquisition["integrity"]
+        quarantine = cleaning["trajectory_quarantine"]
+        raw_coverage = quarantine["raw_field_coverage"]
+        analysis_coverage = quarantine["analysis_field_coverage"]
         invalid = cleaning["invalid_containers"]
         series = cleaning["series"]
         sampling = cleaning["sampling"]
@@ -289,6 +306,36 @@ def build_month_summary_row(
             "right_boundary_count": scope["right_boundary_count"],
             "carry_in_count": acquisition["carry_in_count"],
             "combined_session_count": acquisition["combined_session_count"],
+            "trajectory_quarantine_count": quarantine[
+                "trajectory_quarantine_count"
+            ],
+            "trajectory_quarantine_rate": quarantine["trajectory_quarantine_rate"],
+            "full_session_quarantine_count": quarantine[
+                "full_session_quarantine_count"
+            ],
+            "full_session_quarantine_rate": quarantine[
+                "full_session_quarantine_rate"
+            ],
+            "trajectory_current_raw_coverage_count": raw_coverage["current"]["count"],
+            "trajectory_current_analysis_coverage_count": analysis_coverage["current"][
+                "count"
+            ],
+            "trajectory_pilot_raw_coverage_count": raw_coverage["pilot"]["count"],
+            "trajectory_pilot_analysis_coverage_count": analysis_coverage["pilot"][
+                "count"
+            ],
+            "coverage_denominator_includes_quarantined": quarantine[
+                "coverage_denominator_includes_quarantined"
+            ],
+            "whole_current_pilot_trajectory_unobservable": quarantine[
+                "whole_current_pilot_trajectory_unobservable"
+            ],
+            "raw_trajectory_anomalies_retained": quarantine[
+                "raw_trajectory_anomalies_retained"
+            ],
+            "sort_repair_applied": quarantine["sort_repair_applied"],
+            "timestamp_shift_seconds": quarantine["timestamp_shift_seconds"],
+            "interpolation_applied": quarantine["interpolation_applied"],
             "official_probe_request_count": official_probe["request_count"],
             "official_probe_timeseries": official_probe["timeseries"],
             "official_probe_total_matches_local": official_probe["total_matches_local"],
@@ -657,6 +704,35 @@ def render_report_markdown(
                 ("pilot_usable_samples", "Pilot usable"),
                 ("pilot_retained_samples", "Pilot retained"),
                 ("pilot_retained_sample_rate", "Pilot retained rate"),
+            ),
+        ),
+        "",
+        "### Trajectory quarantine",
+        "",
+        *_table(
+            materialized,
+            (
+                ("month", "Month"),
+                ("trajectory_quarantine_count", "Trajectory quarantine"),
+                ("full_session_quarantine_count", "Full-session quarantine"),
+                ("trajectory_current_raw_coverage_count", "Current raw coverage"),
+                (
+                    "trajectory_current_analysis_coverage_count",
+                    "Current analysis coverage",
+                ),
+                ("trajectory_pilot_raw_coverage_count", "Pilot raw coverage"),
+                (
+                    "trajectory_pilot_analysis_coverage_count",
+                    "Pilot analysis coverage",
+                ),
+                (
+                    "coverage_denominator_includes_quarantined",
+                    "Quarantine in denominator",
+                ),
+                ("raw_trajectory_anomalies_retained", "Raw retained"),
+                ("sort_repair_applied", "Sort repair"),
+                ("timestamp_shift_seconds", "Timestamp shift s"),
+                ("interpolation_applied", "Interpolation"),
             ),
         ),
         "",

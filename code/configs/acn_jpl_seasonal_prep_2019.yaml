@@ -22,6 +22,28 @@ aggregation:
 acquisition_gate:
   charging_current_invalid_rate_max: 0.1
   pilot_signal_invalid_rate_max: 0.1
+trajectory_quarantine:
+  approved_month: 2019-11
+  expected_counts:
+    2019-02: 0
+    2019-08: 0
+    2019-11: 1
+  detector: synchronized_current_pilot_raw_order_utc_nonmonotonic
+  expected_nonmonotonic_pairs_per_series: 1
+  expected_backward_seconds: 3596
+  preserve_raw: true
+  preserve_manifest: true
+  preserve_timestamps: true
+  sort_repair: false
+  timestamp_shift_seconds: 0
+  interpolation: false
+  preserve_structural_metadata_when_bounds_valid: true
+  preserve_connected_state_when_bounds_valid: true
+  whole_current_pilot_trajectory_unobservable: true
+  coverage_denominator_includes_quarantined: true
+  invalid_metadata_action: full_session_quarantine
+  month_status: PASS_WITH_TRAJECTORY_QUARANTINE
+  seasonal_status_ceiling: CONDITIONAL_PASS
 snapshots:
   lookback_minutes: 1440
   horizons_minutes:

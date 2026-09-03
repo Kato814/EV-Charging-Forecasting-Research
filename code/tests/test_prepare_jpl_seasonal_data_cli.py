@@ -94,10 +94,16 @@ def test_authorized_cli_accepts_only_typed_result_and_prints_safe_aggregates(
         "months": [
             {
                 "month": month,
-                "status": "CONDITIONAL_PASS",
+                "status": (
+                    "PASS_WITH_TRAJECTORY_QUARANTINE"
+                    if month == "2019-11"
+                    else "CONDITIONAL_PASS"
+                ),
                 "sessions_processed": 10,
                 "cleaned_session_count": 9,
                 "invalid_skipped_session_count": 1,
+                "trajectory_quarantine_count": 1 if month == "2019-11" else 0,
+                "full_session_quarantine_count": 0,
                 "station_bins": bins,
                 "valid_bin_90_count": (4 * bins + 4) // 5,
                 "scheduled_issue_times": scheduled,

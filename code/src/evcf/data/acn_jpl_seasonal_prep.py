@@ -66,6 +66,9 @@ _ABSOLUTE_PATH = re.compile(
     re.IGNORECASE,
 )
 _STATUSES = frozenset({"PASS", "CONDITIONAL_PASS"})
+_MONTH_STATUSES = frozenset(
+    {"PASS", "CONDITIONAL_PASS", "PASS_WITH_TRAJECTORY_QUARANTINE"}
+)
 _POWER_STATUSES = frozenset({"CURRENT_PROXY_ONLY", "KW_RECONSTRUCTION_CANDIDATE"})
 _RAW_DIMENSIONS = (195, 201, 311)
 _ENCODED_DIMENSIONS = (195, 204, 391)
@@ -105,12 +108,14 @@ IMPLEMENTATION_PATHS = (
     "code/src/evcf/data/acn_jpl_power_semantics.py",
     "code/src/evcf/data/acn_jpl_15min.py",
     "code/src/evcf/data/acn_jpl_issue_snapshots.py",
+    "code/src/evcf/data/acn_jpl_trajectory_quarantine.py",
     "code/src/evcf/data/acn_jpl_seasonal_reporting.py",
     "code/src/evcf/data/acn_jpl_seasonal_prep.py",
     "code/src/evcf/forecasting/__init__.py",
     "code/src/evcf/forecasting/acn_jpl_gate1_data.py",
     "code/src/evcf/forecasting/acn_jpl_gate1_features.py",
     "scripts/prepare_jpl_seasonal_data.py",
+    "scripts/acquire_jpl_seasonal.py",
 )
 
 
@@ -142,6 +147,11 @@ class SeasonalPreparationProtocol:
     lookback_minutes: int
     horizons_minutes: tuple[int, ...]
     issue_step_minutes: int
+    trajectory_quarantine_month: str
+    trajectory_quarantine_expected_counts: tuple[int, int, int]
+    trajectory_quarantine_backward_seconds: int
+    trajectory_quarantine_preserves_raw: bool
+    trajectory_quarantine_preserves_connected: bool
 
 
 def load_seasonal_preparation_protocol(
@@ -185,6 +195,7 @@ def load_seasonal_preparation_protocol(
             "cleaning",
             "aggregation",
             "acquisition_gate",
+            "trajectory_quarantine",
             "snapshots",
             "features",
             "publication",
@@ -222,6 +233,35 @@ def load_seasonal_preparation_protocol(
         ),
         "PROTOCOL_ACQUISITION_GATE",
     )
+    quarantine = _exact(
+        root["trajectory_quarantine"],
+        (
+            "approved_month",
+            "expected_counts",
+            "detector",
+            "expected_nonmonotonic_pairs_per_series",
+            "expected_backward_seconds",
+            "preserve_raw",
+            "preserve_manifest",
+            "preserve_timestamps",
+            "sort_repair",
+            "timestamp_shift_seconds",
+            "interpolation",
+            "preserve_structural_metadata_when_bounds_valid",
+            "preserve_connected_state_when_bounds_valid",
+            "whole_current_pilot_trajectory_unobservable",
+            "coverage_denominator_includes_quarantined",
+            "invalid_metadata_action",
+            "month_status",
+            "seasonal_status_ceiling",
+        ),
+        "PROTOCOL_TRAJECTORY_QUARANTINE",
+    )
+    quarantine_counts = _exact(
+        quarantine["expected_counts"],
+        SEASONAL_MONTHS,
+        "PROTOCOL_TRAJECTORY_QUARANTINE_COUNTS",
+    )
     snapshots = _exact(
         root["snapshots"],
         (
@@ -258,6 +298,25 @@ def load_seasonal_preparation_protocol(
         and aggregation["comparison_active_threshold_a"] == 1.0
         and acquisition_gate["charging_current_invalid_rate_max"] == 0.1
         and acquisition_gate["pilot_signal_invalid_rate_max"] == 0.1
+        and quarantine["approved_month"] == "2019-11"
+        and quarantine_counts == {"2019-02": 0, "2019-08": 0, "2019-11": 1}
+        and quarantine["detector"]
+        == "synchronized_current_pilot_raw_order_utc_nonmonotonic"
+        and quarantine["expected_nonmonotonic_pairs_per_series"] == 1
+        and quarantine["expected_backward_seconds"] == 3596
+        and quarantine["preserve_raw"] is True
+        and quarantine["preserve_manifest"] is True
+        and quarantine["preserve_timestamps"] is True
+        and quarantine["sort_repair"] is False
+        and quarantine["timestamp_shift_seconds"] == 0
+        and quarantine["interpolation"] is False
+        and quarantine["preserve_structural_metadata_when_bounds_valid"] is True
+        and quarantine["preserve_connected_state_when_bounds_valid"] is True
+        and quarantine["whole_current_pilot_trajectory_unobservable"] is True
+        and quarantine["coverage_denominator_includes_quarantined"] is True
+        and quarantine["invalid_metadata_action"] == "full_session_quarantine"
+        and quarantine["month_status"] == "PASS_WITH_TRAJECTORY_QUARANTINE"
+        and quarantine["seasonal_status_ceiling"] == "CONDITIONAL_PASS"
         and snapshots["lookback_minutes"] == 1440
         and snapshots["horizons_minutes"] == [15, 30, 60, 120, 240]
         and snapshots["issue_step_minutes"] == 15
@@ -280,6 +339,11 @@ def load_seasonal_preparation_protocol(
         lookback_minutes=1440,
         horizons_minutes=(15, 30, 60, 120, 240),
         issue_step_minutes=15,
+        trajectory_quarantine_month="2019-11",
+        trajectory_quarantine_expected_counts=(0, 0, 1),
+        trajectory_quarantine_backward_seconds=3596,
+        trajectory_quarantine_preserves_raw=True,
+        trajectory_quarantine_preserves_connected=True,
     )
 
 
@@ -333,6 +397,8 @@ class MonthPreparationResult:
     sessions_processed: int
     cleaned_session_count: int
     invalid_skipped_session_count: int
+    trajectory_quarantine_count: int
+    full_session_quarantine_count: int
     station_bins: int
     valid_bin_90_count: int
     scheduled_issue_times: int
@@ -556,7 +622,7 @@ def _validate_public_value(value: object, *, path: tuple[str, ...] = ()) -> None
 
 def _validate_acquisition(
     config: JPLMonthConfig, document: Mapping[str, Any]
-) -> tuple[int, int, int]:
+) -> tuple[int, int, int, int, int]:
     value = _exact(
         document,
         (
@@ -567,6 +633,9 @@ def _validate_acquisition(
             "local_session_count",
             "carry_in_count",
             "combined_session_count",
+            "trajectory_quarantine_count",
+            "trajectory_quarantine_rate",
+            "full_session_quarantine_count",
             "metadata_scope",
             "official_probe",
             "chunk_integrity",
@@ -600,6 +669,14 @@ def _validate_acquisition(
     local = _integer(value["local_session_count"], "LOCAL_SESSION_COUNT")
     carry = _integer(value["carry_in_count"], "CARRY_IN_COUNT")
     combined = _integer(value["combined_session_count"], "COMBINED_SESSION_COUNT")
+    trajectory = _integer(
+        value["trajectory_quarantine_count"],
+        "TRAJECTORY_QUARANTINE_COUNT",
+    )
+    full = _integer(
+        value["full_session_quarantine_count"],
+        "FULL_SESSION_QUARANTINE_COUNT",
+    )
     metadata_scope = _exact(
         value["metadata_scope"],
         (
@@ -658,6 +735,8 @@ def _validate_acquisition(
         or value["status"] != "COMPLETE"
         or _integer(value["official_total"], "OFFICIAL_TOTAL") != local
         or combined != local + carry
+        or trajectory != (1 if config.month == "2019-11" else 0)
+        or full != 0
         or metadata_scope
         != {
             "local_calendar_session_count": local,
@@ -717,6 +796,12 @@ def _validate_acquisition(
         or any(item is not True for item in integrity.values())
     ):
         raise SeasonalPreparationError("ACQUISITION_INTEGRITY_FAILED")
+    _require_ratio(
+        value["trajectory_quarantine_rate"],
+        numerator=trajectory,
+        denominator=combined,
+        context="TRAJECTORY_QUARANTINE_RATE",
+    )
     for name in (
         "metadata_source_inventory_sha256",
         "metadata_record_inventory_sha256",
@@ -724,7 +809,7 @@ def _validate_acquisition(
         "raw_inventory_sha256",
     ):
         _digest(value[name], name.upper())
-    return local, carry, combined
+    return local, carry, combined, trajectory, full
 
 
 def _validate_cleaning(
@@ -732,6 +817,8 @@ def _validate_cleaning(
     document: Mapping[str, Any],
     *,
     combined_count: int,
+    trajectory_quarantine_count: int,
+    full_session_quarantine_count: int,
 ) -> tuple[int, int]:
     value = _exact(
         document,
@@ -743,6 +830,7 @@ def _validate_cleaning(
             "expected_sessions",
             "cleaned_session_count",
             "invalid_skipped_session_count",
+            "trajectory_quarantine",
             "analysis_window",
             "sampling",
             "invalid_containers",
@@ -794,6 +882,30 @@ def _validate_cleaning(
     skipped_count = _integer(
         value["invalid_skipped_session_count"], "INVALID_SKIPPED_SESSION_COUNT"
     )
+    quarantine = _exact(
+        value["trajectory_quarantine"],
+        (
+            "denominator_sessions",
+            "trajectory_quarantine_count",
+            "trajectory_quarantine_rate",
+            "full_session_quarantine_count",
+            "full_session_quarantine_rate",
+            "synchronized_utc_nonmonotonic_sessions",
+            "raw_trajectory_anomalies_retained",
+            "raw_manifest_modified",
+            "raw_timestamps_modified",
+            "sort_repair_applied",
+            "timestamp_shift_seconds",
+            "interpolation_applied",
+            "whole_current_pilot_trajectory_unobservable",
+            "coverage_denominator_includes_quarantined",
+            "structural_metadata_retained_count",
+            "connected_state_retained_count",
+            "raw_field_coverage",
+            "analysis_field_coverage",
+        ),
+        "TRAJECTORY_QUARANTINE",
+    )
     if (
         value["schema_version"] != "acn-jpl-seasonal-preparation-cleaning-qa/v1"
         or value["month"] != config.month
@@ -810,6 +922,95 @@ def _validate_cleaning(
         or value["raw_modified"] is not False
     ):
         raise SeasonalPreparationError("CLEANING_GATE_FAILED")
+
+    if (
+        _integer(quarantine["denominator_sessions"], "QUARANTINE_DENOMINATOR")
+        != combined_count
+        or _integer(
+            quarantine["trajectory_quarantine_count"],
+            "TRAJECTORY_QUARANTINE_COUNT",
+        )
+        != trajectory_quarantine_count
+        or _integer(
+            quarantine["full_session_quarantine_count"],
+            "FULL_SESSION_QUARANTINE_COUNT",
+        )
+        != full_session_quarantine_count
+        or _integer(
+            quarantine["synchronized_utc_nonmonotonic_sessions"],
+            "SYNCHRONIZED_NONMONOTONIC_SESSIONS",
+        )
+        != trajectory_quarantine_count + full_session_quarantine_count
+        or _integer(
+            quarantine["structural_metadata_retained_count"],
+            "STRUCTURAL_METADATA_RETAINED_COUNT",
+        )
+        != trajectory_quarantine_count
+        or _integer(
+            quarantine["connected_state_retained_count"],
+            "CONNECTED_STATE_RETAINED_COUNT",
+        )
+        != trajectory_quarantine_count
+        or quarantine["raw_trajectory_anomalies_retained"] is not True
+        or quarantine["raw_manifest_modified"] is not False
+        or quarantine["raw_timestamps_modified"] is not False
+        or quarantine["sort_repair_applied"] is not False
+        or _integer(quarantine["timestamp_shift_seconds"], "TIMESTAMP_SHIFT_SECONDS") != 0
+        or quarantine["interpolation_applied"] is not False
+        or quarantine["whole_current_pilot_trajectory_unobservable"] is not True
+        or quarantine["coverage_denominator_includes_quarantined"] is not True
+    ):
+        raise SeasonalPreparationError("TRAJECTORY_QUARANTINE_INVALID")
+    _require_ratio(
+        quarantine["trajectory_quarantine_rate"],
+        numerator=trajectory_quarantine_count,
+        denominator=combined_count,
+        context="TRAJECTORY_QUARANTINE_RATE",
+    )
+    _require_ratio(
+        quarantine["full_session_quarantine_rate"],
+        numerator=full_session_quarantine_count,
+        denominator=combined_count,
+        context="FULL_SESSION_QUARANTINE_RATE",
+    )
+    coverage_counts: dict[str, dict[str, int]] = {}
+    for coverage_name in ("raw_field_coverage", "analysis_field_coverage"):
+        coverage = _exact(
+            quarantine[coverage_name],
+            ("current", "pilot"),
+            "QUARANTINE_FIELD_COVERAGE",
+        )
+        coverage_counts[coverage_name] = {}
+        for field_name in ("current", "pilot"):
+            item = _exact(
+                coverage[field_name],
+                ("count", "denominator", "rate"),
+                "QUARANTINE_FIELD_COVERAGE",
+            )
+            count = _integer(item["count"], "QUARANTINE_FIELD_COVERAGE_COUNT")
+            if (
+                count > combined_count
+                or _integer(
+                    item["denominator"],
+                    "QUARANTINE_FIELD_COVERAGE_DENOMINATOR",
+                )
+                != combined_count
+            ):
+                raise SeasonalPreparationError("TRAJECTORY_QUARANTINE_INVALID")
+            _require_ratio(
+                item["rate"],
+                numerator=count,
+                denominator=combined_count,
+                context="QUARANTINE_FIELD_COVERAGE_RATE",
+            )
+            coverage_counts[coverage_name][field_name] = count
+    for field_name in ("current", "pilot"):
+        if coverage_counts["analysis_field_coverage"][field_name] != (
+            coverage_counts["raw_field_coverage"][field_name]
+            - trajectory_quarantine_count
+            - full_session_quarantine_count
+        ):
+            raise SeasonalPreparationError("TRAJECTORY_QUARANTINE_INVALID")
 
     invalid = _exact(
         value["invalid_containers"],
@@ -844,6 +1045,10 @@ def _validate_cleaning(
         not max(invalid_counts.values())
         <= skipped_count
         <= min(combined_count, sum(invalid_counts.values()))
+        or coverage_counts["raw_field_coverage"]["current"]
+        != combined_count - invalid_counts["charging_current"]
+        or coverage_counts["raw_field_coverage"]["pilot"]
+        != combined_count - invalid_counts["pilot_signal"]
     ):
         raise SeasonalPreparationError("INVALID_CONTAINER_PARTITION_INVALID")
 
@@ -891,8 +1096,10 @@ def _validate_cleaning(
         ):
             _integer(section[count_name], "CLEANING_SERIES_COUNT")
         if (
-            _integer(section["nonmonotonic_pairs"], "NONMONOTONIC_PAIRS") != 0
-            or _integer(section["nonmonotonic_sessions"], "NONMONOTONIC_SESSIONS") != 0
+            _integer(section["nonmonotonic_pairs"], "NONMONOTONIC_PAIRS")
+            != trajectory_quarantine_count
+            or _integer(section["nonmonotonic_sessions"], "NONMONOTONIC_SESSIONS")
+            != trajectory_quarantine_count
             or _number(section["bounded_observation_coverage"], "BOUNDED_COVERAGE") < 0
             or _number(section["bounded_observation_coverage"], "BOUNDED_COVERAGE") > 1
             or (
@@ -1356,7 +1563,12 @@ def _validate_power(config: JPLMonthConfig, document: Mapping[str, Any]) -> str:
     return str(value["status"])
 
 
-def _validate_station(config: JPLMonthConfig, document: Mapping[str, Any]) -> int:
+def _validate_station(
+    config: JPLMonthConfig,
+    document: Mapping[str, Any],
+    *,
+    trajectory_quarantine_count: int,
+) -> int:
     value = _exact(
         document,
         (
@@ -1382,6 +1594,8 @@ def _validate_station(config: JPLMonthConfig, document: Mapping[str, Any]) -> in
             "valid_bin_90_rate",
             "valid_bin_90_rate_min",
             "valid_bin_90_gate",
+            "trajectory_quarantine_count",
+            "coverage_denominator_includes_quarantined",
             "missing_bin_rate",
             "longest_missing_run",
             "peak_current_proxy_a",
@@ -1430,6 +1644,12 @@ def _validate_station(config: JPLMonthConfig, document: Mapping[str, Any]) -> in
         or not _same_number(_number(value["valid_bin_90_rate_min"], "VALID_BIN_MIN"), 0.80)
         or valid_rate < 0.80
         or value["valid_bin_90_gate"] != "PASS"
+        or _integer(
+            value["trajectory_quarantine_count"],
+            "TRAJECTORY_QUARANTINE_COUNT",
+        )
+        != trajectory_quarantine_count
+        or value["coverage_denominator_includes_quarantined"] is not True
         or value["time_weighted_integral_status"] != "PASS"
     ):
         raise SeasonalPreparationError("VALID_BIN_90_GATE_FAILED")
@@ -1550,11 +1770,11 @@ def _validate_issue(config: JPLMonthConfig, document: Mapping[str, Any]) -> int:
     )
     m3_rows = _integer(ragged["M3"], "M3_RAGGED_ROWS")
     expected_shapes = {
-        "M1_history": [scheduled, 96],
-        "M2_dense": [scheduled, 6],
+        "M1_history": [formal, 96],
+        "M2_dense": [formal, 6],
         "M3_ragged_rows": m3_rows,
         "M3_session_feature_width": 11,
-        "labels": [scheduled, len(_HORIZONS_MINUTES)],
+        "labels": [formal, len(_HORIZONS_MINUTES)],
     }
     missing = _exact(value["missing_rates"], _SNAPSHOT_MISSING_RATE_NAMES, "ISSUE_MISSING_RATES")
     for item in missing.values():
@@ -1569,10 +1789,14 @@ def _validate_issue(config: JPLMonthConfig, document: Mapping[str, Any]) -> int:
         or _integer(value["lookback_minutes"], "LOOKBACK_MINUTES", positive=True) != 1440
         or value["horizons_minutes"] != list(_HORIZONS_MINUTES)
         or scheduled != config.expected_scheduled_issue_times
-        or formal != scheduled
-        or _integer(value["incomplete_label_issue_times"], "INCOMPLETE_LABELS") != 0
-        or samples != {tier: scheduled for tier in _TIERS}
-        or labels != {str(item): scheduled for item in _HORIZONS_MINUTES}
+        or not 0 < formal <= scheduled
+        or _integer(value["incomplete_label_issue_times"], "INCOMPLETE_LABELS")
+        != scheduled - formal
+        or samples != {tier: formal for tier in _TIERS}
+        or any(
+            not formal <= _integer(labels[str(item)], "VALID_LABEL_COUNT") <= scheduled
+            for item in _HORIZONS_MINUTES
+        )
         or shapes != expected_shapes
         or _integer(shapes["M3_ragged_rows"], "M3_SHAPE_ROWS") != m3_rows
         or value["m4_generated"] is not False
@@ -1642,6 +1866,8 @@ def _validate_data_manifest(config: JPLMonthConfig, document: Mapping[str, Any])
             "raw_dimensions",
             "encoded_dimensions",
             "local_artifact_count",
+            "trajectory_quarantine_count",
+            "full_session_quarantine_count",
             "anonymous_local_indexes_published",
             "large_arrays_published",
         ),
@@ -1655,6 +1881,16 @@ def _validate_data_manifest(config: JPLMonthConfig, document: Mapping[str, Any])
         or tuple(value["raw_dimensions"]) != _RAW_DIMENSIONS
         or not isinstance(value["encoded_dimensions"], list)
         or tuple(value["encoded_dimensions"]) != _ENCODED_DIMENSIONS
+        or _integer(
+            value["trajectory_quarantine_count"],
+            "TRAJECTORY_QUARANTINE_COUNT",
+        )
+        != (1 if config.month == "2019-11" else 0)
+        or _integer(
+            value["full_session_quarantine_count"],
+            "FULL_SESSION_QUARANTINE_COUNT",
+        )
+        != 0
         or value["anonymous_local_indexes_published"] is not False
         or value["large_arrays_published"] is not False
     ):
@@ -1681,6 +1917,8 @@ def _validate_run(
     valid_90: int,
     formal: int,
     power_status: str,
+    trajectory_quarantine_count: int,
+    full_session_quarantine_count: int,
 ) -> str:
     value = _exact(
         document,
@@ -1695,6 +1933,8 @@ def _validate_run(
             "sessions_processed",
             "cleaned_session_count",
             "invalid_skipped_session_count",
+            "trajectory_quarantine_count",
+            "full_session_quarantine_count",
             "station_bins",
             "valid_bin_90_count",
             "scheduled_issue_times",
@@ -1713,7 +1953,13 @@ def _validate_run(
         "RUN_PRIVACY",
     )
     expected_status = (
-        "PASS" if power_status == "KW_RECONSTRUCTION_CANDIDATE" else "CONDITIONAL_PASS"
+        "PASS_WITH_TRAJECTORY_QUARANTINE"
+        if trajectory_quarantine_count
+        else (
+            "PASS"
+            if power_status == "KW_RECONSTRUCTION_CANDIDATE"
+            else "CONDITIONAL_PASS"
+        )
     )
     if (
         value["schema_version"] != "acn-jpl-seasonal-preparation-run/v1"
@@ -1727,6 +1973,8 @@ def _validate_run(
         or type(value["invalid_skipped_session_count"]) is not int
         or value["invalid_skipped_session_count"] < 0
         or value["cleaned_session_count"] != combined_count - value["invalid_skipped_session_count"]
+        or value["trajectory_quarantine_count"] != trajectory_quarantine_count
+        or value["full_session_quarantine_count"] != full_session_quarantine_count
         or value["station_bins"] != config.expected_bins
         or value["valid_bin_90_count"] != valid_90
         or value["scheduled_issue_times"] != config.expected_scheduled_issue_times
@@ -1761,11 +2009,16 @@ def _validate_month_documents(
         raise SeasonalPreparationError("PUBLIC_SCHEMA_INVALID")
     for document in documents.values():
         _validate_public_value(document)
-    local, carry, combined = _validate_acquisition(config, documents["acquisition_summary.json"])
+    local, carry, combined, trajectory, full = _validate_acquisition(
+        config,
+        documents["acquisition_summary.json"],
+    )
     current_hold, pilot_hold = _validate_cleaning(
         config,
         documents["cleaning_qa.json"],
         combined_count=combined,
+        trajectory_quarantine_count=trajectory,
+        full_session_quarantine_count=full,
     )
     _validate_sensitivity(
         config,
@@ -1775,7 +2028,11 @@ def _validate_month_documents(
     )
     _validate_boundary(config, documents["boundary_current_audit.json"])
     power = _validate_power(config, documents["power_semantics_audit.json"])
-    valid_90 = _validate_station(config, documents["station_15min_qa.json"])
+    valid_90 = _validate_station(
+        config,
+        documents["station_15min_qa.json"],
+        trajectory_quarantine_count=trajectory,
+    )
     formal = _validate_issue(config, documents["issue_snapshot_qa.json"])
     _validate_leakage(config, documents["leakage_audit.json"])
     _validate_data_manifest(config, documents["data_snapshot_manifest.json"])
@@ -1788,6 +2045,8 @@ def _validate_month_documents(
         valid_90=valid_90,
         formal=formal,
         power_status=power,
+        trajectory_quarantine_count=trajectory,
+        full_session_quarantine_count=full,
     )
     acquisition = documents["acquisition_summary.json"]
     data_manifest = documents["data_snapshot_manifest.json"]
@@ -1840,6 +2099,8 @@ def build_month_preparation_result(
         sessions_processed=int(cleaning["sessions_processed"]),
         cleaned_session_count=int(cleaning["cleaned_session_count"]),
         invalid_skipped_session_count=int(cleaning["invalid_skipped_session_count"]),
+        trajectory_quarantine_count=int(acquisition["trajectory_quarantine_count"]),
+        full_session_quarantine_count=int(acquisition["full_session_quarantine_count"]),
         station_bins=int(station["generated_bins"]),
         valid_bin_90_count=int(station["valid_bins_at_90"]),
         scheduled_issue_times=int(issue["scheduled_issue_times"]),
@@ -1860,7 +2121,11 @@ def build_month_preparation_result(
 
 
 def _validate_month_result(result: MonthPreparationResult) -> None:
-    if type(result) is not MonthPreparationResult or result.month not in SEASONAL_MONTHS:
+    if (
+        type(result) is not MonthPreparationResult
+        or result.month not in SEASONAL_MONTHS
+        or result.status not in _MONTH_STATUSES
+    ):
         raise SeasonalPreparationError("MONTH_RESULT_INVALID")
     try:
         config = jpl_month_config(result.month)
@@ -1892,6 +2157,8 @@ def _validate_month_result(result: MonthPreparationResult) -> None:
         "sessions_processed": cleaning["sessions_processed"],
         "cleaned_session_count": cleaning["cleaned_session_count"],
         "invalid_skipped_session_count": cleaning["invalid_skipped_session_count"],
+        "trajectory_quarantine_count": acquisition["trajectory_quarantine_count"],
+        "full_session_quarantine_count": acquisition["full_session_quarantine_count"],
         "station_bins": station["generated_bins"],
         "valid_bin_90_count": station["valid_bins_at_90"],
         "scheduled_issue_times": issue["scheduled_issue_times"],
@@ -2066,6 +2333,9 @@ def _root_payloads(result: SeasonalPreparationResult) -> dict[str, bytes]:
         snapshots.append(
             {
                 "month": item.month,
+                "status": item.status,
+                "trajectory_quarantine_count": item.trajectory_quarantine_count,
+                "full_session_quarantine_count": item.full_session_quarantine_count,
                 "metadata_source_inventory_sha256": (item.metadata_source_inventory_sha256),
                 "metadata_record_inventory_sha256": (item.metadata_record_inventory_sha256),
                 "raw_inventory_sha256": item.raw_inventory_sha256,
@@ -2179,6 +2449,9 @@ def _validate_root_documents(
             declared,
             (
                 "month",
+                "status",
+                "trajectory_quarantine_count",
+                "full_session_quarantine_count",
                 "metadata_source_inventory_sha256",
                 "metadata_record_inventory_sha256",
                 "raw_inventory_sha256",
@@ -2189,6 +2462,9 @@ def _validate_root_documents(
         )
         expected = {
             "month": item.month,
+            "status": item.status,
+            "trajectory_quarantine_count": item.trajectory_quarantine_count,
+            "full_session_quarantine_count": item.full_session_quarantine_count,
             "metadata_source_inventory_sha256": (item.metadata_source_inventory_sha256),
             "metadata_record_inventory_sha256": (item.metadata_record_inventory_sha256),
             "raw_inventory_sha256": item.raw_inventory_sha256,
@@ -2733,6 +3009,18 @@ def _compact_month_documents(
     series = _mapping(quality.get("series"), "ACQUISITION_QA_INVALID")
     current_quality = _mapping(series.get("chargingCurrent"), "ACQUISITION_QA_INVALID")
     pilot_quality = _mapping(series.get("pilotSignal"), "ACQUISITION_QA_INVALID")
+    quarantine = _mapping(
+        acquisition_qa.get("trajectory_quarantine"),
+        "TRAJECTORY_QUARANTINE_INVALID",
+    )
+    trajectory_count = _integer(
+        quarantine.get("trajectory_quarantine_count"),
+        "TRAJECTORY_QUARANTINE_COUNT",
+    )
+    full_count = _integer(
+        quarantine.get("full_session_quarantine_count"),
+        "FULL_SESSION_QUARANTINE_COUNT",
+    )
     current_invalid = _integer(
         current_quality.get("invalid_container_count"), "CURRENT_INVALID_CONTAINERS"
     )
@@ -2773,7 +3061,15 @@ def _compact_month_documents(
     if raw_dimensions != _RAW_DIMENSIONS or encoded_dimensions != _ENCODED_DIMENSIONS:
         raise SeasonalPreparationError("FEATURE_DIMENSION_INVALID")
     power_status = power_audit.get("status")
-    run_status = "PASS" if power_status == "KW_RECONSTRUCTION_CANDIDATE" else "CONDITIONAL_PASS"
+    run_status = (
+        "PASS_WITH_TRAJECTORY_QUARANTINE"
+        if trajectory_count
+        else (
+            "PASS"
+            if power_status == "KW_RECONSTRUCTION_CANDIDATE"
+            else "CONDITIONAL_PASS"
+        )
+    )
     acquisition_document = {
         "schema_version": "acn-jpl-seasonal-acquisition-summary/v1",
         "month": config.month,
@@ -2782,6 +3078,9 @@ def _compact_month_documents(
         "local_session_count": getattr(acquisition, "local_session_count", None),
         "carry_in_count": getattr(acquisition, "carry_in_count", None),
         "combined_session_count": combined,
+        "trajectory_quarantine_count": trajectory_count,
+        "trajectory_quarantine_rate": quarantine.get("trajectory_quarantine_rate"),
+        "full_session_quarantine_count": full_count,
         "metadata_scope": {
             "local_calendar_session_count": getattr(scope, "local_month_session_count", None),
             "utc_calendar_session_count": getattr(scope, "utc_month_session_count", None),
@@ -2853,6 +3152,17 @@ def _compact_month_documents(
         "expected_sessions": combined,
         "cleaned_session_count": cleaning_qa.get("sessions_processed"),
         "invalid_skipped_session_count": invalid_skipped_session_count,
+        "trajectory_quarantine": {
+            **dict(quarantine),
+            "raw_field_coverage": {
+                "current": current_quality.get("raw_field_coverage"),
+                "pilot": pilot_quality.get("raw_field_coverage"),
+            },
+            "analysis_field_coverage": {
+                "current": current_quality.get("field_coverage"),
+                "pilot": pilot_quality.get("field_coverage"),
+            },
+        },
         "analysis_window": {
             "timezone": config.timezone_name,
             "local_start_inclusive": config.local_start.isoformat(),
@@ -2903,7 +3213,10 @@ def _compact_month_documents(
                 "conflicting_timestamps": current_clean.get("conflicting_timestamps"),
                 "conflict_affected_sessions": current_clean.get("conflict_affected_sessions"),
                 "nonmonotonic_pairs": current_quality.get("nonmonotonic_pairs"),
-                "nonmonotonic_sessions": current_quality.get("nonmonotonic_sessions"),
+                "nonmonotonic_sessions": current_quality.get(
+                    "nonmonotonic_affected_sessions",
+                    current_quality.get("nonmonotonic_sessions"),
+                ),
                 "bounded_observation_coverage": current_clean.get("bounded_observation_coverage"),
                 "bounded_value_hours": current_clean.get("bounded_value_hours"),
             },
@@ -2918,7 +3231,10 @@ def _compact_month_documents(
                 "conflicting_timestamps": pilot_clean.get("conflicting_timestamps"),
                 "conflict_affected_sessions": pilot_clean.get("conflict_affected_sessions"),
                 "nonmonotonic_pairs": pilot_quality.get("nonmonotonic_pairs"),
-                "nonmonotonic_sessions": pilot_quality.get("nonmonotonic_sessions"),
+                "nonmonotonic_sessions": pilot_quality.get(
+                    "nonmonotonic_affected_sessions",
+                    pilot_quality.get("nonmonotonic_sessions"),
+                ),
                 "bounded_observation_coverage": pilot_clean.get("bounded_observation_coverage"),
                 "bounded_value_hours": pilot_clean.get("bounded_value_hours"),
             },
@@ -3066,6 +3382,10 @@ def _compact_month_documents(
         "valid_bin_90_gate": (
             "PASS" if valid_90 / config.expected_bins >= protocol.minimum_valid_bin_rate else "FAIL"
         ),
+        "trajectory_quarantine_count": trajectory_count,
+        "coverage_denominator_includes_quarantined": quarantine.get(
+            "coverage_denominator_includes_quarantined"
+        ),
         "missing_bin_rate": 1.0 - valid_90 / config.expected_bins,
         "longest_missing_run": station_qa.get("longest_missing_run"),
         "peak_current_proxy_a": station_qa.get("peak_current_proxy_a"),
@@ -3143,6 +3463,8 @@ def _compact_month_documents(
         "raw_dimensions": list(raw_dimensions),
         "encoded_dimensions": list(encoded_dimensions),
         "local_artifact_count": local_artifact_count,
+        "trajectory_quarantine_count": trajectory_count,
+        "full_session_quarantine_count": full_count,
         "anonymous_local_indexes_published": False,
         "large_arrays_published": False,
     }
@@ -3157,6 +3479,8 @@ def _compact_month_documents(
         "sessions_processed": combined,
         "cleaned_session_count": cleaning_qa.get("sessions_processed"),
         "invalid_skipped_session_count": invalid_skipped_session_count,
+        "trajectory_quarantine_count": trajectory_count,
+        "full_session_quarantine_count": full_count,
         "station_bins": station_qa.get("generated_bins"),
         "valid_bin_90_count": valid_90,
         "scheduled_issue_times": scheduled,
@@ -3216,6 +3540,7 @@ def _prepare_verified_month(
 
     from .acn_jpl_15min import AggregationPolicy, aggregate_station_15min
     from .acn_jpl_cleaning import (
+        clean_quarantined_session,
         clean_session,
         cleaning_policy_from_sampling_modes,
         derive_sampling_modes,
@@ -3245,6 +3570,13 @@ def _prepare_verified_month(
         verified_existing_official_reference_sha256,
         verify_existing_jpl_month,
         verify_month_acquisition_result,
+    )
+    from .acn_jpl_trajectory_quarantine import (
+        FULL_SESSION_QUARANTINE,
+        NO_QUARANTINE,
+        TRAJECTORY_QUARANTINE,
+        build_trajectory_quarantine_audit,
+        quarantine_record_for_analysis,
     )
 
     if (
@@ -3280,7 +3612,7 @@ def _prepare_verified_month(
         raw_root=raw,
         acquisition_result=acquisition,
     )
-    if full_qa.gate_status != "PASS":
+    if full_qa.gate_status not in {"PASS", "PASS_WITH_TRAJECTORY_QUARANTINE"}:
         raise SeasonalPreparationError("ACQUISITION_QA_GATE_FAILED")
     acquisition_qa = full_qa.qa
 
@@ -3295,6 +3627,41 @@ def _prepare_verified_month(
     if validation.total_record_count != expected_sessions:
         raise SeasonalPreparationError("RAW_RECORD_COUNT_INVALID")
     raw_records = tuple(iter_validated_raw_records(raw, contract=contract))
+    metadata_by_pair = {
+        (str(record["_id"]), str(record["sessionID"])): record
+        for record in (*scope.local_month_records, *scope.carry_in_records)
+    }
+    decisions_by_ordinal = {
+        record.ordinal: quarantine_record_for_analysis(
+            record.payload,
+            expected_metadata=metadata_by_pair.get(
+                (record.payload.get("_id"), record.payload.get("sessionID"))
+            ),
+        )[0]
+        for record in raw_records
+    }
+    quarantine_audit = build_trajectory_quarantine_audit(
+        config,
+        tuple(
+            decision
+            for decision in decisions_by_ordinal.values()
+            if decision.action != NO_QUARANTINE
+        ),
+        denominator_sessions=expected_sessions,
+    )
+    expected_qa_status = (
+        "PASS_WITH_TRAJECTORY_QUARANTINE"
+        if quarantine_audit.trajectory_quarantine_count
+        else "PASS"
+    )
+    if (
+        not quarantine_audit.approved
+        or quarantine_audit.full_session_quarantine_count
+        or full_qa.gate_status != expected_qa_status
+        or acquisition_qa.get("trajectory_quarantine")
+        != quarantine_audit.public_dict()
+    ):
+        raise SeasonalPreparationError("TRAJECTORY_QUARANTINE_POLICY_FAIL")
     current_invalid_ordinals = {
         record.ordinal
         for record in raw_records
@@ -3306,6 +3673,11 @@ def _prepare_verified_month(
         if not _series_container_valid(record.payload, "pilotSignal")
     }
     invalid_ordinals = current_invalid_ordinals | pilot_invalid_ordinals
+    if any(
+        decisions_by_ordinal[ordinal].action != NO_QUARANTINE
+        for ordinal in invalid_ordinals
+    ):
+        raise SeasonalPreparationError("TRAJECTORY_QUARANTINE_POLICY_FAIL")
     quality_series = _mapping(
         _mapping(acquisition_qa.get("quality"), "ACQUISITION_QA_INVALID").get("series"),
         "ACQUISITION_QA_INVALID",
@@ -3324,7 +3696,11 @@ def _prepare_verified_month(
     valid_raw_records = tuple(
         record for record in raw_records if record.ordinal not in invalid_ordinals
     )
-    modes = derive_sampling_modes(record.payload for record in valid_raw_records)
+    modes = derive_sampling_modes(
+        record.payload
+        for record in valid_raw_records
+        if decisions_by_ordinal[record.ordinal].action == NO_QUARANTINE
+    )
     cleaning_policy = cleaning_policy_from_sampling_modes(
         modes,
         locf_mode_multiplier=protocol.locf_mode_multiplier,
@@ -3335,11 +3711,21 @@ def _prepare_verified_month(
     cleaned = []
     try:
         for raw_record in valid_raw_records:
-            item = clean_session(
-                raw_record.payload,
-                session_index=len(cleaned),
-                policy=cleaning_policy,
-            )
+            decision = decisions_by_ordinal[raw_record.ordinal]
+            if decision.action == TRAJECTORY_QUARANTINE:
+                item = clean_quarantined_session(
+                    raw_record.payload,
+                    session_index=len(cleaned),
+                    policy=cleaning_policy,
+                )
+            elif decision.action == FULL_SESSION_QUARANTINE:
+                raise SeasonalPreparationError("FULL_SESSION_QUARANTINE_REQUIRED")
+            else:
+                item = clean_session(
+                    raw_record.payload,
+                    session_index=len(cleaned),
+                    policy=cleaning_policy,
+                )
             accumulator.add(item, raw_record.payload)
             cleaned.append(item)
     except Exception as exc:

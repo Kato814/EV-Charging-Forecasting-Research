@@ -1,15 +1,15 @@
 {
   "boundary_plus_minus_60_seconds": {
     "current": {
-      "coverage": 0.9314766651738219,
-      "eligible_seconds": 34640798,
+      "coverage": 0.9306941639299285,
+      "eligible_seconds": 34669923,
       "observed_seconds": 32267095,
       "relative_value_hours_change": 0.001226366157962035,
       "value_hours": 93517.97677777779
     },
     "pilot": {
-      "coverage": 0.9320400182466928,
-      "eligible_seconds": 34640798,
+      "coverage": 0.9312570437494193,
+      "eligible_seconds": 34669923,
       "observed_seconds": 32286610,
       "relative_value_hours_change": 0.0030691622589650875,
       "value_hours": 113286.97000000006
@@ -19,40 +19,40 @@
   "hold_thresholds": {
     "current": {
       "12": {
-        "coverage": 0.9313486066519605,
-        "eligible_seconds": 34479038,
+        "coverage": 0.9305819616944669,
+        "eligible_seconds": 34507443,
         "observed_seconds": 32112004,
         "value_hours": 93403.42997222228
       },
       "4": {
-        "coverage": 0.9015373630784015,
-        "eligible_seconds": 34479038,
+        "coverage": 0.9007952574173635,
+        "eligible_seconds": 34507443,
         "observed_seconds": 31084141,
         "value_hours": 90503.06897222208
       },
       "60": {
-        "coverage": 0.9363173067647653,
-        "eligible_seconds": 34479038,
+        "coverage": 0.9355465717932215,
+        "eligible_seconds": 34507443,
         "observed_seconds": 32283320,
         "value_hours": 93844.23955555563
       }
     },
     "pilot": {
       "12": {
-        "coverage": 0.9319155018188152,
-        "eligible_seconds": 34479038,
+        "coverage": 0.9311483902183074,
+        "eligible_seconds": 34507443,
         "observed_seconds": 32131550,
         "value_hours": 112940.33777777774
       },
       "4": {
-        "coverage": 0.9020772563318037,
-        "eligible_seconds": 34479038,
+        "coverage": 0.9013347062545318,
+        "eligible_seconds": 34507443,
         "observed_seconds": 31102756,
         "value_hours": 109372.92527777789
       },
       "60": {
-        "coverage": 0.9368358827180735,
-        "eligible_seconds": 34479038,
+        "coverage": 0.9360647208777538,
+        "eligible_seconds": 34507443,
         "observed_seconds": 32301200,
         "value_hours": 113514.30111111107
       }
@@ -72,15 +72,15 @@
   },
   "last_write_wins": {
     "current": {
-      "coverage": 0.9313550453466828,
-      "eligible_seconds": 34479038,
+      "coverage": 0.9305883950891406,
+      "eligible_seconds": 34507443,
       "observed_seconds": 32112226,
       "relative_value_hours_change": 2.6313570910847416e-06,
       "value_hours": 93403.67575000007
     },
     "pilot": {
-      "coverage": 0.9319155018188152,
-      "eligible_seconds": 34479038,
+      "coverage": 0.9311483902183074,
+      "eligible_seconds": 34507443,
       "observed_seconds": 32131550,
       "relative_value_hours_change": 0.0,
       "value_hours": 112940.33777777774

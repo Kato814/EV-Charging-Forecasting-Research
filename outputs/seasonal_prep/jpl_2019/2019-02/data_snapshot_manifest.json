@@ -1,7 +1,7 @@
 {
   "anonymous_local_indexes_published": false,
-  "code_commit": "7b5b6e60177c328666896e3f26fe9e037d34e8b7",
-  "config_sha256": "541268b66d3eaad031fb7551fd0e10409dba7c35fb539856ce1936b85160c8e9",
+  "code_commit": "6ded3bdd810a8115ea5b8a51091de71fab894a03",
+  "config_sha256": "ee5aa65322df108c837fe4a4fea49e30f1ec412f8ceb46dcd31e23336ef898b5",
   "encoded_dimensions": [
     195,
     204,
@@ -13,7 +13,7 @@
   "metadata_record_inventory_sha256": "62f8d00dead0b0f6ebc8f22083904076b42a82a7ae420d17f258bcdd982a9a66",
   "metadata_source_inventory_sha256": "bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a",
   "month": "2019-02",
-  "processed_snapshot_sha256": "996c455e482d1e50e374530f29fb8bacd3a0122840655ea4edd9ab3b5a28ebee",
+  "processed_snapshot_sha256": "59eff11bd56ab09a80f26f20a5472a1463953e2c0e680aa270510ef04dd64604",
   "raw_dimensions": [
     195,
     201,

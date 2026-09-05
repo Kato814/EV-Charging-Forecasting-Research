@@ -6,7 +6,7 @@
     "utc_end_exclusive": "2019-03-01T08:00:00+00:00",
     "utc_start_inclusive": "2019-02-01T08:00:00+00:00"
   },
-  "cleaned_session_count": 1287,
+  "cleaned_session_count": 1289,
   "duplicate_conflict": {
     "conflict_main_policy": "mark_timestamp_missing",
     "conflict_sensitivity_policy": "last_write_wins",
@@ -30,7 +30,7 @@
       "status": "PASS"
     }
   },
-  "invalid_skipped_session_count": 2,
+  "invalid_skipped_session_count": 0,
   "month": "2019-02",
   "raw_modified": false,
   "retrospective_done_time": {
@@ -49,10 +49,10 @@
     "pilot_hold_seconds": 12,
     "pilot_mode_seconds": 4
   },
-  "schema_version": "acn-jpl-seasonal-preparation-cleaning-qa/v1",
+  "schema_version": "acn-jpl-seasonal-preparation-cleaning-qa/v2",
   "series": {
     "current": {
-      "bounded_observation_coverage": 0.9837883464043264,
+      "bounded_observation_coverage": 0.9828178555537881,
       "bounded_value_hours": 91800.89147222205,
       "conflict_affected_sessions": 19,
       "conflicting_timestamps": 24,
@@ -67,7 +67,7 @@
       "usable_samples": 8581940
     },
     "pilot": {
-      "bounded_observation_coverage": 0.9842566457204188,
+      "bounded_observation_coverage": 0.9832856929003896,
       "bounded_value_hours": 99938.8502777777,
       "conflict_affected_sessions": 1,
       "conflicting_timestamps": 1,
@@ -81,6 +81,23 @@
       "retained_samples": 8587196,
       "usable_samples": 8587196
     }
+  },
+  "session_accounting": {
+    "acquisition_session_count": 1289,
+    "both_invalid_count": 2,
+    "coverage_denominator_session_count": 1289,
+    "current_analyzable_session_count": 1287,
+    "current_only_invalid_count": 0,
+    "invalid_container_placeholder_count": 2,
+    "metadata_anomaly_count": 0,
+    "metadata_checked_session_count": 2,
+    "metadata_match_session_count": 2,
+    "pilot_analyzable_session_count": 1287,
+    "pilot_only_invalid_count": 0,
+    "structural_retained_session_count": 1289,
+    "trajectory_quarantine_count": 0,
+    "whole_current_unobservable_session_count": 2,
+    "whole_pilot_unobservable_session_count": 2
   },
   "sessions_processed": 1289,
   "status": "PASS",
@@ -128,8 +145,8 @@
   },
   "user_inputs": {
     "issue_time_truncation_ready": true,
-    "raw_revision_count": 1660,
-    "sanitized_revision_count": 1660,
+    "raw_revision_count": 1665,
+    "sanitized_revision_count": 1665,
     "unparseable_modified_count": 0
   }
 }

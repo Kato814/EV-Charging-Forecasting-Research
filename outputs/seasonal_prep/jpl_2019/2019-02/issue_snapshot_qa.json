@@ -1,5 +1,5 @@
 {
-  "formal_issue_times": 2439,
+  "formal_issue_times": 2388,
   "horizons_minutes": [
     15,
     30,
@@ -7,15 +7,15 @@
     120,
     240
   ],
-  "incomplete_label_issue_times": 138,
+  "incomplete_label_issue_times": 189,
   "leakage_status": "PASS",
   "lookback_minutes": 1440,
   "m4_generated": false,
   "missing_rates": {
-    "M1_history": 0.01686142,
-    "M2_pilot_mean": 0.01066011,
-    "M2_pilot_sum": 0.01066011,
-    "M2_station_current": 0.01066011,
+    "M1_history": 0.02590208,
+    "M2_pilot_mean": 0.01088777,
+    "M2_pilot_sum": 0.01088777,
+    "M2_station_current": 0.01088777,
     "M3_cumulative_current_ah": 5.96e-05,
     "M3_current_current": 0.0022648,
     "M3_current_pilot": 0.0022648,
@@ -30,29 +30,29 @@
     "M3": 33557
   },
   "samples": {
-    "M1": 2439,
-    "M2": 2439,
-    "M3": 2439
+    "M1": 2388,
+    "M2": 2388,
+    "M3": 2388
   },
   "scheduled_issue_times": 2577,
   "schema_version": "acn-jpl-seasonal-preparation-issue-snapshot-qa/v1",
   "shapes": {
     "M1_history": [
-      2439,
+      2388,
       96
     ],
     "M2_dense": [
-      2439,
+      2388,
       6
     ],
     "M3_ragged_rows": 33557,
     "M3_session_feature_width": 11,
     "labels": [
-      2439,
+      2388,
       5
     ]
   },
-  "snapshot_sha256": "436db41adca64af2b0758916a83480035638d1912e8ce90c8239186988b6711b",
+  "snapshot_sha256": "3583a639a36f9994138cf66f367af1a9096efccfa785328439d4b8c967d6209f",
   "status": "PASS",
   "tiers": [
     "M1",
@@ -60,10 +60,10 @@
     "M3"
   ],
   "valid_labels_by_horizon": {
-    "120": 2529,
-    "15": 2529,
-    "240": 2529,
-    "30": 2529,
-    "60": 2529
+    "120": 2493,
+    "15": 2493,
+    "240": 2493,
+    "30": 2493,
+    "60": 2493
   }
 }

@@ -1,0 +1,262 @@
+{
+  "after_provenance": {
+    "code_commit": "6ded3bdd810a8115ea5b8a51091de71fab894a03",
+    "config_sha256": "ee5aa65322df108c837fe4a4fea49e30f1ec412f8ceb46dcd31e23336ef898b5",
+    "public_root_sha256": "a4447b00f864488088b32844006b08d162379e44bbf749bfa1cf0abfd56ecf8e"
+  },
+  "baseline_commit": "8c0eeeaff8367dba3c4790de79ba97a018022e0a",
+  "before_provenance": {
+    "code_commit": "7b5b6e60177c328666896e3f26fe9e037d34e8b7",
+    "config_sha256": "541268b66d3eaad031fb7551fd0e10409dba7c35fb539856ce1936b85160c8e9",
+    "preserved_public_inventory_sha256": "27a10c54637772763d194b885c85f28c1ff6f37366774a2f5762bace1d96dd6a",
+    "public_root_sha256": "6416086571d1a46d023ef573e5ac9dbe6cd60c0966e35fdcf83efb17d5af24c8"
+  },
+  "evidence": {
+    "baseline_inventory_content_sha256": "70102e2f86823ab0a77215b75f6c8ae394b688f3827bbeec8436be8b763d5e2a",
+    "comparison_audit_content_sha256": "aba2aebc854e843b5e6786b264581d12a083b9a1b94d5e2ee481e6b28eb55ab6",
+    "may_audit_content_sha256": "d20780698b5da0dc576a7523c06d40e313e2cdecc02108259f2195b14071b74e",
+    "metadata_audit_content_sha256": "cc24146fc1a02826ee5b67a653e56c348c4079acf5951abbd5d33fc254702bb2",
+    "raw_files_verified_unchanged": 188,
+    "reconciliation_source_sha256": "600ab262840ce8cb3372b7c376379ef1b1afeadb6ef2e5221b524cb7cca854ee"
+  },
+  "months": [
+    {
+      "acquisition_session_count": 1289,
+      "after": {
+        "both_invalid_count": 2,
+        "connected_session_seconds": 33701831,
+        "coverage_denominator_session_count": 1289,
+        "coverage_only_valid_bins_at_90": 2604,
+        "current_analyzable_session_count": 1287,
+        "current_only_invalid_count": 0,
+        "formal_issue_times": 2388,
+        "invalid_container_placeholder_count": 2,
+        "issue_snapshot_sha256": "3583a639a36f9994138cf66f367af1a9096efccfa785328439d4b8c967d6209f",
+        "known_incomplete_current_bins": 36,
+        "known_incomplete_current_excluded_bins_at_90": 0,
+        "known_incomplete_pilot_bins": 36,
+        "metadata_anomaly_count": 0,
+        "metadata_checked_session_count": 2,
+        "metadata_match_session_count": 2,
+        "pilot_analyzable_session_count": 1287,
+        "pilot_only_invalid_count": 0,
+        "processed_snapshot_sha256": "59eff11bd56ab09a80f26f20a5472a1463953e2c0e680aa270510ef04dd64604",
+        "structural_session_count": 1289,
+        "trajectory_quarantine_count": 0,
+        "valid_bins_at_90": 2604,
+        "whole_current_unobservable_session_count": 2,
+        "whole_pilot_unobservable_session_count": 2
+      },
+      "before": {
+        "connected_session_seconds": 33668572,
+        "formal_issue_times": 2439,
+        "issue_snapshot_sha256": "436db41adca64af2b0758916a83480035638d1912e8ce90c8239186988b6711b",
+        "processed_snapshot_sha256": "996c455e482d1e50e374530f29fb8bacd3a0122840655ea4edd9ab3b5a28ebee",
+        "structural_session_count": 1287,
+        "valid_bins_at_90": 2640
+      },
+      "changes": {
+        "affected_interval_bins": 36,
+        "changed_connected_bins": 35,
+        "connected_session_seconds": 33259,
+        "formal_issue_times": -51,
+        "old_valid_now_excluded_bins_at_90": 36,
+        "structural_session_count": 2,
+        "valid_bins_at_90": -36
+      },
+      "independent_comparison": {
+        "checks": 145886,
+        "mismatch_count": 0,
+        "status": "PASS"
+      },
+      "month": "2019-02",
+      "provenance": {
+        "after_month_public_sha256": "8de35881267a857c86bcac6a3c21bde2e2ffca33bbe934dafb19fb0b918eacb6",
+        "before_month_public_sha256": "5145860548046fa4a03404dd673330d6c16958db69c99d7b625dbbb68b57602f",
+        "metadata_record_inventory_sha256": "62f8d00dead0b0f6ebc8f22083904076b42a82a7ae420d17f258bcdd982a9a66",
+        "metadata_source_inventory_sha256": "bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a",
+        "official_reference_sha256": "2a6916f4d7c5272f3ec178bdfb2ab69d90e6117cafd77bf9375ef219e1938fef",
+        "raw_inventory_after_sha256": "70a0a6178d39607045a0e048b119ef391fa7a6be96261020a2896e6a4d8742a0",
+        "raw_inventory_before_sha256": "70a0a6178d39607045a0e048b119ef391fa7a6be96261020a2896e6a4d8742a0",
+        "raw_unchanged": true
+      },
+      "station_bin_count": 2688
+    },
+    {
+      "acquisition_session_count": 1509,
+      "after": {
+        "both_invalid_count": 0,
+        "connected_session_seconds": 39019488,
+        "coverage_denominator_session_count": 1509,
+        "coverage_only_valid_bins_at_90": 2954,
+        "current_analyzable_session_count": 1509,
+        "current_only_invalid_count": 0,
+        "formal_issue_times": 2784,
+        "invalid_container_placeholder_count": 0,
+        "issue_snapshot_sha256": "50dd7ce3f6f21fa66bc0b520201f88e6ddf061185f040424a87e8b327770cc11",
+        "known_incomplete_current_bins": 0,
+        "known_incomplete_current_excluded_bins_at_90": 0,
+        "known_incomplete_pilot_bins": 0,
+        "metadata_anomaly_count": 0,
+        "metadata_checked_session_count": 0,
+        "metadata_match_session_count": 0,
+        "pilot_analyzable_session_count": 1509,
+        "pilot_only_invalid_count": 0,
+        "processed_snapshot_sha256": "d938230d57a52b8728580f94737d469be47589c33d98be6aa9a15f5e75a78abb",
+        "structural_session_count": 1509,
+        "trajectory_quarantine_count": 0,
+        "valid_bins_at_90": 2954,
+        "whole_current_unobservable_session_count": 0,
+        "whole_pilot_unobservable_session_count": 0
+      },
+      "before": {
+        "connected_session_seconds": 39019488,
+        "formal_issue_times": 2784,
+        "issue_snapshot_sha256": "50dd7ce3f6f21fa66bc0b520201f88e6ddf061185f040424a87e8b327770cc11",
+        "processed_snapshot_sha256": "8a457ef11680350dd6acacf1473a304b0911b9c8585e478c44d16dba42b71f57",
+        "structural_session_count": 1509,
+        "valid_bins_at_90": 2954
+      },
+      "changes": {
+        "affected_interval_bins": 0,
+        "changed_connected_bins": 0,
+        "connected_session_seconds": 0,
+        "formal_issue_times": 0,
+        "old_valid_now_excluded_bins_at_90": 0,
+        "structural_session_count": 0,
+        "valid_bins_at_90": 0
+      },
+      "independent_comparison": {
+        "checks": 171120,
+        "mismatch_count": 0,
+        "status": "PASS"
+      },
+      "month": "2019-08",
+      "provenance": {
+        "after_month_public_sha256": "9d06d0bef7c28f73aeca5e880087a1da43cffb8d8a37cb600e25e8c401acfe08",
+        "before_month_public_sha256": "6b26ef4bf1ed45a784bf9a5e485f5ffe6b256bdcb661aa98ea3bfaa9b9fef9e4",
+        "metadata_record_inventory_sha256": "62f8d00dead0b0f6ebc8f22083904076b42a82a7ae420d17f258bcdd982a9a66",
+        "metadata_source_inventory_sha256": "bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a",
+        "official_reference_sha256": "d277233d62fca3665e263ee68d580b827d169313bbb50a64ea8c3a071aa4916d",
+        "raw_inventory_after_sha256": "06b16066eeba18ef33ae0eb26a348111b316d213a8f9be88e9c9067059140f10",
+        "raw_inventory_before_sha256": "06b16066eeba18ef33ae0eb26a348111b316d213a8f9be88e9c9067059140f10",
+        "raw_unchanged": true
+      },
+      "station_bin_count": 2976
+    },
+    {
+      "acquisition_session_count": 1354,
+      "after": {
+        "both_invalid_count": 6,
+        "connected_session_seconds": 34499941,
+        "coverage_denominator_session_count": 1354,
+        "coverage_only_valid_bins_at_90": 2762,
+        "current_analyzable_session_count": 1347,
+        "current_only_invalid_count": 0,
+        "formal_issue_times": 2517,
+        "invalid_container_placeholder_count": 6,
+        "issue_snapshot_sha256": "dc043e8b630b7bc5fa630b38345a4599b242f951ef242a45bcd62ea79f706ca9",
+        "known_incomplete_current_bins": 45,
+        "known_incomplete_current_excluded_bins_at_90": 0,
+        "known_incomplete_pilot_bins": 45,
+        "metadata_anomaly_count": 0,
+        "metadata_checked_session_count": 6,
+        "metadata_match_session_count": 6,
+        "pilot_analyzable_session_count": 1347,
+        "pilot_only_invalid_count": 0,
+        "processed_snapshot_sha256": "097457efc566eeab1a79acb76d7ec2fca38f4dc35e1018687d45fc6bbd53c8b9",
+        "structural_session_count": 1354,
+        "trajectory_quarantine_count": 1,
+        "valid_bins_at_90": 2762,
+        "whole_current_unobservable_session_count": 7,
+        "whole_pilot_unobservable_session_count": 7
+      },
+      "before": {
+        "connected_session_seconds": 34471536,
+        "formal_issue_times": 2524,
+        "issue_snapshot_sha256": "0fcec7d93da69ddbb9674e432db88c4a82801370577a1e2a5e020b9b5d6d9dda",
+        "processed_snapshot_sha256": "287e4cd005f60b417b63a24450f1d20bfac68f42ba62bca416977290f4d15e9e",
+        "structural_session_count": 1348,
+        "valid_bins_at_90": 2769
+      },
+      "changes": {
+        "affected_interval_bins": 27,
+        "changed_connected_bins": 24,
+        "connected_session_seconds": 28405,
+        "formal_issue_times": -7,
+        "old_valid_now_excluded_bins_at_90": 7,
+        "structural_session_count": 6,
+        "valid_bins_at_90": -7
+      },
+      "independent_comparison": {
+        "checks": 147811,
+        "mismatch_count": 0,
+        "status": "PASS"
+      },
+      "month": "2019-11",
+      "provenance": {
+        "after_month_public_sha256": "9fba6859dc88c96c54460cce1289353da0943ceb6916c8039ca3c55208c7975e",
+        "before_month_public_sha256": "73d445d3c93dbdc3361cf673bf053eb52b3015dda8254386d6afa81fcb494ec3",
+        "metadata_record_inventory_sha256": "62f8d00dead0b0f6ebc8f22083904076b42a82a7ae420d17f258bcdd982a9a66",
+        "metadata_source_inventory_sha256": "bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a",
+        "official_reference_sha256": "692c3e304ceef3f42a786cf44337e4828c32cdc319bda6a816c34e2fbf695314",
+        "raw_inventory_after_sha256": "77e7b261d488aec79a5d21648fbe1a9825b60cb1df65658de797fc2b404007f3",
+        "raw_inventory_before_sha256": "77e7b261d488aec79a5d21648fbe1a9825b60cb1df65658de797fc2b404007f3",
+        "raw_unchanged": true
+      },
+      "station_bin_count": 2884
+    }
+  ],
+  "publication": {
+    "aggregate_only": true,
+    "correction_file_count": 2,
+    "identifiers_emitted": false,
+    "new_kw_authorization": false,
+    "seasonal_core_file_count": 37,
+    "timestamp_fingerprints_emitted": false,
+    "total_public_file_count": 39
+  },
+  "regressions": {
+    "august": {
+      "checked_array_count": 9,
+      "numerical_values_unchanged": true,
+      "status": "PASS"
+    },
+    "may": {
+      "arrays": {
+        "compared_count": 15,
+        "exact_equal_count": 15
+      },
+      "baseline_manifest_sha256": "f52a2b8e5f3a7694de71edc0561ead0b141c8463bbef23fa79c2be2b1d3dbd3f",
+      "checks": 62,
+      "frozen_public_unchanged": true,
+      "mismatch_count": 0,
+      "numeric_comparison": {
+        "absolute_tolerance": 1e-08,
+        "artifact_provenance_hash_fields_excluded": true,
+        "exact_difference_count": 1138,
+        "max_absolute_difference": 4.3655745685100555e-11,
+        "relative_tolerance": 1e-12,
+        "runtime_environment_python_field_excluded": true,
+        "tolerance_failure_count": 0
+      },
+      "numerical_equivalence_within_tolerance": true,
+      "public_files": {
+        "byte_equal_count": 10,
+        "compared_count": 13
+      },
+      "raw_unchanged": true,
+      "replay_manifest_sha256": "f52a2b8e5f3a7694de71edc0561ead0b141c8463bbef23fa79c2be2b1d3dbd3f",
+      "runtime_python": "3.11.16",
+      "source": {
+        "representation": "working_tree_snapshot",
+        "snapshot_sha256": "8b518f2510cb395a7b713155725049390cd878713d276e7cc90bb8ae1bef18ca",
+        "working_tree_base_commit": "8c0eeeaff8367dba3c4790de79ba97a018022e0a"
+      },
+      "status": "PASS",
+      "verification_content_sha256": "f0ab7ea17b50ce541743e0f00daf8d24b8d76dbe9735a2ca5f554c527366784a"
+    }
+  },
+  "schema_version": "acn-jpl-seasonal-invalid-container-reconciliation/v1",
+  "status": "PASS"
+}

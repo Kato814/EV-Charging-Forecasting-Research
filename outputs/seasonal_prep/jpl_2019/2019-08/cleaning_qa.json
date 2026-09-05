@@ -49,7 +49,7 @@
     "pilot_hold_seconds": 12,
     "pilot_mode_seconds": 4
   },
-  "schema_version": "acn-jpl-seasonal-preparation-cleaning-qa/v1",
+  "schema_version": "acn-jpl-seasonal-preparation-cleaning-qa/v2",
   "series": {
     "current": {
       "bounded_observation_coverage": 0.9863648646542978,
@@ -81,6 +81,23 @@
       "retained_samples": 9748682,
       "usable_samples": 9748682
     }
+  },
+  "session_accounting": {
+    "acquisition_session_count": 1509,
+    "both_invalid_count": 0,
+    "coverage_denominator_session_count": 1509,
+    "current_analyzable_session_count": 1509,
+    "current_only_invalid_count": 0,
+    "invalid_container_placeholder_count": 0,
+    "metadata_anomaly_count": 0,
+    "metadata_checked_session_count": 0,
+    "metadata_match_session_count": 0,
+    "pilot_analyzable_session_count": 1509,
+    "pilot_only_invalid_count": 0,
+    "structural_retained_session_count": 1509,
+    "trajectory_quarantine_count": 0,
+    "whole_current_unobservable_session_count": 0,
+    "whole_pilot_unobservable_session_count": 0
   },
   "sessions_processed": 1509,
   "status": "PASS",

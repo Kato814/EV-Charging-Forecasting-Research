@@ -137,6 +137,12 @@ outputs/runs/**
 !outputs/seasonal_prep/jpl_2019/seasonal_prep_report.md
 !outputs/seasonal_prep/jpl_2019/SHA256SUMS
 
+# Aggregate-only correction evidence; the seasonal core allowlist remains closed.
+!outputs/seasonal_prep_corrections/
+!outputs/seasonal_prep_corrections/jpl_2019_invalid_containers/
+!outputs/seasonal_prep_corrections/jpl_2019_invalid_containers/reconciliation.json
+!outputs/seasonal_prep_corrections/jpl_2019_invalid_containers/SHA256SUMS
+
 # Literature full text: metadata/notes only by default
 literature/fulltext/**
 !literature/fulltext/README.md

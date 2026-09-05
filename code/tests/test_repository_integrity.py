@@ -52,10 +52,23 @@ class RepositoryIntegrityTest(unittest.TestCase):
         lines = tuple(
             line
             for line in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
-            if line.startswith("!outputs/seasonal_prep")
+            if line.startswith("!outputs/seasonal_prep/")
         )
         self.assertEqual(lines, expected)
         self.assertEqual(sum(not line.endswith("/") for line in lines), 37)
+        self.assertFalse(any("*" in line for line in lines))
+
+    def test_seasonal_correction_gitignore_allowlist_is_literal_and_exact(self) -> None:
+        base = "!outputs/seasonal_prep_corrections/"
+        destination = base + "jpl_2019_invalid_containers/"
+        lines = tuple(
+            line
+            for line in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+            if line.startswith(base)
+        )
+        self.assertEqual(lines, (base, destination, destination + "reconciliation.json",
+                                 destination + "SHA256SUMS"))
+        self.assertEqual(sum(not line.endswith("/") for line in lines), 2)
         self.assertFalse(any("*" in line for line in lines))
 
     def test_literature_ids_and_identifiers_are_unique(self) -> None:

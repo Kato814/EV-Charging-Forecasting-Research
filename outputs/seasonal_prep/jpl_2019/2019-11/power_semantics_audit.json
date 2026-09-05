@@ -4,9 +4,9 @@
   "e208_authorized": false,
   "legacy_classifier_status": "CURRENT_PROXY_ONLY",
   "mapping": {
-    "mapped_record_count": 1348,
+    "mapped_record_count": 1354,
     "mapping_rate": 1.0,
-    "raw_record_count": 1348,
+    "raw_record_count": 1354,
     "unmapped_record_count": 0
   },
   "month": "2019-11",
@@ -27,7 +27,7 @@
       "relative_error": 0.00892301009195581,
       "session_count": 1075
     },
-    "audit_coverage": 0.8204747774480712,
+    "audit_coverage": 0.8168389955686853,
     "coverage_qualified_session_count": 1106,
     "e208_error": {
       "count": 1075,
@@ -41,9 +41,9 @@
       "q1": 203.49776290829868,
       "q3": 208.37696938810404
     },
-    "eligible_session_count": 1348,
-    "input_session_count": 1348,
-    "retained_rate": 0.7974777448071216,
+    "eligible_session_count": 1354,
+    "input_session_count": 1354,
+    "retained_rate": 0.7939438700147711,
     "retained_session_count": 1075,
     "thresholds": {
       "minimum_current_coverage": 0.9,

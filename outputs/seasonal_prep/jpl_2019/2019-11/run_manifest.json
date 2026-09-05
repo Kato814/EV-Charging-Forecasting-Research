@@ -1,9 +1,9 @@
 {
   "carry_in_count": 1,
-  "cleaned_session_count": 1348,
-  "formal_issue_times": 2524,
+  "cleaned_session_count": 1354,
+  "formal_issue_times": 2517,
   "full_session_quarantine_count": 0,
-  "invalid_skipped_session_count": 6,
+  "invalid_skipped_session_count": 0,
   "local_session_count": 1353,
   "month": "2019-11",
   "official_total": 1353,
@@ -26,5 +26,5 @@
   "station_bins": 2884,
   "status": "PASS_WITH_TRAJECTORY_QUARANTINE",
   "trajectory_quarantine_count": 1,
-  "valid_bin_90_count": 2769
+  "valid_bin_90_count": 2762
 }

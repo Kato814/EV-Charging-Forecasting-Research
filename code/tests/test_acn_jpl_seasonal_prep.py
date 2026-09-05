@@ -575,6 +575,149 @@ def _month_result(month: str):
     )
 
 
+def _nonintegral_month_documents(month: str, *, rounded: bool) -> dict[str, object]:
+    config = prep_module.jpl_month_config(month)
+    documents = _month_documents(month, config.expected_bins, config.expected_scheduled_issue_times)
+    combined, skipped, station_counts = {
+        "2019-02": (1289, 2, (2646, 2640, 2638)),
+        "2019-11": (1354, 6, (2775, 2769, 2762)),
+    }[month]
+    local = combined - 1
+    acquisition = documents["acquisition_summary.json"]
+    acquisition.update(
+        official_total=local,
+        local_session_count=local,
+        combined_session_count=combined,
+        trajectory_quarantine_rate=acquisition["trajectory_quarantine_count"] / combined,
+    )
+    acquisition["metadata_scope"].update(
+        local_calendar_session_count=local,
+        utc_calendar_session_count=local,
+        left_boundary_count=0,
+    )
+    for name in acquisition["linkage"]:
+        if name.startswith("daily_"):
+            acquisition["linkage"][name] = local
+        elif name.startswith("combined_") or name == "matched_metadata_pairs":
+            acquisition["linkage"][name] = combined
+    cleaning = documents["cleaning_qa.json"]
+    cleaning.update(
+        sessions_processed=combined,
+        expected_sessions=combined,
+        cleaned_session_count=combined - skipped,
+        invalid_skipped_session_count=skipped,
+    )
+    quarantine = cleaning["trajectory_quarantine"]
+    quarantine.update(
+        denominator_sessions=combined,
+        trajectory_quarantine_rate=quarantine["trajectory_quarantine_count"] / combined,
+    )
+    for coverage_name in ("raw_field_coverage", "analysis_field_coverage"):
+        count = combined - skipped
+        if coverage_name == "analysis_field_coverage":
+            count -= quarantine["trajectory_quarantine_count"]
+        for field_name in ("current", "pilot"):
+            rate = count / combined
+            quarantine[coverage_name][field_name] = {
+                "count": count,
+                "denominator": combined,
+                "rate": round(rate, 8) if rounded else rate,
+            }
+    cleaning["invalid_containers"]["denominator"] = combined
+    for field_name in ("charging_current", "pilot_signal"):
+        cleaning["invalid_containers"][field_name].update(count=skipped, rate=skipped / combined)
+    station = documents["station_15min_qa.json"]
+    for threshold, count in zip((80, 90, 95), station_counts, strict=True):
+        rate = count / config.expected_bins
+        station[f"valid_bins_at_{threshold}"] = count
+        station[f"pilot_valid_bins_at_{threshold}"] = count
+        station[f"valid_bin_rate_at_{threshold}"] = round(rate, 8) if rounded else rate
+        station[f"missing_bin_rate_at_{threshold}"] = (
+            round(1 - rate, 8) if rounded else 1 - rate
+        )
+    station["valid_bin_90_rate"] = station_counts[1] / config.expected_bins
+    station["missing_bin_rate"] = 1 - station["valid_bin_90_rate"]
+    station["weekday_distribution"]["valid_bin_count"] = station_counts[1]
+    documents["run_manifest.json"].update(
+        official_total=local,
+        local_session_count=local,
+        sessions_processed=combined,
+        cleaned_session_count=combined - skipped,
+        invalid_skipped_session_count=skipped,
+        valid_bin_90_count=station_counts[1],
+    )
+    return documents
+
+
+@pytest.mark.parametrize("month", ("2019-02", "2019-11"))
+@pytest.mark.parametrize("rounded", (False, True))
+def test_compact_rates_preserve_counts_and_close_real_nonintegral_ratios(
+    month: str, rounded: bool
+) -> None:
+    documents = _nonintegral_month_documents(month, rounded=rounded)
+    original = copy.deepcopy(documents)
+    config = prep_module.jpl_month_config(month)
+    if rounded:
+        with pytest.raises(SeasonalPreparationError, match="QUARANTINE_FIELD_COVERAGE_RATE_INVALID"):
+            build_month_preparation_result(config=config, documents=documents)
+
+    canonical = prep_module._canonicalize_compact_rates(documents)
+
+    assert documents == original
+    quarantine = canonical["cleaning_qa.json"]["trajectory_quarantine"]
+    for coverage_name in ("raw_field_coverage", "analysis_field_coverage"):
+        for field_name in ("current", "pilot"):
+            coverage = quarantine[coverage_name][field_name]
+            assert coverage["rate"] == coverage["count"] / coverage["denominator"]
+    station = canonical["station_15min_qa.json"]
+    for threshold in (80, 90, 95):
+        rate = station[f"valid_bins_at_{threshold}"] / config.expected_bins
+        assert station[f"valid_bin_rate_at_{threshold}"] == rate
+        assert station[f"missing_bin_rate_at_{threshold}"] == 1 - rate
+    result = build_month_preparation_result(config=config, documents=canonical)
+    assert result.sessions_processed == (1289 if month == "2019-02" else 1354)
+    assert result.trajectory_quarantine_count == (0 if month == "2019-02" else 1)
+
+
+@pytest.mark.parametrize("coverage_name", ("raw_field_coverage", "analysis_field_coverage"))
+@pytest.mark.parametrize("field_name", ("current", "pilot"))
+@pytest.mark.parametrize("invalid_rate", (None, True, float("nan"), float("inf"), 0.5))
+def test_compact_rates_reject_contradictory_coverage_rates(
+    coverage_name: str, field_name: str, invalid_rate: object
+) -> None:
+    documents = _nonintegral_month_documents("2019-11", rounded=True)
+    coverage = documents["cleaning_qa.json"]["trajectory_quarantine"][coverage_name][field_name]
+    coverage["rate"] = invalid_rate
+
+    with pytest.raises(SeasonalPreparationError):
+        prep_module._canonicalize_compact_rates(documents)
+
+
+@pytest.mark.parametrize("threshold", (80, 90, 95))
+@pytest.mark.parametrize("rate_name", ("valid_bin_rate", "missing_bin_rate"))
+def test_compact_rates_reject_contradictory_station_rates(threshold: int, rate_name: str) -> None:
+    documents = _nonintegral_month_documents("2019-02", rounded=True)
+    station = documents["station_15min_qa.json"]
+    station[f"{rate_name}_at_{threshold}"] += 1e-7
+
+    with pytest.raises(SeasonalPreparationError):
+        prep_module._canonicalize_compact_rates(documents)
+
+
+@pytest.mark.parametrize("invalid_count", (-1, True, 1.5, None, float("inf"), 9999))
+@pytest.mark.parametrize("target", ("coverage_count", "coverage_denominator", "station_count"))
+def test_compact_rates_reject_invalid_counts(target: str, invalid_count: object) -> None:
+    documents = _nonintegral_month_documents("2019-02", rounded=True)
+    if target == "station_count":
+        documents["station_15min_qa.json"]["valid_bins_at_90"] = invalid_count
+    else:
+        coverage = documents["cleaning_qa.json"]["trajectory_quarantine"]["raw_field_coverage"]
+        coverage["current"]["count" if target == "coverage_count" else "denominator"] = invalid_count
+
+    with pytest.raises(SeasonalPreparationError):
+        prep_module._canonicalize_compact_rates(documents)
+
+
 def test_month_result_is_slots_frozen_and_enforces_both_main_gates() -> None:
     result = _month_result("2019-02")
     assert result.valid_bin_90_rate >= 0.8

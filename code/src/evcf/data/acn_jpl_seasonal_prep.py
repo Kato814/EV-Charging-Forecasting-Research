@@ -2976,6 +2976,62 @@ def _mapping(value: object, reason: str) -> Mapping[str, Any]:
     return value
 
 
+def _canonicalize_compact_rates(documents: Mapping[str, object]) -> dict[str, object]:
+    """Copy rounded producer rates into exact count-based seasonal report rates.
+
+    Only the exact ratio and the frozen producer's eight-decimal representation
+    are accepted. A contradictory rate must still fail before publication.
+    """
+
+    def count_rate(
+        value: object,
+        count: object,
+        denominator: int,
+        context: str,
+        *,
+        missing: bool = False,
+    ) -> float:
+        numerator = _integer(count, f"{context}_COUNT")
+        if numerator > denominator:
+            raise SeasonalPreparationError(f"{context}_COUNT_INVALID")
+        exact = numerator / denominator
+        if missing:
+            exact = 1.0 - exact
+        if _number(value, context) not in (exact, round(exact, 8)):
+            raise SeasonalPreparationError(f"{context}_INVALID")
+        return exact
+
+    canonical = dict(documents)
+    cleaning = dict(_mapping(documents["cleaning_qa.json"], "CLEANING_QA_INVALID"))
+    quarantine = dict(_mapping(cleaning["trajectory_quarantine"], "TRAJECTORY_QUARANTINE_INVALID"))
+    combined = _integer(cleaning["sessions_processed"], "COMBINED_SESSION_COUNT", positive=True)
+    for coverage_name in ("raw_field_coverage", "analysis_field_coverage"):
+        coverage = _exact(quarantine[coverage_name], ("current", "pilot"), "QUARANTINE_FIELD_COVERAGE")
+        normalized: dict[str, object] = {}
+        for field_name in ("current", "pilot"):
+            item = _exact(coverage[field_name], ("count", "denominator", "rate"), "FIELD_COVERAGE")
+            denominator = _integer(item["denominator"], "FIELD_COVERAGE_DENOMINATOR", positive=True)
+            if denominator != combined:
+                raise SeasonalPreparationError("QUARANTINE_FIELD_COVERAGE_DENOMINATOR_INVALID")
+            normalized[field_name] = {
+                **item,
+                "rate": count_rate(item["rate"], item["count"], denominator, "FIELD_COVERAGE_RATE"),
+            }
+        quarantine[coverage_name] = normalized
+    cleaning["trajectory_quarantine"] = quarantine
+    canonical["cleaning_qa.json"] = cleaning
+
+    station = dict(_mapping(documents["station_15min_qa.json"], "STATION_QA_INVALID"))
+    bins = _integer(station["expected_bins"], "EXPECTED_BINS", positive=True)
+    for threshold in (80, 90, 95):
+        count = station[f"valid_bins_at_{threshold}"]
+        for name, missing in (("valid_bin_rate", False), ("missing_bin_rate", True)):
+            key = f"{name}_at_{threshold}"
+            station[key] = count_rate(station[key], count, bins, name.upper(), missing=missing)
+    canonical["station_15min_qa.json"] = station
+    return canonical
+
+
 def _compact_month_documents(
     *,
     config: JPLMonthConfig,
@@ -3496,7 +3552,7 @@ def _compact_month_documents(
             "absolute_paths_emitted": False,
         },
     }
-    return {
+    return _canonicalize_compact_rates({
         "acquisition_summary.json": acquisition_document,
         "cleaning_qa.json": cleaning_document,
         "cleaning_sensitivity.json": sensitivity_document,
@@ -3507,7 +3563,7 @@ def _compact_month_documents(
         "leakage_audit.json": leakage_document,
         "data_snapshot_manifest.json": data_document,
         "run_manifest.json": run_document,
-    }
+    })
 
 
 def _series_container_valid(record: Mapping[str, Any], field_name: str) -> bool:

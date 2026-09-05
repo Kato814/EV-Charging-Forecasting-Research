@@ -72,7 +72,7 @@ def test_complete_metadata_scope_distinguishes_local_and_utc_months() -> None:
 
 - [ ] **Step 2: Run focused tests and confirm RED**
 
-Run: `E:\Anaconda\envs\evcf-gate1-pilot\python.exe -m pytest code/tests/test_acn_jpl_month_config.py code/tests/test_acn_jpl_official_reference.py -q`
+Run: `conda run -n evcf-gate1-pilot python -m pytest code/tests/test_acn_jpl_month_config.py code/tests/test_acn_jpl_official_reference.py -q`
 
 Expected: imports or generic month arguments fail because the month contract does not exist yet.
 
@@ -168,7 +168,7 @@ The existing positional `destination` argument and May default must remain compa
 
 - [ ] **Step 5: Run focused and May regression tests**
 
-Run: `E:\Anaconda\envs\evcf-gate1-pilot\python.exe -m pytest code/tests/test_acn_jpl_month_config.py code/tests/test_acn_jpl_official_reference.py code/tests/test_acn_jpl_metadata_qa.py -q`
+Run: `conda run -n evcf-gate1-pilot python -m pytest code/tests/test_acn_jpl_month_config.py code/tests/test_acn_jpl_official_reference.py code/tests/test_acn_jpl_metadata_qa.py -q`
 
 Expected: PASS, including May 1,644/1,645/1 and November 2,884.
 
@@ -223,7 +223,7 @@ def test_completed_month_is_not_redownloaded_when_later_month_fails(tmp_path: Pa
 
 - [ ] **Step 2: Run focused tests and confirm RED**
 
-Run: `E:\Anaconda\envs\evcf-gate1-pilot\python.exe -m pytest code/tests/test_acn_jpl_seasonal_acquisition.py code/tests/test_acquire_jpl_seasonal_cli.py -q`
+Run: `conda run -n evcf-gate1-pilot python -m pytest code/tests/test_acn_jpl_seasonal_acquisition.py code/tests/test_acquire_jpl_seasonal_cli.py -q`
 
 Expected: seasonal acquisition symbols are absent.
 
@@ -283,7 +283,7 @@ The production CLI has no month-order override: it always considers all three al
 
 - [ ] **Step 6: Run acquisition, CLI, API-client, and May QA tests**
 
-Run: `E:\Anaconda\envs\evcf-gate1-pilot\python.exe -m pytest code/tests/test_acn_jpl_seasonal_acquisition.py code/tests/test_acquire_jpl_seasonal_cli.py code/tests/test_acn_jpl_full_month_ts.py code/tests/test_acn_jpl_full_month_qa.py code/tests/test_acn_jpl_full_month_cli.py -q`
+Run: `conda run -n evcf-gate1-pilot python -m pytest code/tests/test_acn_jpl_seasonal_acquisition.py code/tests/test_acquire_jpl_seasonal_cli.py code/tests/test_acn_jpl_full_month_ts.py code/tests/test_acn_jpl_full_month_qa.py code/tests/test_acn_jpl_full_month_cli.py -q`
 
 Expected: PASS with no network access in tests.
 
@@ -334,7 +334,7 @@ def test_severe_power_conflict_keeps_current_pipeline_but_disables_e208() -> Non
 
 - [ ] **Step 2: Run focused tests and confirm RED**
 
-Run: `E:\Anaconda\envs\evcf-gate1-pilot\python.exe -m pytest code/tests/test_acn_jpl_seasonal_cleaning.py code/tests/test_acn_jpl_preparation.py code/tests/test_acn_jpl_power_semantics.py -q`
+Run: `conda run -n evcf-gate1-pilot python -m pytest code/tests/test_acn_jpl_seasonal_cleaning.py code/tests/test_acn_jpl_preparation.py code/tests/test_acn_jpl_power_semantics.py -q`
 
 Expected: dynamic raw and seasonal power contracts are absent.
 
@@ -362,7 +362,7 @@ The primary audit cohort is fixed before seeing seasonal results: `kWhDelivered 
 
 - [ ] **Step 5: Run cleaning/power suites and May regression**
 
-Run: `E:\Anaconda\envs\evcf-gate1-pilot\python.exe -m pytest code/tests/test_acn_jpl_cleaning.py code/tests/test_acn_jpl_seasonal_cleaning.py code/tests/test_acn_jpl_power_semantics.py code/tests/test_acn_jpl_preparation.py code/tests/test_acn_jpl_gate1_prep.py -q`
+Run: `conda run -n evcf-gate1-pilot python -m pytest code/tests/test_acn_jpl_cleaning.py code/tests/test_acn_jpl_seasonal_cleaning.py code/tests/test_acn_jpl_power_semantics.py code/tests/test_acn_jpl_preparation.py code/tests/test_acn_jpl_gate1_prep.py -q`
 
 Expected: PASS and legacy May public hashes remain unchanged.
 
@@ -409,7 +409,7 @@ def test_seasonal_snapshot_contains_only_m1_m2_m3() -> None:
 
 - [ ] **Step 2: Run focused tests and confirm RED**
 
-Run: `E:\Anaconda\envs\evcf-gate1-pilot\python.exe -m pytest code/tests/test_acn_jpl_seasonal_snapshots.py code/tests/test_acn_jpl_15min.py code/tests/test_acn_jpl_issue_snapshots.py -q`
+Run: `conda run -n evcf-gate1-pilot python -m pytest code/tests/test_acn_jpl_seasonal_snapshots.py code/tests/test_acn_jpl_15min.py code/tests/test_acn_jpl_issue_snapshots.py -q`
 
 Expected: tier selection is absent and November contract is not explicit.
 
@@ -440,7 +440,7 @@ Change the feature-builder signature compatibly to `build_feature_blocks(snapsho
 
 - [ ] **Step 5: Run aggregation, snapshot, and feature suites**
 
-Run: `E:\Anaconda\envs\evcf-gate1-pilot\python.exe -m pytest code/tests/test_acn_jpl_15min.py code/tests/test_acn_jpl_issue_snapshots.py code/tests/test_acn_jpl_gate1_features.py code/tests/test_acn_jpl_seasonal_snapshots.py -q`
+Run: `conda run -n evcf-gate1-pilot python -m pytest code/tests/test_acn_jpl_15min.py code/tests/test_acn_jpl_issue_snapshots.py code/tests/test_acn_jpl_gate1_features.py code/tests/test_acn_jpl_seasonal_snapshots.py -q`
 
 Expected: PASS with February/August/November bins 2,688/2,976/2,884 and dimensions 195/201/311 raw, 195/204/391 encoded.
 
@@ -487,7 +487,7 @@ def test_release_is_exactly_37_files_and_contains_no_m4_or_private_material(tmp_
 
 - [ ] **Step 2: Run focused tests and confirm RED**
 
-Run: `E:\Anaconda\envs\evcf-gate1-pilot\python.exe -m pytest code/tests/test_acn_jpl_seasonal_prep.py code/tests/test_prepare_jpl_seasonal_data_cli.py code/tests/test_repository_integrity.py -q`
+Run: `conda run -n evcf-gate1-pilot python -m pytest code/tests/test_acn_jpl_seasonal_prep.py code/tests/test_prepare_jpl_seasonal_data_cli.py code/tests/test_repository_integrity.py -q`
 
 Expected: seasonal preparation and allowlist do not exist.
 
@@ -515,7 +515,7 @@ The CLI requires `--authorize-prepare`, imports no model runner, accepts explici
 
 - [ ] **Step 6: Run controller, privacy, and repository tests**
 
-Run: `E:\Anaconda\envs\evcf-gate1-pilot\python.exe -m pytest code/tests/test_acn_jpl_seasonal_prep.py code/tests/test_prepare_jpl_seasonal_data_cli.py code/tests/test_repository_integrity.py -q`
+Run: `conda run -n evcf-gate1-pilot python -m pytest code/tests/test_acn_jpl_seasonal_prep.py code/tests/test_prepare_jpl_seasonal_data_cli.py code/tests/test_repository_integrity.py -q`
 
 Expected: PASS, exact 37-file release, zero M4/private/path/token/model/prediction fields.
 
@@ -534,10 +534,10 @@ feat: orchestrate JPL seasonal data preparation
 - [ ] **Step 1: Run the full local verification suite**
 
 ```powershell
-E:\Anaconda\envs\evcf-gate1-pilot\python.exe scripts/validate_library.py
-E:\Anaconda\envs\evcf-gate1-pilot\python.exe -m pytest code/tests
-E:\Anaconda\envs\evcf-gate1-pilot\python.exe -m compileall -q code/src scripts
-E:\Anaconda\envs\evcf-gate1-pilot\python.exe -m ruff check code/src scripts code/tests
+conda run -n evcf-gate1-pilot python scripts/validate_library.py
+conda run -n evcf-gate1-pilot python -m pytest code/tests
+conda run -n evcf-gate1-pilot python -m compileall -q code/src scripts
+conda run -n evcf-gate1-pilot python -m ruff check code/src scripts code/tests
 git diff --check
 ```
 

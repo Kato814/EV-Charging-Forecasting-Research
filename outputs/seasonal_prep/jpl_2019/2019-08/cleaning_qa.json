@@ -1,0 +1,135 @@
+{
+  "analysis_window": {
+    "local_end_exclusive": "2019-09-01T00:00:00-07:00",
+    "local_start_inclusive": "2019-08-01T00:00:00-07:00",
+    "timezone": "America/Los_Angeles",
+    "utc_end_exclusive": "2019-09-01T07:00:00+00:00",
+    "utc_start_inclusive": "2019-08-01T07:00:00+00:00"
+  },
+  "cleaned_session_count": 1509,
+  "duplicate_conflict": {
+    "conflict_main_policy": "mark_timestamp_missing",
+    "conflict_sensitivity_policy": "last_write_wins",
+    "current_conflicting_timestamps": 79,
+    "exact_duplicate_policy": "retain_first_remove_extra",
+    "pilot_conflicting_timestamps": 0
+  },
+  "expected_sessions": 1509,
+  "invalid_containers": {
+    "charging_current": {
+      "count": 0,
+      "limit": 0.1,
+      "rate": 0.0,
+      "status": "PASS"
+    },
+    "denominator": 1509,
+    "pilot_signal": {
+      "count": 0,
+      "limit": 0.1,
+      "rate": 0.0,
+      "status": "PASS"
+    }
+  },
+  "invalid_skipped_session_count": 0,
+  "month": "2019-08",
+  "raw_modified": false,
+  "retrospective_done_time": {
+    "online_feature_allowed": false,
+    "original_value_retained_locally": true,
+    "parsed_count": 1509,
+    "present_count": 1509,
+    "unparseable_count": 0
+  },
+  "sampling": {
+    "cap_seconds": 60,
+    "current_hold_seconds": 12,
+    "current_mode_seconds": 4,
+    "derivation": "mode_of_positive_raw_timestamp_differences",
+    "mode_multiplier": 3,
+    "pilot_hold_seconds": 12,
+    "pilot_mode_seconds": 4
+  },
+  "schema_version": "acn-jpl-seasonal-preparation-cleaning-qa/v1",
+  "series": {
+    "current": {
+      "bounded_observation_coverage": 0.9863648646542978,
+      "bounded_value_hours": 104124.00444444445,
+      "conflict_affected_sessions": 41,
+      "conflicting_timestamps": 79,
+      "exact_duplicate_extras": 21,
+      "invalid_timestamps": 0,
+      "invalid_values": 0,
+      "nonmonotonic_pairs": 0,
+      "nonmonotonic_sessions": 0,
+      "raw_samples": 9796237,
+      "retained_sample_rate": 0.9952149993921136,
+      "retained_samples": 9749362,
+      "usable_samples": 9749362
+    },
+    "pilot": {
+      "bounded_observation_coverage": 0.98628741617522,
+      "bounded_value_hours": 133796.52250000014,
+      "conflict_affected_sessions": 0,
+      "conflicting_timestamps": 0,
+      "exact_duplicate_extras": 94,
+      "invalid_timestamps": 0,
+      "invalid_values": 0,
+      "nonmonotonic_pairs": 0,
+      "nonmonotonic_sessions": 0,
+      "raw_samples": 9795474,
+      "retained_sample_rate": 0.9952230999745393,
+      "retained_samples": 9748682,
+      "usable_samples": 9748682
+    }
+  },
+  "sessions_processed": 1509,
+  "status": "PASS",
+  "trajectory_quarantine": {
+    "analysis_field_coverage": {
+      "current": {
+        "count": 1509,
+        "denominator": 1509,
+        "rate": 1.0
+      },
+      "pilot": {
+        "count": 1509,
+        "denominator": 1509,
+        "rate": 1.0
+      }
+    },
+    "connected_state_retained_count": 0,
+    "coverage_denominator_includes_quarantined": true,
+    "denominator_sessions": 1509,
+    "full_session_quarantine_count": 0,
+    "full_session_quarantine_rate": 0.0,
+    "interpolation_applied": false,
+    "raw_field_coverage": {
+      "current": {
+        "count": 1509,
+        "denominator": 1509,
+        "rate": 1.0
+      },
+      "pilot": {
+        "count": 1509,
+        "denominator": 1509,
+        "rate": 1.0
+      }
+    },
+    "raw_manifest_modified": false,
+    "raw_timestamps_modified": false,
+    "raw_trajectory_anomalies_retained": true,
+    "sort_repair_applied": false,
+    "structural_metadata_retained_count": 0,
+    "synchronized_utc_nonmonotonic_sessions": 0,
+    "timestamp_shift_seconds": 0,
+    "trajectory_quarantine_count": 0,
+    "trajectory_quarantine_rate": 0.0,
+    "whole_current_pilot_trajectory_unobservable": true
+  },
+  "user_inputs": {
+    "issue_time_truncation_ready": true,
+    "raw_revision_count": 2028,
+    "sanitized_revision_count": 2028,
+    "unparseable_modified_count": 0
+  }
+}

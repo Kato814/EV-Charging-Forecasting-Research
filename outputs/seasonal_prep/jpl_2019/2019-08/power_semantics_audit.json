@@ -1,0 +1,61 @@
+{
+  "continue_current_pipeline": true,
+  "current_proxy_available": true,
+  "e208_authorized": false,
+  "legacy_classifier_status": "KW_RECONSTRUCTION_CANDIDATE",
+  "mapping": {
+    "mapped_record_count": 1509,
+    "mapping_rate": 1.0,
+    "raw_record_count": 1509,
+    "unmapped_record_count": 0
+  },
+  "month": "2019-08",
+  "pinned_evidence": {
+    "commit": "14e723b11339e56ca3afd2bf4969f9e4bc8c2623",
+    "default_evse_voltage_v": 208.0,
+    "e208_formula": "E_208_kWh=208*ampere_hours/1000",
+    "line_to_line_network": true,
+    "repository": "https://github.com/zach401/acnportal",
+    "source_sha256": "0a8c9de3c972995dd323e3c2a976bff8511b795553f3926b60251b5418d6140d"
+  },
+  "primary_cohort": {
+    "aggregate_energy": {
+      "absolute_relative_error": 0.016798426177806733,
+      "e208_kwh": 20598.463605777783,
+      "error_kwh": 340.3051788333396,
+      "observed_kwh": 20258.158426944443,
+      "relative_error": 0.016798426177806733,
+      "session_count": 1418
+    },
+    "audit_coverage": 0.9602385685884692,
+    "coverage_qualified_session_count": 1449,
+    "e208_error": {
+      "count": 1418,
+      "median_absolute_percentage_error": 0.021752629612152248,
+      "p90_absolute_percentage_error": 0.04051788089281101
+    },
+    "effective_voltage_v": {
+      "count": 1418,
+      "iqr": 4.153915933033005,
+      "median": 204.0083715267089,
+      "q1": 202.20479756878726,
+      "q3": 206.35871350182026
+    },
+    "eligible_session_count": 1509,
+    "input_session_count": 1509,
+    "retained_rate": 0.9396951623591783,
+    "retained_session_count": 1418,
+    "thresholds": {
+      "minimum_current_coverage": 0.9,
+      "minimum_kwh_delivered": 0.5
+    }
+  },
+  "privacy": {
+    "aggregate_only": true,
+    "identifiers_emitted": false
+  },
+  "reconstructed_kw_column_authorized": false,
+  "schema_version": "acn-jpl-seasonal-preparation-power-semantics/v1",
+  "statistics_finite": true,
+  "status": "KW_RECONSTRUCTION_CANDIDATE"
+}

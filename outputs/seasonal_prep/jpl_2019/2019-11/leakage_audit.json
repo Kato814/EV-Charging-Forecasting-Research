@@ -1,0 +1,17 @@
+{
+  "connected_user_input_rows": 28944,
+  "feature_whitelist_status": "PASS",
+  "future_outcome_field_count": 0,
+  "future_outcome_fields_emitted": false,
+  "identifiers_emitted": false,
+  "issue_time_user_input_status": "PASS",
+  "known_user_input_rows": 28137,
+  "late_user_input_rows": 0,
+  "month": "2019-11",
+  "private_identifier_field_count": 0,
+  "schema_version": "acn-jpl-seasonal-preparation-leakage-audit/v1",
+  "status": "PASS",
+  "temporal_violation_count": 0,
+  "unexpected_feature_key_count": 0,
+  "user_input_rule": "last modifiedAt at or before issue time"
+}

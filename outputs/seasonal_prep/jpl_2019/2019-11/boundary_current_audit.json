@@ -1,0 +1,22 @@
+{
+  "at_or_after_disconnect_count": 4514,
+  "before_connection_count": 167,
+  "current_integral_share": 0.001390497003309783,
+  "excluded_positive_ampere_seconds": 468225.6999999997,
+  "main_result_excludes_boundary_points": true,
+  "month": "2019-11",
+  "positive_points_excluded": 4681,
+  "raw_total_ampere_seconds": 336732620.6999999,
+  "schema_version": "acn-jpl-seasonal-preparation-boundary-audit/v1",
+  "sensitivity_window_seconds": 60,
+  "sessions_affected": 313,
+  "signed_distance_seconds": {
+    "count": 4681,
+    "maximum": 60.0,
+    "median": 29.0,
+    "minimum": -60.0,
+    "p05": 0.0,
+    "p95": 57.0
+  },
+  "status": "PASS"
+}

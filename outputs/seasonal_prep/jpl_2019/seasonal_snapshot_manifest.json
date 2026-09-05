@@ -1,0 +1,48 @@
+{
+  "aggregate_only": true,
+  "code_commit": "7b5b6e60177c328666896e3f26fe9e037d34e8b7",
+  "config_sha256": "541268b66d3eaad031fb7551fd0e10409dba7c35fb539856ce1936b85160c8e9",
+  "month_snapshots": [
+    {
+      "full_session_quarantine_count": 0,
+      "metadata_record_inventory_sha256": "62f8d00dead0b0f6ebc8f22083904076b42a82a7ae420d17f258bcdd982a9a66",
+      "metadata_source_inventory_sha256": "bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a",
+      "month": "2019-02",
+      "month_public_sha256": "5145860548046fa4a03404dd673330d6c16958db69c99d7b625dbbb68b57602f",
+      "processed_snapshot_sha256": "996c455e482d1e50e374530f29fb8bacd3a0122840655ea4edd9ab3b5a28ebee",
+      "raw_inventory_sha256": "70a0a6178d39607045a0e048b119ef391fa7a6be96261020a2896e6a4d8742a0",
+      "status": "PASS",
+      "trajectory_quarantine_count": 0
+    },
+    {
+      "full_session_quarantine_count": 0,
+      "metadata_record_inventory_sha256": "62f8d00dead0b0f6ebc8f22083904076b42a82a7ae420d17f258bcdd982a9a66",
+      "metadata_source_inventory_sha256": "bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a",
+      "month": "2019-08",
+      "month_public_sha256": "6b26ef4bf1ed45a784bf9a5e485f5ffe6b256bdcb661aa98ea3bfaa9b9fef9e4",
+      "processed_snapshot_sha256": "8a457ef11680350dd6acacf1473a304b0911b9c8585e478c44d16dba42b71f57",
+      "raw_inventory_sha256": "06b16066eeba18ef33ae0eb26a348111b316d213a8f9be88e9c9067059140f10",
+      "status": "PASS",
+      "trajectory_quarantine_count": 0
+    },
+    {
+      "full_session_quarantine_count": 0,
+      "metadata_record_inventory_sha256": "62f8d00dead0b0f6ebc8f22083904076b42a82a7ae420d17f258bcdd982a9a66",
+      "metadata_source_inventory_sha256": "bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a",
+      "month": "2019-11",
+      "month_public_sha256": "73d445d3c93dbdc3361cf673bf053eb52b3015dda8254386d6afa81fcb494ec3",
+      "processed_snapshot_sha256": "287e4cd005f60b417b63a24450f1d20bfac68f42ba62bca416977290f4d15e9e",
+      "raw_inventory_sha256": "77e7b261d488aec79a5d21648fbe1a9825b60cb1df65658de797fc2b404007f3",
+      "status": "PASS_WITH_TRAJECTORY_QUARANTINE",
+      "trajectory_quarantine_count": 1
+    }
+  ],
+  "months": [
+    "2019-02",
+    "2019-08",
+    "2019-11"
+  ],
+  "public_file_count": 37,
+  "schema_version": "acn-jpl-seasonal-preparation-snapshot/v1",
+  "status": "CONDITIONAL_PASS"
+}

@@ -1,0 +1,69 @@
+{
+  "formal_issue_times": 2439,
+  "horizons_minutes": [
+    15,
+    30,
+    60,
+    120,
+    240
+  ],
+  "incomplete_label_issue_times": 138,
+  "leakage_status": "PASS",
+  "lookback_minutes": 1440,
+  "m4_generated": false,
+  "missing_rates": {
+    "M1_history": 0.01686142,
+    "M2_pilot_mean": 0.01066011,
+    "M2_pilot_sum": 0.01066011,
+    "M2_station_current": 0.01066011,
+    "M3_cumulative_current_ah": 5.96e-05,
+    "M3_current_current": 0.0022648,
+    "M3_current_pilot": 0.0022648,
+    "M3_elapsed_charging_time_proxy": 5.96e-05,
+    "M3_known_requested_departure": 0.03951486,
+    "M3_known_requested_energy": 0.03951486,
+    "M3_recent_current_mean": 0.0001192,
+    "M3_recent_current_peak": 0.0001192
+  },
+  "month": "2019-02",
+  "ragged_rows": {
+    "M3": 33557
+  },
+  "samples": {
+    "M1": 2439,
+    "M2": 2439,
+    "M3": 2439
+  },
+  "scheduled_issue_times": 2577,
+  "schema_version": "acn-jpl-seasonal-preparation-issue-snapshot-qa/v1",
+  "shapes": {
+    "M1_history": [
+      2439,
+      96
+    ],
+    "M2_dense": [
+      2439,
+      6
+    ],
+    "M3_ragged_rows": 33557,
+    "M3_session_feature_width": 11,
+    "labels": [
+      2439,
+      5
+    ]
+  },
+  "snapshot_sha256": "436db41adca64af2b0758916a83480035638d1912e8ce90c8239186988b6711b",
+  "status": "PASS",
+  "tiers": [
+    "M1",
+    "M2",
+    "M3"
+  ],
+  "valid_labels_by_horizon": {
+    "120": 2529,
+    "15": 2529,
+    "240": 2529,
+    "30": 2529,
+    "60": 2529
+  }
+}

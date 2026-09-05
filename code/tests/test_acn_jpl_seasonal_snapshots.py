@@ -120,6 +120,7 @@ def _seasonal_adapter_inputs(*, empty_trajectory: bool = False) -> tuple[
         start_utc=config.utc_start,
         end_utc=config.utc_end,
         policy=SnapshotPolicy(tiers=config.tiers),
+        include_trajectory_missing_rates=True,
     )
     return config, station_rows, result
 
@@ -163,6 +164,7 @@ def _seasonal_subset_adapter_inputs() -> tuple[
         start_utc=config.utc_start,
         end_utc=config.utc_end,
         policy=SnapshotPolicy(tiers=config.tiers),
+        include_trajectory_missing_rates=True,
     )
     return config, station_rows, result
 

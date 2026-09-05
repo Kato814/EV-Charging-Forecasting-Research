@@ -812,9 +812,12 @@ def build_issue_snapshots(
     start_utc: datetime,
     end_utc: datetime,
     policy: SnapshotPolicy,
+    include_trajectory_missing_rates: bool = False,
 ) -> IssueSnapshotResult:
     """Build M1-M4 snapshots with exact issue-time truncation and future labels."""
 
+    if type(include_trajectory_missing_rates) is not bool:
+        raise TypeError("include_trajectory_missing_rates must be a boolean")
     start = _utc(start_utc)
     end = _utc(end_utc)
     expected_bins = int((end - start).total_seconds() // BIN_SECONDS)
@@ -1189,21 +1192,26 @@ def build_issue_snapshots(
         missing_rates.update(
             {
                 "M3_current_current": _missing_rate(m3_rows, "current_current_a"),
-                "M3_elapsed_charging_time_proxy": _missing_rate(
-                    m3_rows, "elapsed_charging_time_proxy_s"
-                ),
                 "M3_recent_current_mean": _missing_rate(m3_rows, "recent_current_mean_a"),
                 "M3_recent_current_peak": _missing_rate(m3_rows, "recent_current_peak_a"),
                 "M3_current_pilot": _missing_rate(m3_rows, "current_pilot_a"),
-                "M3_cumulative_current_ah": _missing_rate(
-                    m3_rows, "cumulative_current_ah"
-                ),
                 "M3_known_requested_departure": _missing_rate(
                     m3_rows, "requested_departure_minutes_from_issue"
                 ),
                 "M3_known_requested_energy": _missing_rate(m3_rows, "known_kwh_requested"),
             }
         )
+        if include_trajectory_missing_rates:
+            missing_rates.update(
+                {
+                    "M3_elapsed_charging_time_proxy": _missing_rate(
+                        m3_rows, "elapsed_charging_time_proxy_s"
+                    ),
+                    "M3_cumulative_current_ah": _missing_rate(
+                        m3_rows, "cumulative_current_ah"
+                    ),
+                }
+            )
     qa = {
         "schema_version": "acn-jpl-issue-snapshot-qa/v1",
         "lookback_minutes": policy.lookback_minutes,

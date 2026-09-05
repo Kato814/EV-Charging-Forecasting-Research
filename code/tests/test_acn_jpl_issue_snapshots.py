@@ -307,6 +307,8 @@ def test_snapshot_hash_and_shapes_are_reproducible() -> None:
     assert first.qa["ragged_rows"]["M4"] == 1
     assert first.qa["shapes"]["labels"] == [1, 5]
     assert first.qa["missing_rates"]["M3_current_current"] == 0.0
+    assert "M3_elapsed_charging_time_proxy" not in first.qa["missing_rates"]
+    assert "M3_cumulative_current_ah" not in first.qa["missing_rates"]
     assert first.qa["M4_prefix_length_distribution"]["current"]["count"] == 1
 
 

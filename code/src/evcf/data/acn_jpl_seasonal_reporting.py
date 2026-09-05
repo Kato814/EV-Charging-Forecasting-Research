@@ -74,6 +74,20 @@ SUMMARY_COLUMNS = (
     "sessions_processed",
     "cleaned_session_count",
     "invalid_skipped_session_count",
+    "acquisition_session_count",
+    "structural_retained_session_count",
+    "current_analyzable_session_count",
+    "pilot_analyzable_session_count",
+    "invalid_container_placeholder_count",
+    "current_only_invalid_count",
+    "pilot_only_invalid_count",
+    "both_invalid_count",
+    "metadata_checked_session_count",
+    "metadata_match_session_count",
+    "metadata_anomaly_count",
+    "coverage_denominator_session_count",
+    "whole_current_unobservable_session_count",
+    "whole_pilot_unobservable_session_count",
     "charging_current_invalid_count",
     "charging_current_invalid_rate",
     "pilot_signal_invalid_count",
@@ -156,6 +170,14 @@ SUMMARY_COLUMNS = (
     "grid_policy",
     "station_column_count",
     "station_bins",
+    "coverage_only_valid_bins_at_80",
+    "coverage_only_valid_bins_at_90",
+    "coverage_only_valid_bins_at_95",
+    "known_incomplete_current_bins",
+    "known_incomplete_pilot_bins",
+    "known_incomplete_current_excluded_bins_at_80",
+    "known_incomplete_current_excluded_bins_at_90",
+    "known_incomplete_current_excluded_bins_at_95",
     "valid_bin_80_count",
     "valid_bin_90_count",
     "valid_bin_95_count",
@@ -274,6 +296,7 @@ def build_month_summary_row(
         chunks = acquisition["chunk_integrity"]
         linkage = acquisition["linkage"]
         integrity = acquisition["integrity"]
+        accounting = cleaning["session_accounting"]
         quarantine = cleaning["trajectory_quarantine"]
         raw_coverage = quarantine["raw_field_coverage"]
         analysis_coverage = quarantine["analysis_field_coverage"]
@@ -376,6 +399,34 @@ def build_month_summary_row(
             "sessions_processed": cleaning["sessions_processed"],
             "cleaned_session_count": cleaning["cleaned_session_count"],
             "invalid_skipped_session_count": cleaning["invalid_skipped_session_count"],
+            "acquisition_session_count": accounting["acquisition_session_count"],
+            "structural_retained_session_count": accounting[
+                "structural_retained_session_count"
+            ],
+            "current_analyzable_session_count": accounting[
+                "current_analyzable_session_count"
+            ],
+            "pilot_analyzable_session_count": accounting[
+                "pilot_analyzable_session_count"
+            ],
+            "invalid_container_placeholder_count": accounting[
+                "invalid_container_placeholder_count"
+            ],
+            "current_only_invalid_count": accounting["current_only_invalid_count"],
+            "pilot_only_invalid_count": accounting["pilot_only_invalid_count"],
+            "both_invalid_count": accounting["both_invalid_count"],
+            "metadata_checked_session_count": accounting["metadata_checked_session_count"],
+            "metadata_match_session_count": accounting["metadata_match_session_count"],
+            "metadata_anomaly_count": accounting["metadata_anomaly_count"],
+            "coverage_denominator_session_count": accounting[
+                "coverage_denominator_session_count"
+            ],
+            "whole_current_unobservable_session_count": accounting[
+                "whole_current_unobservable_session_count"
+            ],
+            "whole_pilot_unobservable_session_count": accounting[
+                "whole_pilot_unobservable_session_count"
+            ],
             "charging_current_invalid_count": invalid["charging_current"]["count"],
             "charging_current_invalid_rate": invalid["charging_current"]["rate"],
             "pilot_signal_invalid_count": invalid["pilot_signal"]["count"],
@@ -484,6 +535,20 @@ def build_month_summary_row(
             "grid_policy": station["grid_policy"],
             "station_column_count": len(station["station_columns"]),
             "station_bins": station["generated_bins"],
+            "coverage_only_valid_bins_at_80": station["coverage_only_valid_bins_at_80"],
+            "coverage_only_valid_bins_at_90": station["coverage_only_valid_bins_at_90"],
+            "coverage_only_valid_bins_at_95": station["coverage_only_valid_bins_at_95"],
+            "known_incomplete_current_bins": station["known_incomplete_current_bins"],
+            "known_incomplete_pilot_bins": station["known_incomplete_pilot_bins"],
+            "known_incomplete_current_excluded_bins_at_80": station[
+                "known_incomplete_current_excluded_bins_at_80"
+            ],
+            "known_incomplete_current_excluded_bins_at_90": station[
+                "known_incomplete_current_excluded_bins_at_90"
+            ],
+            "known_incomplete_current_excluded_bins_at_95": station[
+                "known_incomplete_current_excluded_bins_at_95"
+            ],
             "valid_bin_80_count": station["valid_bins_at_80"],
             "valid_bin_90_count": station["valid_bins_at_90"],
             "valid_bin_95_count": station["valid_bins_at_95"],
@@ -687,13 +752,48 @@ def render_report_markdown(
         "",
         "## Cleaning",
         "",
+        (
+            "Structural sessions retain verified connection/disconnection state and remain in "
+            "coverage denominators when either branch is unavailable. Analyzable session counts "
+            "require a cleaned branch with positive observed duration; raw container validity "
+            "alone does not establish an observed trajectory."
+        ),
+        "",
+        *_table(
+            materialized,
+            (
+                ("month", "Month"),
+                ("acquisition_session_count", "Acquisition sessions"),
+                ("structural_retained_session_count", "Structural retained"),
+                ("current_analyzable_session_count", "Current analyzable"),
+                ("pilot_analyzable_session_count", "Pilot analyzable"),
+                ("coverage_denominator_session_count", "Coverage denominator"),
+                ("whole_current_unobservable_session_count", "Whole current unavailable"),
+                ("whole_pilot_unobservable_session_count", "Whole pilot unavailable"),
+            ),
+        ),
+        "",
+        *_table(
+            materialized,
+            (
+                ("month", "Month"),
+                ("invalid_container_placeholder_count", "Invalid placeholders"),
+                ("current_only_invalid_count", "Current-only invalid"),
+                ("pilot_only_invalid_count", "Pilot-only invalid"),
+                ("both_invalid_count", "Both invalid"),
+                ("metadata_checked_session_count", "Metadata checked"),
+                ("metadata_match_session_count", "Metadata matched"),
+                ("metadata_anomaly_count", "Metadata anomalies"),
+            ),
+        ),
+        "",
         *_table(
             materialized,
             (
                 ("month", "Month"),
                 ("sessions_processed", "Attempted"),
                 ("cleaned_session_count", "Cleaned"),
-                ("invalid_skipped_session_count", "Skipped"),
+                ("invalid_skipped_session_count", "Sessions omitted"),
                 ("charging_current_invalid_rate", "Current invalid rate"),
                 ("pilot_signal_invalid_rate", "Pilot invalid rate"),
                 ("current_raw_samples", "Current raw"),
@@ -715,15 +815,15 @@ def render_report_markdown(
                 ("month", "Month"),
                 ("trajectory_quarantine_count", "Trajectory quarantine"),
                 ("full_session_quarantine_count", "Full-session quarantine"),
-                ("trajectory_current_raw_coverage_count", "Current raw coverage"),
+                ("trajectory_current_raw_coverage_count", "Current raw-container count"),
                 (
                     "trajectory_current_analysis_coverage_count",
-                    "Current analysis coverage",
+                    "Current container-valid after quarantine",
                 ),
-                ("trajectory_pilot_raw_coverage_count", "Pilot raw coverage"),
+                ("trajectory_pilot_raw_coverage_count", "Pilot raw-container count"),
                 (
                     "trajectory_pilot_analysis_coverage_count",
-                    "Pilot analysis coverage",
+                    "Pilot container-valid after quarantine",
                 ),
                 (
                     "coverage_denominator_includes_quarantined",
@@ -759,6 +859,11 @@ def render_report_markdown(
         "",
         "## Power semantics",
         "",
+        (
+            "This accounting correction grants no new kW-label authorization; the existing "
+            "E208 and power-semantics gates remain authoritative."
+        ),
+        "",
         *_table(
             materialized,
             (
@@ -785,14 +890,47 @@ def render_report_markdown(
         "",
         "## 15-minute",
         "",
+        (
+            "A bin with any positive-duration overlap with a wholly unobserved current session "
+            "is excluded from station-current targets, even when coverage is at least 90%. "
+            "Coverage-only counts are reported separately from final target-valid counts. "
+            "Observed current partial sums remain diagnostic and unavailable current is not "
+            "replaced by zero. Pilot-only missingness does not reject an otherwise valid "
+            "current target."
+        ),
+        "",
+        *_table(
+            materialized,
+            (
+                ("month", "Month"),
+                ("known_incomplete_current_bins", "Known-incomplete current bins"),
+                ("known_incomplete_pilot_bins", "Known-incomplete pilot bins"),
+                ("coverage_only_valid_bins_at_80", "Coverage-only 80"),
+                ("coverage_only_valid_bins_at_90", "Coverage-only 90"),
+                ("coverage_only_valid_bins_at_95", "Coverage-only 95"),
+                (
+                    "known_incomplete_current_excluded_bins_at_80",
+                    "Excluded despite coverage 80",
+                ),
+                (
+                    "known_incomplete_current_excluded_bins_at_90",
+                    "Excluded despite coverage 90",
+                ),
+                (
+                    "known_incomplete_current_excluded_bins_at_95",
+                    "Excluded despite coverage 95",
+                ),
+            ),
+        ),
+        "",
         *_table(
             materialized,
             (
                 ("month", "Month"),
                 ("station_bins", "Bins"),
-                ("valid_bin_80_count", "Valid 80"),
-                ("valid_bin_90_count", "Valid 90"),
-                ("valid_bin_95_count", "Valid 95"),
+                ("valid_bin_80_count", "Final valid 80"),
+                ("valid_bin_90_count", "Final valid 90"),
+                ("valid_bin_95_count", "Final valid 95"),
                 ("valid_bin_80_rate", "Valid 80 rate"),
                 ("valid_bin_90_rate", "Valid 90 rate"),
                 ("valid_bin_95_rate", "Valid 95 rate"),
@@ -823,6 +961,13 @@ def render_report_markdown(
         ),
         "",
         "## M1-M3",
+        "",
+        (
+            "All future-label horizons use corrected target validity. Active charging counts "
+            "are observed lower bounds; unknown current is not evidence that a connected "
+            "session is inactive. Missing current, pilot and cumulative-current state retain "
+            "their missingness masks; offline anomaly reasons do not enter online features."
+        ),
         "",
         *_table(
             materialized,

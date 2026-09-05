@@ -66,9 +66,7 @@ _ABSOLUTE_PATH = re.compile(
     re.IGNORECASE,
 )
 _STATUSES = frozenset({"PASS", "CONDITIONAL_PASS"})
-_MONTH_STATUSES = frozenset(
-    {"PASS", "CONDITIONAL_PASS", "PASS_WITH_TRAJECTORY_QUARANTINE"}
-)
+_MONTH_STATUSES = frozenset({"PASS", "CONDITIONAL_PASS", "PASS_WITH_TRAJECTORY_QUARANTINE"})
 _POWER_STATUSES = frozenset({"CURRENT_PROXY_ONLY", "KW_RECONSTRUCTION_CANDIDATE"})
 _RAW_DIMENSIONS = (195, 201, 311)
 _ENCODED_DIMENSIONS = (195, 204, 391)
@@ -106,6 +104,7 @@ IMPLEMENTATION_PATHS = (
     "code/src/evcf/data/acn_jpl_official_reference.py",
     "code/src/evcf/data/acn_jpl_preparation.py",
     "code/src/evcf/data/acn_jpl_cleaning.py",
+    "code/src/evcf/data/acn_jpl_invalid_containers.py",
     "code/src/evcf/data/acn_jpl_gate1_prep.py",
     "code/src/evcf/data/acn_jpl_power_semantics.py",
     "code/src/evcf/data/acn_jpl_15min.py",
@@ -154,6 +153,8 @@ class SeasonalPreparationProtocol:
     trajectory_quarantine_backward_seconds: int
     trajectory_quarantine_preserves_raw: bool
     trajectory_quarantine_preserves_connected: bool
+    preserve_invalid_container_structure: bool
+    enforce_known_incomplete_current: bool
 
 
 def load_seasonal_preparation_protocol(
@@ -198,6 +199,7 @@ def load_seasonal_preparation_protocol(
             "aggregation",
             "acquisition_gate",
             "trajectory_quarantine",
+            "missing_trajectory",
             "snapshots",
             "features",
             "publication",
@@ -264,6 +266,24 @@ def load_seasonal_preparation_protocol(
         SEASONAL_MONTHS,
         "PROTOCOL_TRAJECTORY_QUARANTINE_COUNTS",
     )
+    missing_trajectory = _exact(
+        root["missing_trajectory"],
+        (
+            "preserve_invalid_container_structure",
+            "verify_official_structural_metadata",
+            "branchwise_availability",
+            "invalid_metadata_action",
+            "coverage_denominator_includes_structural_placeholders",
+            "whole_current_unobservable_overlap_rejects_target",
+            "pilot_only_missing_rejects_current_target",
+            "impute_future_labels",
+            "coverage_rescale_current",
+            "final_energy_reconstruction",
+            "offline_qa_reasons_are_features",
+            "active_count_semantics",
+        ),
+        "PROTOCOL_MISSING_TRAJECTORY",
+    )
     snapshots = _exact(
         root["snapshots"],
         (
@@ -285,7 +305,7 @@ def load_seasonal_preparation_protocol(
         "PROTOCOL_PUBLICATION",
     )
     numeric_contract = (
-        root["schema_version"] == "acn-jpl-seasonal-preparation-protocol/v1"
+        root["schema_version"] == "acn-jpl-seasonal-preparation-protocol/v2"
         and root["months"] == list(SEASONAL_MONTHS)
         and cleaning["sampling_derivation"] == "mode_of_positive_raw_timestamp_differences"
         and cleaning["locf_mode_multiplier"] == 3
@@ -302,8 +322,7 @@ def load_seasonal_preparation_protocol(
         and acquisition_gate["pilot_signal_invalid_rate_max"] == 0.1
         and quarantine["approved_month"] == "2019-11"
         and quarantine_counts == {"2019-02": 0, "2019-08": 0, "2019-11": 1}
-        and quarantine["detector"]
-        == "synchronized_current_pilot_raw_order_utc_nonmonotonic"
+        and quarantine["detector"] == "synchronized_current_pilot_raw_order_utc_nonmonotonic"
         and quarantine["expected_nonmonotonic_pairs_per_series"] == 1
         and quarantine["expected_backward_seconds"] == 3596
         and quarantine["preserve_raw"] is True
@@ -319,6 +338,21 @@ def load_seasonal_preparation_protocol(
         and quarantine["invalid_metadata_action"] == "full_session_quarantine"
         and quarantine["month_status"] == "PASS_WITH_TRAJECTORY_QUARANTINE"
         and quarantine["seasonal_status_ceiling"] == "CONDITIONAL_PASS"
+        and missing_trajectory
+        == {
+            "preserve_invalid_container_structure": True,
+            "verify_official_structural_metadata": True,
+            "branchwise_availability": True,
+            "invalid_metadata_action": "stop_month_publication",
+            "coverage_denominator_includes_structural_placeholders": True,
+            "whole_current_unobservable_overlap_rejects_target": True,
+            "pilot_only_missing_rejects_current_target": False,
+            "impute_future_labels": False,
+            "coverage_rescale_current": False,
+            "final_energy_reconstruction": False,
+            "offline_qa_reasons_are_features": False,
+            "active_count_semantics": "observed_active_lower_bound_unknown_is_not_inactive",
+        }
         and snapshots["lookback_minutes"] == 1440
         and snapshots["horizons_minutes"] == [15, 30, 60, 120, 240]
         and snapshots["issue_step_minutes"] == 15
@@ -346,6 +380,8 @@ def load_seasonal_preparation_protocol(
         trajectory_quarantine_backward_seconds=3596,
         trajectory_quarantine_preserves_raw=True,
         trajectory_quarantine_preserves_connected=True,
+        preserve_invalid_container_structure=True,
+        enforce_known_incomplete_current=True,
     )
 
 
@@ -832,6 +868,7 @@ def _validate_cleaning(
             "expected_sessions",
             "cleaned_session_count",
             "invalid_skipped_session_count",
+            "session_accounting",
             "trajectory_quarantine",
             "analysis_window",
             "sampling",
@@ -909,12 +946,13 @@ def _validate_cleaning(
         "TRAJECTORY_QUARANTINE",
     )
     if (
-        value["schema_version"] != "acn-jpl-seasonal-preparation-cleaning-qa/v1"
+        value["schema_version"] != "acn-jpl-seasonal-preparation-cleaning-qa/v2"
         or value["month"] != config.month
         or value["status"] != "PASS"
         or attempted != combined_count
         or _integer(value["expected_sessions"], "EXPECTED_SESSIONS") != combined_count
-        or cleaned_count + skipped_count != combined_count
+        or cleaned_count != combined_count
+        or skipped_count != 0
         or dict(window) != expected_window
         or sampling["derivation"] != "mode_of_positive_raw_timestamp_differences"
         or sampling["mode_multiplier"] != 3
@@ -926,8 +964,7 @@ def _validate_cleaning(
         raise SeasonalPreparationError("CLEANING_GATE_FAILED")
 
     if (
-        _integer(quarantine["denominator_sessions"], "QUARANTINE_DENOMINATOR")
-        != combined_count
+        _integer(quarantine["denominator_sessions"], "QUARANTINE_DENOMINATOR") != combined_count
         or _integer(
             quarantine["trajectory_quarantine_count"],
             "TRAJECTORY_QUARANTINE_COUNT",
@@ -1044,15 +1081,65 @@ def _validate_cleaning(
         ):
             raise SeasonalPreparationError("INVALID_CONTAINER_RATE_EXCEEDED")
     if (
-        not max(invalid_counts.values())
-        <= skipped_count
-        <= min(combined_count, sum(invalid_counts.values()))
-        or coverage_counts["raw_field_coverage"]["current"]
+        coverage_counts["raw_field_coverage"]["current"]
         != combined_count - invalid_counts["charging_current"]
         or coverage_counts["raw_field_coverage"]["pilot"]
         != combined_count - invalid_counts["pilot_signal"]
     ):
         raise SeasonalPreparationError("INVALID_CONTAINER_PARTITION_INVALID")
+
+    accounting = _exact(
+        value["session_accounting"],
+        (
+            "acquisition_session_count",
+            "structural_retained_session_count",
+            "current_analyzable_session_count",
+            "pilot_analyzable_session_count",
+            "invalid_container_placeholder_count",
+            "current_only_invalid_count",
+            "pilot_only_invalid_count",
+            "both_invalid_count",
+            "trajectory_quarantine_count",
+            "metadata_checked_session_count",
+            "metadata_match_session_count",
+            "metadata_anomaly_count",
+            "coverage_denominator_session_count",
+            "whole_current_unobservable_session_count",
+            "whole_pilot_unobservable_session_count",
+        ),
+        "SESSION_ACCOUNTING",
+    )
+    counts = {
+        name: _integer(count, "SESSION_ACCOUNTING_COUNT") for name, count in accounting.items()
+    }
+    placeholders = counts["invalid_container_placeholder_count"]
+    if (
+        counts["acquisition_session_count"] != combined_count
+        or counts["structural_retained_session_count"] != combined_count
+        or counts["coverage_denominator_session_count"] != combined_count
+        or counts["metadata_checked_session_count"] != placeholders
+        or counts["metadata_match_session_count"] != placeholders
+        or counts["metadata_anomaly_count"] != 0
+        or counts["trajectory_quarantine_count"] != trajectory_quarantine_count
+        or counts["current_only_invalid_count"] + counts["both_invalid_count"]
+        != invalid_counts["charging_current"]
+        or counts["pilot_only_invalid_count"] + counts["both_invalid_count"]
+        != invalid_counts["pilot_signal"]
+        or counts["current_only_invalid_count"]
+        + counts["pilot_only_invalid_count"]
+        + counts["both_invalid_count"]
+        != placeholders
+        or placeholders + trajectory_quarantine_count > combined_count
+    ):
+        raise SeasonalPreparationError("SESSION_ACCOUNTING_INVALID")
+    for name in ("current", "pilot"):
+        analyzable = counts[f"{name}_analyzable_session_count"]
+        unobservable = counts[f"whole_{name}_unobservable_session_count"]
+        if (
+            analyzable + unobservable != combined_count
+            or analyzable > coverage_counts["analysis_field_coverage"][name]
+        ):
+            raise SeasonalPreparationError("SESSION_ACCOUNTING_INVALID")
 
     series = _exact(value["series"], ("current", "pilot"), "CLEANING_SERIES")
     for name, invalid_name in (
@@ -1502,17 +1589,13 @@ def _validate_power(config: JPLMonthConfig, document: Mapping[str, Any]) -> str:
         or (
             retained_count == 0
             and any(
-                item is not None
-                for item in (q1_voltage, median_voltage, q3_voltage, voltage_iqr)
+                item is not None for item in (q1_voltage, median_voltage, q3_voltage, voltage_iqr)
             )
         )
         or (
             retained_count > 0
             and (
-                any(
-                    item is None
-                    for item in (q1_voltage, median_voltage, q3_voltage, voltage_iqr)
-                )
+                any(item is None for item in (q1_voltage, median_voltage, q3_voltage, voltage_iqr))
                 or not q1_voltage <= median_voltage <= q3_voltage  # type: ignore[operator]
                 or not _same_number(voltage_iqr, q3_voltage - q1_voltage)  # type: ignore[operator]
             )
@@ -1579,6 +1662,15 @@ def _validate_station(
             "status",
             "grid_policy",
             "station_columns",
+            "structural_session_count",
+            "known_incomplete_current_bins",
+            "known_incomplete_pilot_bins",
+            "coverage_only_valid_bins_at_80",
+            "coverage_only_valid_bins_at_90",
+            "coverage_only_valid_bins_at_95",
+            "known_incomplete_current_excluded_bins_at_80",
+            "known_incomplete_current_excluded_bins_at_90",
+            "known_incomplete_current_excluded_bins_at_95",
             "expected_bins",
             "generated_bins",
             "valid_bins_at_80",
@@ -1630,9 +1722,11 @@ def _validate_station(
         "valid_bin_80",
         "valid_bin_90",
         "valid_bin_95",
+        "known_incomplete_current",
+        "known_incomplete_pilot",
     ]
     if (
-        value["schema_version"] != "acn-jpl-seasonal-preparation-station-15min-qa/v1"
+        value["schema_version"] != "acn-jpl-seasonal-preparation-station-15min-qa/v2"
         or value["month"] != config.month
         or value["status"] != "PASS"
         or value["grid_policy"] != config.grid_policy
@@ -1655,7 +1749,27 @@ def _validate_station(
         or value["time_weighted_integral_status"] != "PASS"
     ):
         raise SeasonalPreparationError("VALID_BIN_90_GATE_FAILED")
+    _integer(value["structural_session_count"], "STATION_STRUCTURAL_SESSIONS", positive=True)
+    known_current = _integer(value["known_incomplete_current_bins"], "KNOWN_INCOMPLETE_TARGET")
+    known_pilot = _integer(value["known_incomplete_pilot_bins"], "KNOWN_INCOMPLETE_PILOT")
+    if max(known_current, known_pilot) > config.expected_bins:
+        raise SeasonalPreparationError("KNOWN_INCOMPLETE_TARGET_INVALID")
     for threshold, count in ((80, valid_80), (90, valid_90), (95, valid_95)):
+        coverage_only = _integer(
+            value[f"coverage_only_valid_bins_at_{threshold}"],
+            "KNOWN_INCOMPLETE_TARGET",
+        )
+        excluded = _integer(
+            value[f"known_incomplete_current_excluded_bins_at_{threshold}"],
+            "KNOWN_INCOMPLETE_TARGET",
+        )
+        if (
+            coverage_only > config.expected_bins
+            or excluded > known_current
+            or coverage_only - excluded != count
+            or count + known_current > config.expected_bins
+        ):
+            raise SeasonalPreparationError("KNOWN_INCOMPLETE_TARGET_INVALID")
         rate = _number(value[f"valid_bin_rate_at_{threshold}"], "VALID_BIN_RATE")
         missing = _number(value[f"missing_bin_rate_at_{threshold}"], "MISSING_BIN_RATE")
         pilot_count = _integer(value[f"pilot_valid_bins_at_{threshold}"], "PILOT_VALID_BINS")
@@ -1957,11 +2071,7 @@ def _validate_run(
     expected_status = (
         "PASS_WITH_TRAJECTORY_QUARANTINE"
         if trajectory_quarantine_count
-        else (
-            "PASS"
-            if power_status == "KW_RECONSTRUCTION_CANDIDATE"
-            else "CONDITIONAL_PASS"
-        )
+        else ("PASS" if power_status == "KW_RECONSTRUCTION_CANDIDATE" else "CONDITIONAL_PASS")
     )
     if (
         value["schema_version"] != "acn-jpl-seasonal-preparation-run/v1"
@@ -1973,8 +2083,8 @@ def _validate_run(
         or value["carry_in_count"] != carry_count
         or value["sessions_processed"] != combined_count
         or type(value["invalid_skipped_session_count"]) is not int
-        or value["invalid_skipped_session_count"] < 0
-        or value["cleaned_session_count"] != combined_count - value["invalid_skipped_session_count"]
+        or value["invalid_skipped_session_count"] != 0
+        or value["cleaned_session_count"] != combined_count
         or value["trajectory_quarantine_count"] != trajectory_quarantine_count
         or value["full_session_quarantine_count"] != full_session_quarantine_count
         or value["station_bins"] != config.expected_bins
@@ -2038,6 +2148,13 @@ def _validate_month_documents(
     formal = _validate_issue(config, documents["issue_snapshot_qa.json"])
     _validate_leakage(config, documents["leakage_audit.json"])
     _validate_data_manifest(config, documents["data_snapshot_manifest.json"])
+    if (
+        documents["station_15min_qa.json"]["structural_session_count"] != combined
+        or documents["power_semantics_audit.json"]["primary_cohort"]["input_session_count"]
+        != combined
+        or documents["power_semantics_audit.json"]["mapping"]["raw_record_count"] != combined
+    ):
+        raise SeasonalPreparationError("STRUCTURAL_DENOMINATOR_BINDING_INVALID")
     _validate_run(
         config,
         documents["run_manifest.json"],
@@ -2300,8 +2417,7 @@ def _root_summary_rows(result: SeasonalPreparationResult) -> tuple[dict[str, obj
     try:
         for item in result.months:
             documents = {
-                artifact.name: _decode_json_bytes(artifact.content)
-                for artifact in item.artifacts
+                artifact.name: _decode_json_bytes(artifact.content) for artifact in item.artifacts
             }
             rows.append(build_month_summary_row(documents))
     except SeasonalReportingError as exc:
@@ -3006,7 +3122,9 @@ def _canonicalize_compact_rates(documents: Mapping[str, object]) -> dict[str, ob
     quarantine = dict(_mapping(cleaning["trajectory_quarantine"], "TRAJECTORY_QUARANTINE_INVALID"))
     combined = _integer(cleaning["sessions_processed"], "COMBINED_SESSION_COUNT", positive=True)
     for coverage_name in ("raw_field_coverage", "analysis_field_coverage"):
-        coverage = _exact(quarantine[coverage_name], ("current", "pilot"), "QUARANTINE_FIELD_COVERAGE")
+        coverage = _exact(
+            quarantine[coverage_name], ("current", "pilot"), "QUARANTINE_FIELD_COVERAGE"
+        )
         normalized: dict[str, object] = {}
         for field_name in ("current", "pilot"):
             item = _exact(coverage[field_name], ("count", "denominator", "rate"), "FIELD_COVERAGE")
@@ -3047,6 +3165,7 @@ def _compact_month_documents(
     issue_qa: Mapping[str, Any],
     blocks: Mapping[str, object],
     invalid_skipped_session_count: int,
+    session_accounting: Mapping[str, int],
     processed_snapshot_sha256: str,
     local_artifact_count: int,
     official_reference_sha256: str,
@@ -3122,11 +3241,7 @@ def _compact_month_documents(
     run_status = (
         "PASS_WITH_TRAJECTORY_QUARANTINE"
         if trajectory_count
-        else (
-            "PASS"
-            if power_status == "KW_RECONSTRUCTION_CANDIDATE"
-            else "CONDITIONAL_PASS"
-        )
+        else ("PASS" if power_status == "KW_RECONSTRUCTION_CANDIDATE" else "CONDITIONAL_PASS")
     )
     acquisition_document = {
         "schema_version": "acn-jpl-seasonal-acquisition-summary/v1",
@@ -3203,13 +3318,14 @@ def _compact_month_documents(
         },
     }
     cleaning_document = {
-        "schema_version": "acn-jpl-seasonal-preparation-cleaning-qa/v1",
+        "schema_version": "acn-jpl-seasonal-preparation-cleaning-qa/v2",
         "month": config.month,
         "status": cleaning_qa.get("status"),
         "sessions_processed": combined,
         "expected_sessions": combined,
         "cleaned_session_count": cleaning_qa.get("sessions_processed"),
         "invalid_skipped_session_count": invalid_skipped_session_count,
+        "session_accounting": dict(session_accounting),
         "trajectory_quarantine": {
             **dict(quarantine),
             "raw_field_coverage": {
@@ -3403,7 +3519,7 @@ def _compact_month_documents(
         "privacy": {"aggregate_only": True, "identifiers_emitted": False},
     }
     station_document = {
-        "schema_version": "acn-jpl-seasonal-preparation-station-15min-qa/v1",
+        "schema_version": "acn-jpl-seasonal-preparation-station-15min-qa/v2",
         "month": config.month,
         "status": "PASS",
         "grid_policy": station_qa.get("grid_policy"),
@@ -3420,7 +3536,23 @@ def _compact_month_documents(
             "valid_bin_80",
             "valid_bin_90",
             "valid_bin_95",
+            "known_incomplete_current",
+            "known_incomplete_pilot",
         ],
+        "structural_session_count": station_qa.get("session_count"),
+        **{
+            name: station_qa.get(name)
+            for name in (
+                "known_incomplete_current_bins",
+                "known_incomplete_pilot_bins",
+                "coverage_only_valid_bins_at_80",
+                "coverage_only_valid_bins_at_90",
+                "coverage_only_valid_bins_at_95",
+                "known_incomplete_current_excluded_bins_at_80",
+                "known_incomplete_current_excluded_bins_at_90",
+                "known_incomplete_current_excluded_bins_at_95",
+            )
+        },
         "expected_bins": station_qa.get("expected_bins"),
         "generated_bins": station_qa.get("generated_bins"),
         "valid_bins_at_80": station_qa.get("valid_bins_at_80"),
@@ -3552,29 +3684,138 @@ def _compact_month_documents(
             "absolute_paths_emitted": False,
         },
     }
-    return _canonicalize_compact_rates({
-        "acquisition_summary.json": acquisition_document,
-        "cleaning_qa.json": cleaning_document,
-        "cleaning_sensitivity.json": sensitivity_document,
-        "boundary_current_audit.json": boundary_document,
-        "power_semantics_audit.json": power_document,
-        "station_15min_qa.json": station_document,
-        "issue_snapshot_qa.json": issue_document,
-        "leakage_audit.json": leakage_document,
-        "data_snapshot_manifest.json": data_document,
-        "run_manifest.json": run_document,
-    })
+    return _canonicalize_compact_rates(
+        {
+            "acquisition_summary.json": acquisition_document,
+            "cleaning_qa.json": cleaning_document,
+            "cleaning_sensitivity.json": sensitivity_document,
+            "boundary_current_audit.json": boundary_document,
+            "power_semantics_audit.json": power_document,
+            "station_15min_qa.json": station_document,
+            "issue_snapshot_qa.json": issue_document,
+            "leakage_audit.json": leakage_document,
+            "data_snapshot_manifest.json": data_document,
+            "run_manifest.json": run_document,
+        }
+    )
 
 
 def _series_container_valid(record: Mapping[str, Any], field_name: str) -> bool:
-    value = record.get(field_name)
-    if not isinstance(value, Mapping):
-        return False
-    timestamps = value.get("timestamps")
-    values = value.get("current" if field_name == "chargingCurrent" else "pilot")
-    return (
-        isinstance(timestamps, list) and isinstance(values, list) and len(timestamps) == len(values)
+    from .acn_jpl_invalid_containers import series_container_valid
+
+    return series_container_valid(record, field_name)
+
+
+def _verify_invalid_container_metadata(
+    raw_records: Sequence[Any],
+    *,
+    metadata_by_pair: Mapping[tuple[str, str], Mapping[str, Any]],
+    invalid_ordinals: set[int],
+) -> None:
+    from .acn_jpl_invalid_containers import (
+        StructuralMetadataError,
+        verify_structural_metadata,
     )
+
+    metadata_anomalies = 0
+    # Validate the complete invalid-container population before cleaning or writes.
+    for item in raw_records:
+        if item.ordinal not in invalid_ordinals:
+            continue
+        record = item.payload
+        expected = metadata_by_pair.get((record.get("_id"), record.get("sessionID")))
+        try:
+            verify_structural_metadata(record, expected)
+        except StructuralMetadataError:
+            metadata_anomalies += 1
+    if metadata_anomalies:
+        error = SeasonalPreparationError("INVALID_CONTAINER_METADATA_FAILED")
+        error.diagnostics = {
+            "metadata_checked_session_count": len(invalid_ordinals),
+            "metadata_match_session_count": len(invalid_ordinals) - metadata_anomalies,
+            "metadata_anomaly_count": metadata_anomalies,
+        }
+        raise error
+
+
+def _clean_records_retaining_structure(
+    raw_records: Sequence[Any],
+    *,
+    metadata_by_pair: Mapping[tuple[str, str], Mapping[str, Any]],
+    decisions_by_ordinal: Mapping[int, Any],
+    cleaning_policy: Any,
+) -> tuple[list[Any], Any, dict[str, int]]:
+    from .acn_jpl_cleaning import clean_quarantined_session, clean_session
+    from .acn_jpl_gate1_prep import CleaningAccumulator
+    from .acn_jpl_invalid_containers import clean_branchwise_session
+    from .acn_jpl_trajectory_quarantine import (
+        FULL_SESSION_QUARANTINE,
+        TRAJECTORY_QUARANTINE,
+    )
+
+    invalid_current = {
+        item.ordinal
+        for item in raw_records
+        if not _series_container_valid(item.payload, "chargingCurrent")
+    }
+    invalid_pilot = {
+        item.ordinal
+        for item in raw_records
+        if not _series_container_valid(item.payload, "pilotSignal")
+    }
+    invalid = invalid_current | invalid_pilot
+    _verify_invalid_container_metadata(
+        raw_records,
+        metadata_by_pair=metadata_by_pair,
+        invalid_ordinals=invalid,
+    )
+    cleaned = []
+    accumulator = CleaningAccumulator(cleaning_policy)
+    trajectory_count = 0
+    for raw_record in raw_records:
+        decision = decisions_by_ordinal[raw_record.ordinal]
+        record = raw_record.payload
+        if decision.action == FULL_SESSION_QUARANTINE:
+            raise SeasonalPreparationError("FULL_SESSION_QUARANTINE_REQUIRED")
+        if decision.action == TRAJECTORY_QUARANTINE:
+            trajectory_count += 1
+            item = clean_quarantined_session(
+                record,
+                session_index=len(cleaned),
+                policy=cleaning_policy,
+            )
+        elif raw_record.ordinal in invalid:
+            item = clean_branchwise_session(
+                record,
+                expected_metadata=metadata_by_pair[(record["_id"], record["sessionID"])],
+                session_index=len(cleaned),
+                policy=cleaning_policy,
+            )
+        else:
+            item = clean_session(record, session_index=len(cleaned), policy=cleaning_policy)
+        accumulator.add(item, record)
+        cleaned.append(item)
+    current_analyzable = sum(item.current.main_integral.observed_seconds > 0 for item in cleaned)
+    pilot_analyzable = sum(item.pilot.main_integral.observed_seconds > 0 for item in cleaned)
+    combined = len(raw_records)
+    accounting = {
+        "acquisition_session_count": combined,
+        "structural_retained_session_count": len(cleaned),
+        "current_analyzable_session_count": current_analyzable,
+        "pilot_analyzable_session_count": pilot_analyzable,
+        "invalid_container_placeholder_count": len(invalid),
+        "current_only_invalid_count": len(invalid_current - invalid_pilot),
+        "pilot_only_invalid_count": len(invalid_pilot - invalid_current),
+        "both_invalid_count": len(invalid_current & invalid_pilot),
+        "trajectory_quarantine_count": trajectory_count,
+        "metadata_checked_session_count": len(invalid),
+        "metadata_match_session_count": len(invalid),
+        "metadata_anomaly_count": 0,
+        "coverage_denominator_session_count": len(cleaned),
+        "whole_current_unobservable_session_count": combined - current_analyzable,
+        "whole_pilot_unobservable_session_count": combined - pilot_analyzable,
+    }
+    return cleaned, accumulator, accounting
 
 
 def _prepare_verified_month(
@@ -3598,18 +3839,16 @@ def _prepare_verified_month(
 
     from .acn_jpl_15min import AggregationPolicy, aggregate_station_15min
     from .acn_jpl_cleaning import (
-        clean_quarantined_session,
-        clean_session,
         cleaning_policy_from_sampling_modes,
         derive_sampling_modes,
     )
     from .acn_jpl_full_month_qa import generate_month_timeseries_qa
     from .acn_jpl_gate1_prep import (
-        CleaningAccumulator,
         build_cleaning_qa,
         build_seasonal_cleaning_sensitivity,
         validate_seasonal_cleaning_documents,
     )
+    from .acn_jpl_invalid_containers import valid_series_record_for_sampling
     from .acn_jpl_issue_snapshots import SnapshotPolicy, build_issue_snapshots
     from .acn_jpl_month_config import (
         CompleteMetadataScope,
@@ -3630,9 +3869,7 @@ def _prepare_verified_month(
         verify_month_acquisition_result,
     )
     from .acn_jpl_trajectory_quarantine import (
-        FULL_SESSION_QUARANTINE,
         NO_QUARANTINE,
-        TRAJECTORY_QUARANTINE,
         build_trajectory_quarantine_audit,
         quarantine_record_for_analysis,
     )
@@ -3664,16 +3901,6 @@ def _prepare_verified_month(
         inventory=before,
     ):
         raise SeasonalPreparationError("ACQUISITION_INTEGRITY_FAILED")
-    full_qa = generate_month_timeseries_qa(
-        config=config,
-        scope=scope,
-        raw_root=raw,
-        acquisition_result=acquisition,
-    )
-    if full_qa.gate_status != "PASS":
-        raise SeasonalPreparationError("ACQUISITION_QA_GATE_FAILED")
-    acquisition_qa = full_qa.qa
-
     contract = RawSnapshotContract.for_month(
         config,
         local_record_count=scope.local_month_session_count,
@@ -3689,6 +3916,31 @@ def _prepare_verified_month(
         (str(record["_id"]), str(record["sessionID"])): record
         for record in (*scope.local_month_records, *scope.carry_in_records)
     }
+    current_invalid_ordinals = {
+        record.ordinal
+        for record in raw_records
+        if not _series_container_valid(record.payload, "chargingCurrent")
+    }
+    pilot_invalid_ordinals = {
+        record.ordinal
+        for record in raw_records
+        if not _series_container_valid(record.payload, "pilotSignal")
+    }
+    invalid_ordinals = current_invalid_ordinals | pilot_invalid_ordinals
+    _verify_invalid_container_metadata(
+        raw_records,
+        metadata_by_pair=metadata_by_pair,
+        invalid_ordinals=invalid_ordinals,
+    )
+    full_qa = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw,
+        acquisition_result=acquisition,
+    )
+    if full_qa.gate_status != "PASS":
+        raise SeasonalPreparationError("ACQUISITION_QA_GATE_FAILED")
+    acquisition_qa = full_qa.qa
     decisions_by_ordinal = {
         record.ordinal: quarantine_record_for_analysis(
             record.payload,
@@ -3711,25 +3963,10 @@ def _prepare_verified_month(
         not quarantine_audit.approved
         or quarantine_audit.full_session_quarantine_count
         or full_qa.gate_status != "PASS"
-        or acquisition_qa.get("trajectory_quarantine")
-        != quarantine_audit.public_dict()
+        or acquisition_qa.get("trajectory_quarantine") != quarantine_audit.public_dict()
     ):
         raise SeasonalPreparationError("TRAJECTORY_QUARANTINE_POLICY_FAIL")
-    current_invalid_ordinals = {
-        record.ordinal
-        for record in raw_records
-        if not _series_container_valid(record.payload, "chargingCurrent")
-    }
-    pilot_invalid_ordinals = {
-        record.ordinal
-        for record in raw_records
-        if not _series_container_valid(record.payload, "pilotSignal")
-    }
-    invalid_ordinals = current_invalid_ordinals | pilot_invalid_ordinals
-    if any(
-        decisions_by_ordinal[ordinal].action != NO_QUARANTINE
-        for ordinal in invalid_ordinals
-    ):
+    if any(decisions_by_ordinal[ordinal].action != NO_QUARANTINE for ordinal in invalid_ordinals):
         raise SeasonalPreparationError("TRAJECTORY_QUARANTINE_POLICY_FAIL")
     quality_series = _mapping(
         _mapping(acquisition_qa.get("quality"), "ACQUISITION_QA_INVALID").get("series"),
@@ -3746,12 +3983,9 @@ def _prepare_verified_month(
         or len(pilot_invalid_ordinals) / expected_sessions > 0.10
     ):
         raise SeasonalPreparationError("INVALID_CONTAINER_RATE_EXCEEDED")
-    valid_raw_records = tuple(
-        record for record in raw_records if record.ordinal not in invalid_ordinals
-    )
     modes = derive_sampling_modes(
-        record.payload
-        for record in valid_raw_records
+        valid_series_record_for_sampling(record.payload)
+        for record in raw_records
         if decisions_by_ordinal[record.ordinal].action == NO_QUARANTINE
     )
     cleaning_policy = cleaning_policy_from_sampling_modes(
@@ -3760,27 +3994,15 @@ def _prepare_verified_month(
         locf_cap_seconds=protocol.locf_cap_seconds,
         boundary_sensitivity_seconds=protocol.boundary_sensitivity_seconds,
     )
-    accumulator = CleaningAccumulator(cleaning_policy)
-    cleaned = []
     try:
-        for raw_record in valid_raw_records:
-            decision = decisions_by_ordinal[raw_record.ordinal]
-            if decision.action == TRAJECTORY_QUARANTINE:
-                item = clean_quarantined_session(
-                    raw_record.payload,
-                    session_index=len(cleaned),
-                    policy=cleaning_policy,
-                )
-            elif decision.action == FULL_SESSION_QUARANTINE:
-                raise SeasonalPreparationError("FULL_SESSION_QUARANTINE_REQUIRED")
-            else:
-                item = clean_session(
-                    raw_record.payload,
-                    session_index=len(cleaned),
-                    policy=cleaning_policy,
-                )
-            accumulator.add(item, raw_record.payload)
-            cleaned.append(item)
+        cleaned, accumulator, session_accounting = _clean_records_retaining_structure(
+            raw_records,
+            metadata_by_pair=metadata_by_pair,
+            decisions_by_ordinal=decisions_by_ordinal,
+            cleaning_policy=cleaning_policy,
+        )
+    except SeasonalPreparationError:
+        raise
     except Exception as exc:
         raise SeasonalPreparationError("CLEANING_GATE_FAILED") from exc
     analysis_window = {
@@ -3825,6 +4047,7 @@ def _prepare_verified_month(
         end_utc=config.utc_end,
         policy=aggregation_policy,
         grid_policy=config.grid_policy,
+        enforce_known_incomplete_current=protocol.enforce_known_incomplete_current,
     )
     valid_90 = _integer(station.qa.get("valid_bins_at_90"), "VALID_BIN_90")
     if (
@@ -3928,7 +4151,8 @@ def _prepare_verified_month(
         station_qa=station.qa,
         issue_qa=issue_qa,
         blocks=blocks,
-        invalid_skipped_session_count=len(invalid_ordinals),
+        invalid_skipped_session_count=0,
+        session_accounting=session_accounting,
         processed_snapshot_sha256=processed_snapshot,
         local_artifact_count=local_count,
         official_reference_sha256=official_reference_sha256,

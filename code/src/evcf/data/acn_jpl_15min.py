@@ -163,6 +163,21 @@ def _add_interval(
     difference[right] -= value
 
 
+def _whole_trajectory_unobserved(session: object, name: str, times: np.ndarray) -> bool:
+    """Use observation state, not offline failure reasons or eventual charging outcomes."""
+    integral = _member(_member(session, name), "main_integral")
+    if integral is None:
+        return times.size == 0
+    observed_seconds = _member(integral, "observed_seconds")
+    if (
+        isinstance(observed_seconds, bool)
+        or not isinstance(observed_seconds, (int, np.integer))
+        or observed_seconds < 0
+    ):
+        raise ValueError(f"cleaned {name} integral observed_seconds must be nonnegative integer")
+    return times.size == 0 or observed_seconds == 0
+
+
 def _add_held_series(
     times: np.ndarray,
     values: np.ndarray,
@@ -253,9 +268,12 @@ def aggregate_station_15min(
     end_utc: datetime,
     policy: AggregationPolicy,
     grid_policy: str | None = None,
+    enforce_known_incomplete_current: bool = False,
 ) -> Station15MinResult:
     """Aggregate cleaned session trajectories on an exact one-second time base."""
 
+    if type(enforce_known_incomplete_current) is not bool:
+        raise TypeError("enforce_known_incomplete_current must be a boolean")
     start = _aware_utc(start_utc)
     end = _aware_utc(end_utc)
     if grid_policy not in (None, "continuous_physical_utc"):
@@ -276,6 +294,8 @@ def aggregate_station_15min(
     active_comparison_difference = np.zeros(total_seconds + 1, dtype=np.int32)
     arrival_counts = np.zeros(len(grid), dtype=np.int32)
     disconnect_counts = np.zeros(len(grid), dtype=np.int32)
+    known_current_bins = np.zeros(len(grid), dtype=np.bool_)
+    known_pilot_bins = np.zeros(len(grid), dtype=np.bool_)
 
     session_count = 0
     for session in sessions:
@@ -299,6 +319,18 @@ def aggregate_station_15min(
 
         current_times, current_values = _series_arrays(session, "current")
         pilot_times, pilot_values = _series_arrays(session, "pilot")
+        if enforce_known_incomplete_current:
+            clipped_start = max(connection, start_epoch)
+            clipped_end = min(disconnect, end_epoch)
+            if clipped_start < clipped_end:
+                first_bin = (clipped_start - start_epoch) // BIN_SECONDS
+                stop_bin = (clipped_end - 1 - start_epoch) // BIN_SECONDS + 1
+                for name, times, known_bins in (
+                    ("current", current_times, known_current_bins),
+                    ("pilot", pilot_times, known_pilot_bins),
+                ):
+                    if _whole_trajectory_unobserved(session, name, times):
+                        known_bins[first_bin:stop_bin] = True
         _add_held_series(
             current_times,
             current_values,
@@ -339,6 +371,7 @@ def aggregate_station_15min(
     active_comparison = np.cumsum(active_comparison_difference[:-1])
 
     rows: list[dict[str, Any]] = []
+    coverage_only_counts = {threshold: 0 for threshold in (80, 90, 95)}
     for index, interval in enumerate(grid):
         left = index * BIN_SECONDS
         right = left + BIN_SECONDS
@@ -351,6 +384,10 @@ def aggregate_station_15min(
         pilot_area = float(np.sum(pilot[left:right], dtype=np.float64))
         has_current = observed_seconds > 0 or connected_seconds == 0
         has_pilot = pilot_observed_seconds > 0 or connected_seconds == 0
+        known_current = bool(known_current_bins[index])
+        known_pilot = bool(known_pilot_bins[index])
+        has_current = has_current and not known_current
+        has_pilot = has_pilot and not known_pilot
         current_mean = current_area / BIN_SECONDS if has_current and coverage >= 0.90 else None
         current_peak = (
             float(np.max(current[left:right])) if has_current and coverage >= 0.90 else None
@@ -358,7 +395,7 @@ def aggregate_station_15min(
         pilot_sum = pilot_area / BIN_SECONDS if has_pilot and pilot_coverage >= 0.90 else None
         pilot_mean = (
             pilot_area / pilot_observed_seconds
-            if pilot_observed_seconds and pilot_coverage >= 0.90
+            if has_pilot and pilot_observed_seconds and pilot_coverage >= 0.90
             else (0.0 if connected_seconds == 0 else None)
         )
         edge_index = right - 1
@@ -385,11 +422,18 @@ def aggregate_station_15min(
                 "disconnect_count": int(disconnect_counts[index]),
                 "observed_coverage_ratio": round(coverage, 8),
                 "pilot_observed_coverage_ratio": round(pilot_coverage, 8),
-                "valid_bin_80": coverage >= 0.80,
-                "valid_bin_90": coverage >= 0.90,
-                "valid_bin_95": coverage >= 0.95,
+                "valid_bin_80": coverage >= 0.80 and not known_current,
+                "valid_bin_90": coverage >= 0.90 and not known_current,
+                "valid_bin_95": coverage >= 0.95 and not known_current,
             }
         )
+        if enforce_known_incomplete_current:
+            rows[-1].update(
+                known_incomplete_current=known_current,
+                known_incomplete_pilot=known_pilot,
+            )
+            for threshold in coverage_only_counts:
+                coverage_only_counts[threshold] += int(coverage >= threshold / 100)
 
     valid_90 = [bool(row["valid_bin_90"]) for row in rows]
     peaks = [
@@ -458,6 +502,20 @@ def aggregate_station_15min(
             "power_label_type": "none",
         },
     }
+    if enforce_known_incomplete_current:
+        qa["known_incomplete_current_bins"] = int(np.count_nonzero(known_current_bins))
+        qa["known_incomplete_pilot_bins"] = int(np.count_nonzero(known_pilot_bins))
+        for threshold, count in coverage_only_counts.items():
+            qa[f"coverage_only_valid_bins_at_{threshold}"] = count
+            qa[f"known_incomplete_current_excluded_bins_at_{threshold}"] = (
+                count - qa[f"valid_bins_at_{threshold}"]
+            )
+        qa["aggregation_semantics"].update(
+            current_publication_gate="coverage_at_least_0.90_and_no_known_incomplete_current",
+            pilot_publication_gate="coverage_at_least_0.90_and_no_known_incomplete_pilot",
+            validity_rule="coverage_threshold_and_no_known_incomplete_current",
+            active_count_observation_rule="observed_active_lower_bound_not_known_inactive",
+        )
     if grid_policy is not None:
         local_quarters = [(interval.local_date, interval.quarter_hour_index) for interval in grid]
         repeated_local_quarters = len(local_quarters) - len(set(local_quarters))

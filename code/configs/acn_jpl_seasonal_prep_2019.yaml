@@ -1,4 +1,4 @@
-schema_version: acn-jpl-seasonal-preparation-protocol/v1
+schema_version: acn-jpl-seasonal-preparation-protocol/v2
 months:
   - 2019-02
   - 2019-08
@@ -44,6 +44,19 @@ trajectory_quarantine:
   invalid_metadata_action: full_session_quarantine
   month_status: PASS_WITH_TRAJECTORY_QUARANTINE
   seasonal_status_ceiling: CONDITIONAL_PASS
+missing_trajectory:
+  preserve_invalid_container_structure: true
+  verify_official_structural_metadata: true
+  branchwise_availability: true
+  invalid_metadata_action: stop_month_publication
+  coverage_denominator_includes_structural_placeholders: true
+  whole_current_unobservable_overlap_rejects_target: true
+  pilot_only_missing_rejects_current_target: false
+  impute_future_labels: false
+  coverage_rescale_current: false
+  final_energy_reconstruction: false
+  offline_qa_reasons_are_features: false
+  active_count_semantics: observed_active_lower_bound_unknown_is_not_inactive
 snapshots:
   lookback_minutes: 1440
   horizons_minutes:

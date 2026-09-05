@@ -335,6 +335,158 @@ def test_active_thresholds_and_coverage_sensitivities_are_explicit() -> None:
     assert result.qa["active_threshold_sensitivity"]["comparison_threshold_a"] == 1.0
 
 
+@pytest.mark.parametrize("missing_branch", ["current", "pilot", "both"])
+@pytest.mark.parametrize("observed_count", [10, 20])
+def test_known_missing_branch_cannot_hide_in_high_concurrency_coverage(
+    missing_branch: str,
+    observed_count: int,
+) -> None:
+    start = datetime(2019, 2, 1, 8, tzinfo=timezone.utc)
+    end = start + timedelta(minutes=15)
+    times = [start + timedelta(seconds=offset) for offset in range(0, 900, 60)]
+    observed = _session(
+        start,
+        end,
+        current_times=times,
+        current_values=[10.0] * 15,
+        pilot_times=times,
+        pilot_values=[12.0] * 15,
+    )
+    missing = _session(
+        start,
+        end,
+        current_times=[] if missing_branch in ("current", "both") else times,
+        current_values=[] if missing_branch in ("current", "both") else [10.0] * 15,
+        pilot_times=[] if missing_branch in ("pilot", "both") else times,
+        pilot_values=[] if missing_branch in ("pilot", "both") else [12.0] * 15,
+    )
+    result = aggregate_station_15min(
+        [observed] * observed_count + [missing],
+        start_utc=start,
+        end_utc=end,
+        policy=AggregationPolicy(max_hold_seconds=60),
+        enforce_known_incomplete_current=True,
+    )
+    row = result.rows[0]
+    missing_current = missing_branch in ("current", "both")
+    missing_pilot = missing_branch in ("pilot", "both")
+    assert row["connected_session_count"] == observed_count + 1
+    assert row["arrival_count"] == observed_count + 1
+    assert row["observed_coverage_ratio"] >= 0.90
+    assert row["pilot_observed_coverage_ratio"] >= 0.90
+    assert row["known_incomplete_current"] is missing_current
+    assert row["known_incomplete_pilot"] is missing_pilot
+    assert row["valid_bin_90"] is not missing_current
+    assert row["station_current_mean_a"] == (
+        None if missing_current else 10.0 * (observed_count + 1)
+    )
+    assert row["station_current_peak_a"] == (
+        None if missing_current else 10.0 * (observed_count + 1)
+    )
+    assert row["pilot_sum_a"] == (None if missing_pilot else 12.0 * (observed_count + 1))
+    assert row["pilot_mean_a"] == (None if missing_pilot else 12.0)
+    assert result.qa["coverage_only_valid_bins_at_90"] == 1
+    assert result.qa["known_incomplete_current_excluded_bins_at_90"] == int(missing_current)
+    assert result.qa["known_incomplete_current_bins"] == int(missing_current)
+    assert result.qa["known_incomplete_pilot_bins"] == int(missing_pilot)
+    assert result.qa["valid_bins_at_90"] == int(not missing_current)
+    for threshold in (80, 90, 95):
+        coverage_passes = row["observed_coverage_ratio"] >= threshold / 100
+        assert row[f"valid_bin_{threshold}"] is (coverage_passes and not missing_current)
+        assert result.qa[f"coverage_only_valid_bins_at_{threshold}"] == int(coverage_passes)
+        assert result.qa[f"known_incomplete_current_excluded_bins_at_{threshold}"] == int(
+            coverage_passes and missing_current
+        )
+
+
+def test_known_missing_is_half_open_preserves_carry_in_and_is_not_observed_zero() -> None:
+    start = datetime(2019, 2, 1, 8, tzinfo=timezone.utc)
+    missing = _session(
+        start - timedelta(hours=1),
+        start + timedelta(minutes=15),
+        current_times=[],
+        current_values=[],
+    )
+    observed_zero = _session(
+        start + timedelta(minutes=15),
+        start + timedelta(minutes=30),
+        current_times=[start + timedelta(minutes=15)],
+        current_values=[0.0],
+    )
+    result = aggregate_station_15min(
+        [missing, observed_zero],
+        start_utc=start,
+        end_utc=start + timedelta(minutes=45),
+        policy=AggregationPolicy(max_hold_seconds=900),
+        enforce_known_incomplete_current=True,
+    )
+    unknown, zero, empty = result.rows
+    assert [row["known_incomplete_current"] for row in result.rows] == [True, False, False]
+    assert unknown["station_current_mean_a"] is None
+    assert unknown["connected_session_count"] == 1
+    assert unknown["observed_coverage_ratio"] == 0.0
+    assert unknown["arrival_count"] == 0
+    assert zero["station_current_mean_a"] == 0.0
+    assert zero["connected_session_count"] == 1
+    assert zero["observed_coverage_ratio"] == 1.0
+    assert zero["disconnect_count"] == 1
+    assert empty["station_current_mean_a"] == 0.0
+    assert empty["connected_session_count"] == 0
+    assert empty["known_incomplete_pilot"] is False
+
+
+def test_known_missing_uses_integral_state_and_not_future_samples_for_labels() -> None:
+    start = datetime(2019, 2, 1, 8, tzinfo=timezone.utc)
+    end = start + timedelta(minutes=15)
+    session = _session(start, end, current_times=[end], current_values=[999.0])
+    session["current"]["main_integral"] = {"observed_seconds": 0}
+    session["pilot"]["main_integral"] = {"observed_seconds": 0}
+    result = aggregate_station_15min(
+        [session],
+        start_utc=start,
+        end_utc=end,
+        policy=AggregationPolicy(max_hold_seconds=60),
+        enforce_known_incomplete_current=True,
+    )
+    assert result.rows[0]["known_incomplete_current"] is True
+    assert result.rows[0]["station_current_mean_a"] is None
+
+
+def test_opt_in_preserves_anomaly_free_numeric_output_and_may_default_schema() -> None:
+    start = datetime(2019, 5, 1, 7, tzinfo=timezone.utc)
+    end = start + timedelta(minutes=15)
+    session = _session(start, end, current_times=[start], current_values=[2.0])
+    kwargs = {
+        "start_utc": start,
+        "end_utc": end,
+        "policy": AggregationPolicy(max_hold_seconds=900),
+    }
+    legacy = aggregate_station_15min([session], **kwargs)
+    explicit_default = aggregate_station_15min(
+        [session], **kwargs, enforce_known_incomplete_current=False
+    )
+    seasonal = aggregate_station_15min([session], **kwargs, enforce_known_incomplete_current=True)
+    assert explicit_default == legacy
+    assert {key: seasonal.rows[0][key] for key in legacy.rows[0]} == legacy.rows[0]
+    assert "known_incomplete_current" not in legacy.rows[0]
+    assert "known_incomplete_current_bins" not in legacy.qa
+    for threshold in (80, 90, 95):
+        assert seasonal.qa[f"valid_bins_at_{threshold}"] == legacy.qa[f"valid_bins_at_{threshold}"]
+
+
+@pytest.mark.parametrize("value", [None, 0, 1, "true"])
+def test_known_missing_opt_in_requires_boolean(value: object) -> None:
+    start = datetime(2019, 2, 1, 8, tzinfo=timezone.utc)
+    with pytest.raises(TypeError, match="enforce_known_incomplete_current"):
+        aggregate_station_15min(
+            [],
+            start_utc=start,
+            end_utc=start + timedelta(minutes=15),
+            policy=AggregationPolicy(max_hold_seconds=60),
+            enforce_known_incomplete_current=value,
+        )
+
+
 def test_required_schema_and_summary_are_deterministic() -> None:
     start = datetime(2019, 5, 1, 7, tzinfo=timezone.utc)
     end = start + timedelta(minutes=30)

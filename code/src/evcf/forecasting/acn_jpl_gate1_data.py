@@ -1897,7 +1897,11 @@ def _validate_seasonal_station_rows(
             raise TypeError(f"seasonal station row {ordinal} must be a mapping")
         row = dict(source)
         context = f"seasonal station row {ordinal}"
-        _require_exact_keys(row, set(_STATION_COLUMNS), context)
+        _require_exact_keys(
+            row,
+            set(_STATION_COLUMNS) | {"known_incomplete_current", "known_incomplete_pilot"},
+            context,
+        )
         expected_epoch = start_epoch + ordinal * 900
         if _parse_utc_epoch(row["timestamp_utc"], f"{context} timestamp_utc") != expected_epoch:
             raise ValueError("seasonal station rows must follow the continuous physical UTC grid")
@@ -1941,9 +1945,23 @@ def _validate_seasonal_station_rows(
         validity = tuple(
             _strict_bool(row[name], f"{context} {name}") for name in _STATION_VALIDITY_COLUMNS
         )
-        expected_validity = tuple(coverage >= threshold for threshold in (0.80, 0.90, 0.95))
+        known_current = _strict_bool(
+            row["known_incomplete_current"], f"{context} known_incomplete_current"
+        )
+        known_pilot = _strict_bool(
+            row["known_incomplete_pilot"], f"{context} known_incomplete_pilot"
+        )
+        if known_current and (
+            row["station_current_mean_a"] is not None or row["station_current_peak_a"] is not None
+        ):
+            raise ValueError(f"{context} known incomplete current cannot be a formal total label")
+        if known_pilot and (row["pilot_sum_a"] is not None or row["pilot_mean_a"] is not None):
+            raise ValueError(f"{context} known incomplete pilot must remain missing")
+        expected_validity = tuple(
+            coverage >= threshold and not known_current for threshold in (0.80, 0.90, 0.95)
+        )
         if validity != expected_validity:
-            raise ValueError(f"{context} validity flags do not match observed coverage")
+            raise ValueError(f"{context} validity flags do not match coverage and known current")
         materialized.append(row)
         station_times.append(expected_epoch)
         station_current.append(current)

@@ -560,7 +560,10 @@ def _station_value(row: Mapping[str, Any]) -> float | None:
 
 
 def _valid_history_value(row: Mapping[str, Any]) -> float | None:
-    return _station_value(row) if bool(row.get("valid_bin_90")) else None
+    known_incomplete = row.get("known_incomplete_current", False)
+    if type(known_incomplete) is not bool:
+        raise TypeError("known_incomplete_current must be a boolean")
+    return _station_value(row) if bool(row.get("valid_bin_90")) and not known_incomplete else None
 
 
 def _find_forbidden_keys(value: object, found: set[str]) -> None:
@@ -890,7 +893,7 @@ def build_issue_snapshots(
         for horizon in policy.horizons_minutes:
             target_index = bin_index + horizon // BIN_MINUTES - 1
             target_row = station_rows[target_index]
-            target = _station_value(target_row) if bool(target_row.get("valid_bin_90")) else None
+            target = _valid_history_value(target_row)
             labels[str(horizon)] = target
             if target is not None:
                 valid_labels[str(horizon)] += 1
@@ -908,9 +911,7 @@ def build_issue_snapshots(
             "day_of_week": local.weekday(),
             "is_weekend": local.weekday() >= 5,
             "history_station_current_mean_a": [_valid_history_value(row) for row in history],
-            "history_observed_mask": [
-                bool(row.get("valid_bin_90")) and _station_value(row) is not None for row in history
-            ],
+            "history_observed_mask": [_valid_history_value(row) is not None for row in history],
         }
         m1_rows.append(m1)
         if not include_m2:
@@ -923,6 +924,8 @@ def build_issue_snapshots(
         ]
         current_values: list[float] = []
         pilot_values: list[float] = []
+        # Observed-active lower bound; unobserved current remains explicit in the
+        # independent observed ratio and nullable M3 fields, never known inactive.
         active_count = 0
         session_current: dict[int, float | None] = {}
         for session in connected_sessions:

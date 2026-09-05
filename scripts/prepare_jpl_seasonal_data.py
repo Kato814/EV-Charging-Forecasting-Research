@@ -20,6 +20,7 @@ _SAFE_REASON_CODES = frozenset(
         "FEATURE_TIER_INVALID",
         "IMPLEMENTATION_DRIFT",
         "INVALID_CONTAINER_PARTITION_INVALID",
+        "INVALID_CONTAINER_METADATA_FAILED",
         "INVALID_CONTAINER_RATE_EXCEEDED",
         "ISSUE_SNAPSHOT_GATE_FAILED",
         "LOCAL_ARTIFACT_INVALID",
@@ -111,6 +112,17 @@ def run_prepare_cli(
             "months": [],
             "reason_code": reason if reason in _SAFE_REASON_CODES else "UNEXPECTED_ERROR",
         }
+        if reason == "INVALID_CONTAINER_METADATA_FAILED":
+            diagnostics = getattr(exc, "diagnostics", {})
+            names = (
+                "metadata_checked_session_count",
+                "metadata_match_session_count",
+                "metadata_anomaly_count",
+            )
+            if set(diagnostics) == set(names) and all(
+                type(diagnostics[name]) is int and diagnostics[name] >= 0 for name in names
+            ):
+                payload["metadata_diagnostics"] = {name: diagnostics[name] for name in names}
         print(
             json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
             file=stdout,

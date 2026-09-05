@@ -100,8 +100,8 @@ def test_authorized_cli_accepts_only_typed_result_and_prints_safe_aggregates(
                     else "CONDITIONAL_PASS"
                 ),
                 "sessions_processed": 10,
-                "cleaned_session_count": 9,
-                "invalid_skipped_session_count": 1,
+                "cleaned_session_count": 10,
+                "invalid_skipped_session_count": 0,
                 "trajectory_quarantine_count": 1 if month == "2019-11" else 0,
                 "full_session_quarantine_count": 0,
                 "station_bins": bins,

@@ -84,12 +84,16 @@ def _full_station_rows(config: JPLMonthConfig) -> list[dict[str, object]]:
             "valid_bin_80": True,
             "valid_bin_90": True,
             "valid_bin_95": True,
+            "known_incomplete_current": False,
+            "known_incomplete_pilot": False,
         }
         for interval in build_local_15min_grid(config.local_start, config.local_end)
     ]
 
 
-def _seasonal_adapter_inputs(*, empty_trajectory: bool = False) -> tuple[
+def _seasonal_adapter_inputs(
+    *, empty_trajectory: bool = False
+) -> tuple[
     JPLMonthConfig,
     list[dict[str, object]],
     IssueSnapshotResult,
@@ -329,6 +333,149 @@ def test_seasonal_adapter_builds_a_sealed_readonly_m1_to_m3_snapshot() -> None:
         snapshot.artifact_sha256["manual"] = "f" * 64
     with pytest.raises(TypeError):
         snapshot.m3_rows[0]["current_current_a"] = 10.0
+
+
+def test_known_incomplete_current_excludes_targets_and_masks_history_even_if_flag_is_stale() -> (
+    None
+):
+    config = jpl_month_config("2019-02")
+    rows = _full_station_rows(config)
+    rows[106]["known_incomplete_current"] = True
+    rows[106]["observed_coverage_ratio"] = 10 / 11
+    rows[106]["station_current_mean_a"] = 100.0
+    result = build_issue_snapshots(
+        rows,
+        [],
+        start_utc=config.utc_start,
+        end_utc=config.utc_end,
+        policy=SnapshotPolicy(tiers=config.tiers),
+        preserve_unobserved_trajectory_missingness=True,
+    )
+    indexes = {row["issue_index"] for row in result.m1_rows}
+    assert set(range(config.expected_scheduled_issue_times)) - indexes == {3, 7, 9, 10}
+    later = next(row for row in result.m1_rows if row["issue_index"] == 11)
+    assert later["history_station_current_mean_a"][-1] is None
+    assert later["history_observed_mask"][-1] is False
+    assert result.qa["future_fields_found"] == []
+
+
+@pytest.mark.parametrize("branch", ["current", "pilot"])
+def test_seasonal_station_loader_independently_enforces_branch_missingness(branch: str) -> None:
+    config = jpl_month_config("2019-02")
+    rows = _full_station_rows(config)
+    row = rows[106]
+    row[f"known_incomplete_{branch}"] = True
+    row["connected_session_count"] = 11
+    row["observed_coverage_ratio"] = 10 / 11 if branch == "current" else 1.0
+    row["pilot_observed_coverage_ratio"] = 10 / 11 if branch == "pilot" else 1.0
+    if branch == "current":
+        for threshold in (80, 90, 95):
+            row[f"valid_bin_{threshold}"] = False
+        row["station_current_mean_a"] = None
+        row["station_current_peak_a"] = None
+    else:
+        row["pilot_sum_a"] = None
+        row["pilot_mean_a"] = None
+    validated, _times, current, valid = gate1_data._validate_seasonal_station_rows(
+        rows, config=config
+    )
+    assert validated[106][f"known_incomplete_{branch}"] is True
+    assert bool(valid[106]) is (branch == "pilot")
+    if branch == "current":
+        assert current[106] != current[106]
+        row["valid_bin_90"] = True
+    else:
+        row["pilot_sum_a"] = 100.0
+    with pytest.raises(ValueError, match="known|validity"):
+        gate1_data._validate_seasonal_station_rows(rows, config=config)
+
+
+@pytest.mark.parametrize("branch", ["current", "pilot"])
+@pytest.mark.parametrize("bad_value", [None, 0, "false"])
+def test_seasonal_station_loader_rejects_nonboolean_known_state(
+    branch: str, bad_value: object
+) -> None:
+    config = jpl_month_config("2019-02")
+    rows = _full_station_rows(config)
+    rows[0][f"known_incomplete_{branch}"] = bad_value
+    with pytest.raises(TypeError, match="boolean"):
+        gate1_data._validate_seasonal_station_rows(rows, config=config)
+
+
+@pytest.mark.parametrize("branch", ["current", "pilot", "both", "zero"])
+def test_m3_missing_branches_stay_independent_and_unknown_is_not_inactive(branch: str) -> None:
+    config = jpl_month_config("2019-02")
+    issue = config.utc_start + timedelta(hours=24)
+    end = issue + timedelta(hours=4)
+    station_rows = _station_rows(config.utc_start, 28 * 4)
+    session = _session(config.utc_start, end)
+    if branch in ("current", "both"):
+        session["current"] = {"timestamps_utc_s": [], "values": []}
+    if branch in ("pilot", "both"):
+        session["pilot"] = {"timestamps_utc_s": [], "values": []}
+    if branch == "zero":
+        session["current"]["values"] = [0.0]
+    result = build_issue_snapshots(
+        station_rows,
+        [session],
+        start_utc=config.utc_start,
+        end_utc=end,
+        policy=SnapshotPolicy(tiers=config.tiers),
+        preserve_unobserved_trajectory_missingness=True,
+    )
+    m2, m3 = result.m2_rows[0], result.m3_rows[0]
+    missing_current = branch in ("current", "both")
+    assert m2["connected_session_count"] == 1
+    assert m2["station_current_observed_ratio"] == (0.0 if missing_current else 1.0)
+    assert m2["active_charging_session_count"] == int(branch == "pilot")
+    assert m3["elapsed_connection_s"] == 3600
+    assert m3["current_current_a"] == (
+        None if missing_current else 0.0 if branch == "zero" else 2.0
+    )
+    assert m3["current_pilot_a"] == (None if branch in ("pilot", "both") else 8.0)
+    assert m2["pilot_sum_a"] == (None if branch in ("pilot", "both") else 8.0)
+    for name in (
+        "recent_current_mean_a",
+        "recent_current_peak_a",
+        "cumulative_current_ah",
+        "elapsed_charging_time_proxy_s",
+    ):
+        assert (m3[name] is None) is missing_current
+        if branch == "zero":
+            assert m3[name] == 0.0
+    assert result.qa["future_fields_found"] == []
+    assert not any("reason" in key or "known_incomplete" in key for key in m3)
+
+
+def test_future_trajectory_samples_cannot_fill_missing_issue_features() -> None:
+    config = jpl_month_config("2019-02")
+    issue = config.utc_start + timedelta(hours=24)
+    end = issue + timedelta(hours=4)
+    session = _session(config.utc_start, end)
+    for branch in ("current", "pilot"):
+        session[branch] = {
+            "timestamps_utc_s": [_epoch(issue + timedelta(seconds=1))],
+            "values": [999.0],
+        }
+    result = build_issue_snapshots(
+        _station_rows(config.utc_start, 28 * 4),
+        [session],
+        start_utc=config.utc_start,
+        end_utc=end,
+        policy=SnapshotPolicy(tiers=config.tiers),
+        preserve_unobserved_trajectory_missingness=True,
+    )
+    assert result.m2_rows[0]["station_current_observed_ratio"] == 0.0
+    assert result.m2_rows[0]["active_charging_session_count"] == 0
+    for field in (
+        "current_current_a",
+        "current_pilot_a",
+        "cumulative_current_ah",
+        "elapsed_charging_time_proxy_s",
+        "recent_current_mean_a",
+        "recent_current_peak_a",
+    ):
+        assert result.m3_rows[0][field] is None
 
 
 def test_empty_connected_trajectory_stays_missing_through_gate1_pooling() -> None:

@@ -75,6 +75,240 @@ def test_protocol_freezes_the_narrow_trajectory_quarantine_policy() -> None:
     assert protocol.trajectory_quarantine_backward_seconds == 3596
     assert protocol.trajectory_quarantine_preserves_raw is True
     assert protocol.trajectory_quarantine_preserves_connected is True
+    assert protocol.preserve_invalid_container_structure is True
+    assert protocol.enforce_known_incomplete_current is True
+
+
+def test_cleaning_contract_retains_invalid_container_structure() -> None:
+    config = prep_module.jpl_month_config("2019-02")
+    cleaning = _month_documents("2019-02", 2688, 2577)["cleaning_qa.json"]
+    cleaning["schema_version"] = "acn-jpl-seasonal-preparation-cleaning-qa/v2"
+    cleaning["cleaned_session_count"] = 10
+    cleaning["invalid_skipped_session_count"] = 0
+    cleaning["session_accounting"] = {
+        "acquisition_session_count": 10,
+        "structural_retained_session_count": 10,
+        "current_analyzable_session_count": 9,
+        "pilot_analyzable_session_count": 10,
+        "invalid_container_placeholder_count": 1,
+        "current_only_invalid_count": 1,
+        "pilot_only_invalid_count": 0,
+        "both_invalid_count": 0,
+        "trajectory_quarantine_count": 0,
+        "metadata_checked_session_count": 1,
+        "metadata_match_session_count": 1,
+        "metadata_anomaly_count": 0,
+        "coverage_denominator_session_count": 10,
+        "whole_current_unobservable_session_count": 1,
+        "whole_pilot_unobservable_session_count": 0,
+    }
+    prep_module._validate_cleaning(
+        config,
+        cleaning,
+        combined_count=10,
+        trajectory_quarantine_count=0,
+        full_session_quarantine_count=0,
+    )
+
+
+def test_seasonal_cleaning_keeps_every_structural_record_and_each_valid_branch() -> None:
+    from evcf.data.acn_jpl_cleaning import CleaningPolicy
+    from evcf.data.acn_jpl_trajectory_quarantine import NO_QUARANTINE
+
+    valid = {
+        "_id": "synthetic-object",
+        "sessionID": "synthetic-session",
+        "connectionTime": "2019-02-01T08:00:00+00:00",
+        "disconnectTime": "2019-02-01T08:15:00+00:00",
+        "chargingCurrent": {"timestamps": ["2019-02-01T08:00:00+00:00"], "current": [5]},
+        "pilotSignal": {"timestamps": ["2019-02-01T08:00:00+00:00"], "pilot": [6]},
+    }
+    current_missing = {
+        **valid,
+        "_id": "synthetic-object-2",
+        "sessionID": "synthetic-session-2",
+        "chargingCurrent": None,
+    }
+    pilot_missing = {
+        **valid,
+        "_id": "synthetic-object-3",
+        "sessionID": "synthetic-session-3",
+        "pilotSignal": None,
+    }
+    raw = [valid, current_missing, pilot_missing]
+    original = copy.deepcopy(raw)
+    records = tuple(
+        SimpleNamespace(ordinal=index, payload=record) for index, record in enumerate(raw)
+    )
+    metadata = {
+        (record["_id"], record["sessionID"]): {
+            key: value
+            for key, value in record.items()
+            if key not in ("chargingCurrent", "pilotSignal")
+        }
+        for record in raw
+    }
+    cleaned, accumulator, counts = prep_module._clean_records_retaining_structure(
+        records,
+        metadata_by_pair=metadata,
+        decisions_by_ordinal={index: SimpleNamespace(action=NO_QUARANTINE) for index in range(3)},
+        cleaning_policy=CleaningPolicy(current_mode_s=4, pilot_mode_s=4),
+    )
+    assert raw == original
+    assert len(cleaned) == accumulator.sessions_processed == 3
+    assert [item.session_index for item in cleaned] == [0, 1, 2]
+    assert cleaned[1].current.values == () and cleaned[1].pilot.values == (6.0,)
+    assert cleaned[2].current.values == (5.0,) and cleaned[2].pilot.values == ()
+    assert len(accumulator.power_sessions) == 3
+    assert counts["invalid_container_placeholder_count"] == 2
+    assert counts["metadata_match_session_count"] == 2
+    assert counts["current_analyzable_session_count"] == 2
+    assert counts["pilot_analyzable_session_count"] == 2
+    assert counts["coverage_denominator_session_count"] == 3
+
+
+def test_station_contract_closes_known_incomplete_target_counts() -> None:
+    config = prep_module.jpl_month_config("2019-02")
+    document = _month_documents("2019-02", 2688, 2577)["station_15min_qa.json"]
+    document["schema_version"] = "acn-jpl-seasonal-preparation-station-15min-qa/v2"
+    document["structural_session_count"] = 10
+    document["known_incomplete_current_bins"] = 5
+    document["known_incomplete_pilot_bins"] = 0
+    document["valid_bins_at_80"] = document["valid_bins_at_90"]
+    document["valid_bin_rate_at_80"] = document["valid_bin_rate_at_90"]
+    document["missing_bin_rate_at_80"] = document["missing_bin_rate_at_90"]
+    for threshold in (80, 90, 95):
+        document[f"coverage_only_valid_bins_at_{threshold}"] = (
+            document[f"valid_bins_at_{threshold}"] + 3
+        )
+        document[f"known_incomplete_current_excluded_bins_at_{threshold}"] = 3
+    assert (
+        prep_module._validate_station(config, document, trajectory_quarantine_count=0)
+        == document["valid_bins_at_90"]
+    )
+    document["known_incomplete_current_excluded_bins_at_90"] = 2
+    with pytest.raises(SeasonalPreparationError, match="KNOWN_INCOMPLETE_TARGET"):
+        prep_module._validate_station(config, document, trajectory_quarantine_count=0)
+
+
+def test_invalid_container_metadata_failure_is_diagnosed_before_cleaning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from evcf.data import acn_jpl_invalid_containers as containers
+    from evcf.data.acn_jpl_cleaning import CleaningPolicy
+    from evcf.data.acn_jpl_trajectory_quarantine import NO_QUARANTINE
+
+    raw = {
+        "_id": "synthetic-object",
+        "sessionID": "synthetic-session",
+        "connectionTime": "2019-02-01T08:00:00+00:00",
+        "disconnectTime": "2019-02-01T08:15:00+00:00",
+        "chargingCurrent": None,
+        "pilotSignal": None,
+    }
+    expected = {**raw, "disconnectTime": "2019-02-01T08:16:00+00:00"}
+
+    def forbid_cleaning(*args, **kwargs):
+        pytest.fail("metadata anomalies must stop before any cleaning")
+
+    monkeypatch.setattr(containers, "clean_branchwise_session", forbid_cleaning)
+    with pytest.raises(
+        SeasonalPreparationError, match="INVALID_CONTAINER_METADATA_FAILED"
+    ) as caught:
+        prep_module._clean_records_retaining_structure(
+            (SimpleNamespace(ordinal=0, payload=raw),),
+            metadata_by_pair={(raw["_id"], raw["sessionID"]): expected},
+            decisions_by_ordinal={0: SimpleNamespace(action=NO_QUARANTINE)},
+            cleaning_policy=CleaningPolicy(current_mode_s=4, pilot_mode_s=4),
+        )
+    assert caught.value.diagnostics == {
+        "metadata_checked_session_count": 1,
+        "metadata_match_session_count": 0,
+        "metadata_anomaly_count": 1,
+    }
+
+
+def test_prepare_month_reports_invalid_metadata_before_full_timeseries_qa(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from evcf.data import acn_jpl_full_month_qa as qa_module
+    from evcf.data import acn_jpl_preparation as raw_module
+    from test_acn_jpl_seasonal_acquisition import _complete_february
+
+    config, _scope, raw_root, _reference = _complete_february(tmp_path, monkeypatch)
+    original_iterator = raw_module.iter_validated_raw_records
+
+    def malformed_record_stream(*args, **kwargs):
+        for index, item in enumerate(original_iterator(*args, **kwargs)):
+            if index == 0:
+                payload = {**item.payload, "chargingCurrent": None, "disconnectTime": "invalid"}
+                yield SimpleNamespace(ordinal=item.ordinal, payload=payload)
+            else:
+                yield item
+
+    def failing_full_qa(**kwargs):
+        return SimpleNamespace(gate_status="FAIL", qa={})
+
+    monkeypatch.setattr(raw_module, "iter_validated_raw_records", malformed_record_stream)
+    monkeypatch.setattr(qa_module, "generate_month_timeseries_qa", failing_full_qa)
+    monkeypatch.setattr(prep_module, "verify_implementation_commit", lambda *a, **k: None)
+    before = canonical_seasonal_inventory(raw_root)
+    with pytest.raises(
+        SeasonalPreparationError, match="INVALID_CONTAINER_METADATA_FAILED"
+    ) as caught:
+        prep_module.prepare_jpl_seasonal_month(
+            authorized=True,
+            config=config,
+            metadata_root=tmp_path / "metadata",
+            raw_root=raw_root,
+            interim_root=tmp_path / "interim",
+            processed_root=tmp_path / "processed",
+            code_commit="a" * 40,
+        )
+    assert caught.value.diagnostics["metadata_anomaly_count"] == 1
+    assert not (tmp_path / "interim").exists()
+    assert not (tmp_path / "processed").exists()
+    assert canonical_seasonal_inventory(raw_root) == before
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "structural_retained_session_count",
+        "coverage_denominator_session_count",
+        "metadata_match_session_count",
+        "metadata_anomaly_count",
+        "current_analyzable_session_count",
+        "pilot_analyzable_session_count",
+    ],
+)
+def test_cleaning_contract_rejects_inconsistent_structural_accounting(field: str) -> None:
+    config = prep_module.jpl_month_config("2019-02")
+    documents = _month_documents("2019-02", 2688, 2577)
+    cleaning = documents["cleaning_qa.json"]
+    cleaning["session_accounting"][field] += 1
+    with pytest.raises(SeasonalPreparationError):
+        prep_module._validate_cleaning(
+            config,
+            cleaning,
+            combined_count=10,
+            trajectory_quarantine_count=0,
+            full_session_quarantine_count=0,
+        )
+
+
+def test_run_manifest_cannot_reintroduce_invalid_session_omissions() -> None:
+    documents = _month_documents("2019-02", 2688, 2577)
+    documents["run_manifest.json"].update(
+        cleaned_session_count=9,
+        invalid_skipped_session_count=1,
+    )
+    with pytest.raises(SeasonalPreparationError, match="RUN_MANIFEST_INVALID"):
+        build_month_preparation_result(
+            config=prep_module.jpl_month_config("2019-02"),
+            documents=documents,
+        )
 
 
 def _month_documents(month: str, expected_bins: int, scheduled: int) -> dict[str, object]:
@@ -82,9 +316,7 @@ def _month_documents(month: str, expected_bins: int, scheduled: int) -> dict[str
     day_count = {"2019-02": 28, "2019-08": 31, "2019-11": 30}[month]
     trajectory_quarantine_count = 1 if month == "2019-11" else 0
     month_status = (
-        "PASS_WITH_TRAJECTORY_QUARANTINE"
-        if trajectory_quarantine_count
-        else "CONDITIONAL_PASS"
+        "PASS_WITH_TRAJECTORY_QUARANTINE" if trajectory_quarantine_count else "CONDITIONAL_PASS"
     )
     sha = {
         "config": "1" * 64,
@@ -194,13 +426,30 @@ def _month_documents(month: str, expected_bins: int, scheduled: int) -> dict[str
             },
         },
         "cleaning_qa.json": {
-            "schema_version": "acn-jpl-seasonal-preparation-cleaning-qa/v1",
+            "schema_version": "acn-jpl-seasonal-preparation-cleaning-qa/v2",
             "month": month,
             "status": "PASS",
             "sessions_processed": 10,
             "expected_sessions": 10,
-            "cleaned_session_count": 9,
-            "invalid_skipped_session_count": 1,
+            "cleaned_session_count": 10,
+            "invalid_skipped_session_count": 0,
+            "session_accounting": {
+                "acquisition_session_count": 10,
+                "structural_retained_session_count": 10,
+                "current_analyzable_session_count": 9 - trajectory_quarantine_count,
+                "pilot_analyzable_session_count": 10 - trajectory_quarantine_count,
+                "invalid_container_placeholder_count": 1,
+                "current_only_invalid_count": 1,
+                "pilot_only_invalid_count": 0,
+                "both_invalid_count": 0,
+                "trajectory_quarantine_count": trajectory_quarantine_count,
+                "metadata_checked_session_count": 1,
+                "metadata_match_session_count": 1,
+                "metadata_anomaly_count": 0,
+                "coverage_denominator_session_count": 10,
+                "whole_current_unobservable_session_count": 1 + trajectory_quarantine_count,
+                "whole_pilot_unobservable_session_count": trajectory_quarantine_count,
+            },
             "trajectory_quarantine": {
                 "denominator_sessions": 10,
                 "trajectory_quarantine_count": trajectory_quarantine_count,
@@ -347,8 +596,8 @@ def _month_documents(month: str, expected_bins: int, scheduled: int) -> dict[str
                 "e208_formula": "E_208_kWh=208*ampere_hours/1000",
             },
             "mapping": {
-                "raw_record_count": 9,
-                "mapped_record_count": 9,
+                "raw_record_count": 10,
+                "mapped_record_count": 10,
                 "unmapped_record_count": 0,
                 "mapping_rate": 1.0,
             },
@@ -357,7 +606,7 @@ def _month_documents(month: str, expected_bins: int, scheduled: int) -> dict[str
                     "minimum_kwh_delivered": 0.5,
                     "minimum_current_coverage": 0.9,
                 },
-                "input_session_count": 9,
+                "input_session_count": 10,
                 "eligible_session_count": 0,
                 "coverage_qualified_session_count": 0,
                 "retained_session_count": 0,
@@ -388,7 +637,7 @@ def _month_documents(month: str, expected_bins: int, scheduled: int) -> dict[str
             "privacy": {"aggregate_only": True, "identifiers_emitted": False},
         },
         "station_15min_qa.json": {
-            "schema_version": "acn-jpl-seasonal-preparation-station-15min-qa/v1",
+            "schema_version": "acn-jpl-seasonal-preparation-station-15min-qa/v2",
             "month": month,
             "status": "PASS",
             "grid_policy": "continuous_physical_utc",
@@ -405,7 +654,18 @@ def _month_documents(month: str, expected_bins: int, scheduled: int) -> dict[str
                 "valid_bin_80",
                 "valid_bin_90",
                 "valid_bin_95",
+                "known_incomplete_current",
+                "known_incomplete_pilot",
             ],
+            "structural_session_count": 10,
+            "known_incomplete_current_bins": 0,
+            "known_incomplete_pilot_bins": 0,
+            "coverage_only_valid_bins_at_80": expected_bins,
+            "coverage_only_valid_bins_at_90": valid_90,
+            "coverage_only_valid_bins_at_95": valid_90,
+            "known_incomplete_current_excluded_bins_at_80": 0,
+            "known_incomplete_current_excluded_bins_at_90": 0,
+            "known_incomplete_current_excluded_bins_at_95": 0,
             "expected_bins": expected_bins,
             "generated_bins": expected_bins,
             "valid_bins_at_80": expected_bins,
@@ -543,8 +803,8 @@ def _month_documents(month: str, expected_bins: int, scheduled: int) -> dict[str
             "local_session_count": 9,
             "carry_in_count": 1,
             "sessions_processed": 10,
-            "cleaned_session_count": 9,
-            "invalid_skipped_session_count": 1,
+            "cleaned_session_count": 10,
+            "invalid_skipped_session_count": 0,
             "trajectory_quarantine_count": trajectory_quarantine_count,
             "full_session_quarantine_count": 0,
             "station_bins": expected_bins,
@@ -604,8 +864,23 @@ def _nonintegral_month_documents(month: str, *, rounded: bool) -> dict[str, obje
     cleaning.update(
         sessions_processed=combined,
         expected_sessions=combined,
-        cleaned_session_count=combined - skipped,
-        invalid_skipped_session_count=skipped,
+        cleaned_session_count=combined,
+        invalid_skipped_session_count=0,
+    )
+    quarantine_count = cleaning["trajectory_quarantine"]["trajectory_quarantine_count"]
+    cleaning["session_accounting"].update(
+        acquisition_session_count=combined,
+        structural_retained_session_count=combined,
+        coverage_denominator_session_count=combined,
+        current_analyzable_session_count=combined - skipped - quarantine_count,
+        pilot_analyzable_session_count=combined - skipped - quarantine_count,
+        invalid_container_placeholder_count=skipped,
+        current_only_invalid_count=0,
+        both_invalid_count=skipped,
+        metadata_checked_session_count=skipped,
+        metadata_match_session_count=skipped,
+        whole_current_unobservable_session_count=skipped + quarantine_count,
+        whole_pilot_unobservable_session_count=skipped + quarantine_count,
     )
     quarantine = cleaning["trajectory_quarantine"]
     quarantine.update(
@@ -627,14 +902,19 @@ def _nonintegral_month_documents(month: str, *, rounded: bool) -> dict[str, obje
     for field_name in ("charging_current", "pilot_signal"):
         cleaning["invalid_containers"][field_name].update(count=skipped, rate=skipped / combined)
     station = documents["station_15min_qa.json"]
+    station["structural_session_count"] = combined
+    documents["power_semantics_audit.json"]["mapping"].update(
+        raw_record_count=combined,
+        mapped_record_count=combined,
+    )
+    documents["power_semantics_audit.json"]["primary_cohort"]["input_session_count"] = combined
     for threshold, count in zip((80, 90, 95), station_counts, strict=True):
         rate = count / config.expected_bins
         station[f"valid_bins_at_{threshold}"] = count
+        station[f"coverage_only_valid_bins_at_{threshold}"] = count
         station[f"pilot_valid_bins_at_{threshold}"] = count
         station[f"valid_bin_rate_at_{threshold}"] = round(rate, 8) if rounded else rate
-        station[f"missing_bin_rate_at_{threshold}"] = (
-            round(1 - rate, 8) if rounded else 1 - rate
-        )
+        station[f"missing_bin_rate_at_{threshold}"] = round(1 - rate, 8) if rounded else 1 - rate
     station["valid_bin_90_rate"] = station_counts[1] / config.expected_bins
     station["missing_bin_rate"] = 1 - station["valid_bin_90_rate"]
     station["weekday_distribution"]["valid_bin_count"] = station_counts[1]
@@ -642,8 +922,8 @@ def _nonintegral_month_documents(month: str, *, rounded: bool) -> dict[str, obje
         official_total=local,
         local_session_count=local,
         sessions_processed=combined,
-        cleaned_session_count=combined - skipped,
-        invalid_skipped_session_count=skipped,
+        cleaned_session_count=combined,
+        invalid_skipped_session_count=0,
         valid_bin_90_count=station_counts[1],
     )
     return documents
@@ -658,7 +938,9 @@ def test_compact_rates_preserve_counts_and_close_real_nonintegral_ratios(
     original = copy.deepcopy(documents)
     config = prep_module.jpl_month_config(month)
     if rounded:
-        with pytest.raises(SeasonalPreparationError, match="QUARANTINE_FIELD_COVERAGE_RATE_INVALID"):
+        with pytest.raises(
+            SeasonalPreparationError, match="QUARANTINE_FIELD_COVERAGE_RATE_INVALID"
+        ):
             build_month_preparation_result(config=config, documents=documents)
 
     canonical = prep_module._canonicalize_compact_rates(documents)
@@ -712,7 +994,9 @@ def test_compact_rates_reject_invalid_counts(target: str, invalid_count: object)
         documents["station_15min_qa.json"]["valid_bins_at_90"] = invalid_count
     else:
         coverage = documents["cleaning_qa.json"]["trajectory_quarantine"]["raw_field_coverage"]
-        coverage["current"]["count" if target == "coverage_count" else "denominator"] = invalid_count
+        coverage["current"]["count" if target == "coverage_count" else "denominator"] = (
+            invalid_count
+        )
 
     with pytest.raises(SeasonalPreparationError):
         prep_module._canonicalize_compact_rates(documents)
@@ -749,6 +1033,14 @@ def test_month_result_is_slots_frozen_and_enforces_both_main_gates() -> None:
     }
     cleaning["cleaned_session_count"] = 10  # type: ignore[index]
     cleaning["invalid_skipped_session_count"] = 0  # type: ignore[index]
+    cleaning["session_accounting"].update(
+        current_analyzable_session_count=10,
+        invalid_container_placeholder_count=0,
+        current_only_invalid_count=0,
+        metadata_checked_session_count=0,
+        metadata_match_session_count=0,
+        whole_current_unobservable_session_count=0,
+    )
     cleaning["trajectory_quarantine"]["raw_field_coverage"]["current"] = {  # type: ignore[index]
         "count": 10,
         "denominator": 10,
@@ -1155,6 +1447,7 @@ def test_implementation_binding_covers_dependencies_and_detects_each_drift(
     assert set(prep_module.IMPLEMENTATION_PATHS) >= required
 
     for drifted in prep_module.IMPLEMENTATION_PATHS:
+
         def fake_run(args, _drifted=drifted, **_kwargs):  # type: ignore[no-untyped-def]
             relative = args[2].split(":", 1)[1]
             content = (repo_root / relative).read_bytes()
@@ -1272,59 +1565,59 @@ def test_prepare_month_runs_real_clean_station_snapshot_feature_projection(
             qa={
                 "quality": {
                     "series": {
-                            "chargingCurrent": {
-                                "invalid_container_count": 0,
-                                "usable_samples": 0,
-                                "raw_field_coverage": {
-                                    "count": 3,
-                                    "denominator": 3,
-                                    "rate": 1.0,
-                                },
-                                "analysis_field_coverage": {
-                                    "count": 3,
-                                    "denominator": 3,
-                                    "rate": 1.0,
-                                },
-                                "nonmonotonic_pairs": 0,
-                                "nonmonotonic_sessions": 0,
+                        "chargingCurrent": {
+                            "invalid_container_count": 0,
+                            "usable_samples": 0,
+                            "raw_field_coverage": {
+                                "count": 3,
+                                "denominator": 3,
+                                "rate": 1.0,
                             },
-                            "pilotSignal": {
-                                "invalid_container_count": 0,
-                                "usable_samples": 0,
-                                "raw_field_coverage": {
-                                    "count": 3,
-                                    "denominator": 3,
-                                    "rate": 1.0,
-                                },
-                                "analysis_field_coverage": {
-                                    "count": 3,
-                                    "denominator": 3,
-                                    "rate": 1.0,
-                                },
-                                "nonmonotonic_pairs": 0,
-                                "nonmonotonic_sessions": 0,
+                            "analysis_field_coverage": {
+                                "count": 3,
+                                "denominator": 3,
+                                "rate": 1.0,
+                            },
+                            "nonmonotonic_pairs": 0,
+                            "nonmonotonic_sessions": 0,
+                        },
+                        "pilotSignal": {
+                            "invalid_container_count": 0,
+                            "usable_samples": 0,
+                            "raw_field_coverage": {
+                                "count": 3,
+                                "denominator": 3,
+                                "rate": 1.0,
+                            },
+                            "analysis_field_coverage": {
+                                "count": 3,
+                                "denominator": 3,
+                                "rate": 1.0,
+                            },
+                            "nonmonotonic_pairs": 0,
+                            "nonmonotonic_sessions": 0,
                         },
                     }
-                    },
-                    "trajectory_quarantine": {
-                        "denominator_sessions": 3,
-                        "trajectory_quarantine_count": 0,
-                        "trajectory_quarantine_rate": 0.0,
-                        "full_session_quarantine_count": 0,
-                        "full_session_quarantine_rate": 0.0,
-                        "synchronized_utc_nonmonotonic_sessions": 0,
-                        "raw_trajectory_anomalies_retained": True,
-                        "raw_manifest_modified": False,
-                        "raw_timestamps_modified": False,
-                        "sort_repair_applied": False,
-                        "timestamp_shift_seconds": 0,
-                        "interpolation_applied": False,
-                        "whole_current_pilot_trajectory_unobservable": True,
-                        "coverage_denominator_includes_quarantined": True,
-                        "structural_metadata_retained_count": 0,
-                        "connected_state_retained_count": 0,
-                    },
-                    "integrity": {
+                },
+                "trajectory_quarantine": {
+                    "denominator_sessions": 3,
+                    "trajectory_quarantine_count": 0,
+                    "trajectory_quarantine_rate": 0.0,
+                    "full_session_quarantine_count": 0,
+                    "full_session_quarantine_rate": 0.0,
+                    "synchronized_utc_nonmonotonic_sessions": 0,
+                    "raw_trajectory_anomalies_retained": True,
+                    "raw_manifest_modified": False,
+                    "raw_timestamps_modified": False,
+                    "sort_repair_applied": False,
+                    "timestamp_shift_seconds": 0,
+                    "interpolation_applied": False,
+                    "whole_current_pilot_trajectory_unobservable": True,
+                    "coverage_denominator_includes_quarantined": True,
+                    "structural_metadata_retained_count": 0,
+                    "connected_state_retained_count": 0,
+                },
+                "integrity": {
                     "daily_chunks": {
                         "expected": 28,
                         "data_files_present": 28,

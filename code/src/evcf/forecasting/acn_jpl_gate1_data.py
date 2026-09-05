@@ -1625,8 +1625,18 @@ def _validate_m3_row(raw: dict[str, Any], ordinal: int) -> dict[str, Any]:
     row["cumulative_current_ah"] = cumulative_current
     if (elapsed_charging is None) != (cumulative_current is None):
         raise ValueError(f"{context} cumulative trajectory missing fields disagree")
-    for name in ("recent_current_observed_ratio", "cumulative_current_observed_ratio"):
-        row[name] = _validate_optional_ratio(row[name], f"{context} {name}")
+    row["recent_current_observed_ratio"] = _validate_optional_ratio(
+        row["recent_current_observed_ratio"],
+        f"{context} recent_current_observed_ratio",
+    )
+    cumulative_ratio = _validate_optional_ratio(
+        row["cumulative_current_observed_ratio"],
+        f"{context} cumulative_current_observed_ratio",
+    )
+    trajectory_missing = elapsed_charging is None
+    if cumulative_ratio is None or (cumulative_ratio == 0.0) != trajectory_missing:
+        raise ValueError(f"{context} cumulative trajectory observation state is inconsistent")
+    row["cumulative_current_observed_ratio"] = cumulative_ratio
     modified = _as_optional_int(row["user_input_modified_utc_s"], f"{context} user input cutoff")
     if modified is not None and modified > row["issue_time_utc_s"]:
         raise ValueError(f"{context} user input is later than the issue time")

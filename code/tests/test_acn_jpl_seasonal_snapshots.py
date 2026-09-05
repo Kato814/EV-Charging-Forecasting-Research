@@ -350,6 +350,40 @@ def test_empty_connected_trajectory_stays_missing_through_gate1_pooling() -> Non
         assert bool(block.nullable_mask[mean]) is True
 
 
+@pytest.mark.parametrize(
+    "mutation",
+    ("legacy_zero", "missing_with_positive_ratio", "missing_ratio"),
+)
+def test_m3_validator_rejects_inconsistent_cumulative_observation_state(
+    mutation: str,
+) -> None:
+    _config, _station_rows, result = _seasonal_adapter_inputs(empty_trajectory=True)
+    row = dict(result.m3_rows[0])
+    if mutation == "legacy_zero":
+        row["elapsed_charging_time_proxy_s"] = 0
+        row["cumulative_current_ah"] = 0.0
+    elif mutation == "missing_with_positive_ratio":
+        row["cumulative_current_observed_ratio"] = 0.25
+    else:
+        row["cumulative_current_observed_ratio"] = None
+
+    with pytest.raises(ValueError, match="cumulative.*observ"):
+        gate1_data._validate_m3_row(row, 0)
+
+
+def test_m3_validator_preserves_observed_zero_current() -> None:
+    _config, _station_rows, result = _seasonal_adapter_inputs()
+    row = dict(result.m3_rows[0])
+    assert row["cumulative_current_observed_ratio"] > 0
+    row["elapsed_charging_time_proxy_s"] = 0
+    row["cumulative_current_ah"] = 0.0
+
+    validated = gate1_data._validate_m3_row(row, 0)
+
+    assert validated["elapsed_charging_time_proxy_s"] == 0
+    assert validated["cumulative_current_ah"] == 0.0
+
+
 def test_seasonal_adapter_compacts_scheduled_incomplete_issue_rows() -> None:
     config, station_rows, result = _seasonal_subset_adapter_inputs()
     scheduled_count = config.expected_scheduled_issue_times

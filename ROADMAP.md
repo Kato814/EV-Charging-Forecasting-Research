@@ -1,62 +1,28 @@
-# Roadmap
+# Roadmap｜按已验收证据推进
 
-## Phase 0 — Evidence library and problem definition
+状态快照：2026-09-05。最新进度见 [CURRENT_STATUS.md](CURRENT_STATUS.md)。本路线图是状态与依赖表，不是批量执行授权。
 
-- [x] Build literature, dataset, code and decision-log structure
-- [x] Complete initial EV forecasting/flexibility review
-- [x] Complete adjacent-method and OOD review
-- [x] Correct direction policy: OOD becomes optional validation rather than the paper core
-- [x] Complete Round 3 problem-first gap search
-- [x] Establish active-session/future-arrival, weak-label and peak-event gates
-- [ ] Complete full-text review of all P0 nearest neighbors
-- [ ] Pin P0 dataset versions, licenses and SHA-256
+| 阶段 | 状态 | 证据/条件 |
+| --- | --- | --- |
+| 文献库与问题筛选 | 已建立，保留审读深度和局限 | literature/、research/历史材料；不宣称所有全文已审读 |
+| JPL 5月完整月获取 | 已完成 | PR #16 |
+| 5月清洗、语义、15 min和无泄漏输入 | 已完成 | PR #18 |
+| 5月 Gate 1 pilot | 已完成 | PR #21；保留M3，当前M4-lite退出主线 |
+| 2/8/11月raw获取 | 已完成 | PR #23提交证据；不重下 |
+| 季节准备缺测记账修复 | **当前唯一执行任务** | PR #23 / Issue #22；待新代码和新snapshot复核 |
+| M2/M3季节复核 | 未开始 | 先验收修复，再冻结每月切分、参数使用、统计与门控 |
+| 双源分解 Gate 2 | 未开始、未授权 | 不把M3信息价值等同于双源分解价值 |
+| 概率预测与场景质量 | 未开始、未授权 | 需独立协议和强直接基线 |
+| 最小预测—调度价值测试 | 未开始、未授权 | 区分外生EV负荷与有序充电需求 |
+| 深度骨干/联邦扩展 | 未开始、非当前任务 | 已验证问题需要时再选择 |
+| 正式论文与发布 | 未开始 | 完整证据、复现和许可核验后另议 |
 
-## Phase 1 — Primary data acquisition and semantics audit
+## 保持的研究选择
 
-- [ ] Download ACN-Data using official API/client
-- [ ] Verify time-zone correction and chronological coverage
-- [ ] Separate legal issue-time fields from future session outcomes
-- [ ] Quantify pilot-limited/controlled sessions
-- [ ] Download DESL-EPFL Level 3 files and pin commit/hash
-- [ ] Audit P, Pset, Preq, SOC and overlapping-session power sharing
+M3是下一轮信息价值复核对象；M4历史代码和负结果保留作证据，不作为当前研发任务。分布外泛化不作为论文核心，跨月份只验证已选问题的稳定性，不另造边界条件充当创新。
 
-## Phase 2 — Gate 1 and Gate 2 baselines
+EPFL、其他中国场景数据、控制污染审计和GPU稳定环境仍在待办层，不得写成已完成。若后续需要，按具体问题单独立项。
 
-- [ ] Build strict rolling issue-time samples
-- [ ] Seasonal persistence and tabular baselines
-- [ ] Direct aggregate TCN/PatchTST/TFT baseline
-- [ ] Direct probabilistic quantile/density baseline
-- [ ] Bottom-up mixture baseline
-- [ ] Compound-Poisson/Cox baseline
-- [ ] Joint occupancy-load baseline
-- [ ] Active-only, arrival-only and oracle value ceilings
-- [ ] Peak/ramp and forecast-time leakage audit
+## 不再作为当前指令的旧内容
 
-## Phase 3 — Candidate method only after gate pass
-
-- [ ] Active-session conditional remaining-curve model
-- [ ] Future-arrival marked event model
-- [ ] Correlated probabilistic station aggregation
-- [ ] Source-specific uncertainty attribution
-- [ ] Calibration and scenario reduction for downstream use
-
-## Phase 4 — Parallel gates
-
-- [ ] Weak-label power-curve reconstruction masking experiment
-- [ ] Joint peak timing–magnitude–ramp backup experiment
-- [ ] Zero-activation/count/conditional-power component test
-- [ ] Control-aware latent need/executed-power feasibility study
-
-## Phase 5 — Downstream optimization and later project integration
-
-- [ ] Small rolling power-cap/PV/storage scheduling value test
-- [ ] Perfect-information and safe-baseline comparison
-- [ ] Only after central mechanism is stable, consider distributed/trusted learning
-- [ ] OOD/transfer tests only as robustness extensions where useful
-
-## Phase 6 — Paper and release
-
-- [ ] Freeze problem statement, nearest-neighbor table and stop conditions
-- [ ] Lock data splits and result files
-- [ ] Publish reproducible code and environment
-- [ ] Prepare manuscript only after a gate produces a nontrivial, externally validated effect
+旧版路线图中“尚未下载5月”“尚未运行Gate 1”、立即引入TCN/PatchTST/概率模型的清单已从当前入口移除。早期设计文件原位保留，见 [docs/REPOSITORY_INDEX.md](docs/REPOSITORY_INDEX.md)。Issue #19/#21是已执行pilot；Issue #20是关闭的重复设计，不追加其要求。

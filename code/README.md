@@ -1,50 +1,24 @@
 # Codebase
 
-正式代码以 Python package 方式组织：
+当前状态：[CURRENT_STATUS](../CURRENT_STATUS.md)。接管细节：[HANDOFF](../HANDOFF.md)。
 
-- `evcf.data`：数据获取、字段语义、在线信息边界、schema和无泄漏划分；
-- `evcf.forecasting`：点预测、概率预测和场景生成；
-- `evcf.evaluation`：准确性、校准、峰值、爬坡和运行事件评价；
-- `evcf.flexibility`：后续会话约束、功率/能量边界与可行域；
-- `evcf.optimization`：安全基线、oracle价值和风险感知滚动调度；
-- `evcf.federated`：中央方法稳定后的可信联邦实验。
+## 已实现并验收
 
-## 当前代码任务：ACN Gate 0
+- `evcf.data`：ACN获取、QA、JPL 5月清洗、能量语义审计、15 min聚合与issue-time快照。
+- `evcf.forecasting`：5月M1–M4固定编码、Ridge/HGB、持久性和按日滚动pilot。
+- `evcf.evaluation`：该pilot的点预测、峰值/爬坡、日级配对与bootstrap。
+- 脚本：`acn_jpl_full_month_ts.py`、`prepare_jpl_gate1_data.py`、`run_jpl_gate1_pilot.py`（位于仓库 `scripts/`）。只按已有任务授权运行，不因入口存在就重跑。
 
-在模型开发前先完成数据与语义门控：
+## 未合并工作
 
-1. 安全获取有界ACN元数据和时间序列；
-2. 固定查询窗口、API条件、原始文件SHA-256和下载manifest；
-3. 审计会话字段、时间戳、时区、时间序列长度和用户输入覆盖率；
-4. 区分`chargingCurrent`、`pilotSignal`和最终会话结果；
-5. 构造严格截至发布时间的在线会话快照；
-6. 在获取EVSE网络参数前，不把电流序列直接命名为kW功率。
+季节管线与当前缺测记账修复在PR #23的 `data/jpl-2019-seasonal-replication`。`scripts/acquire_jpl_seasonal.py` / `scripts/prepare_jpl_seasonal_data.py` 及对应模块需在该分支读取，不能假定已存在于main。raw已获取，不再下载。
 
-安装：
+## 未实现/未验收模块
 
-```bash
-python -m pip install -e .[dev]
-```
+概率场景、双源生成、flexibility、optimization和federated目录/骨架不等于已经实现。M4历史代码保留用于复现，不进入当前季节正式研发。
 
-查询预览：
+## 环境与校验
 
-```bash
-python scripts/acn_gate0.py download \
-  --site caltech \
-  --start 2019-05-01T00:00:00-07:00 \
-  --end 2019-05-08T00:00:00-07:00 \
-  --output data/raw/acn/gate0/pilot_metadata.jsonl \
-  --max-sessions 500 \
-  --dry-run
-```
+当前CPU环境以 `environment-gate1-pilot.yml` 与运行manifest为准。GitHub CI安装 `.[dev,gate1]` 并运行仓库校验、pytest、compileall和Ruff；本地不要在活跃环境中无条件升级。
 
-访问凭据只通过本地环境变量`ACN_API_TOKEN`提供，不得写入仓库。
-
-## Gate 0通过后的代码顺序
-
-1. 严格无泄漏滚动样本构造器；
-2. M1–M4实时信息阶梯基线；
-3. 简单双源统计/机器学习模型；
-4. 概率评分、峰值、爬坡和阈值超越评价；
-5. Gate 1–2通过后，再选择神经生存模型、标记点过程或其他深度骨干；
-6. 最后进行小型预测—调度运行价值测试。
+Token从本地环境读取。raw/interim/processed/完整预测/模型均保持本地。调用任何入口前先看当前分支脚本 `--help` 与Issue，不从早期网页试下载文档复制命令。

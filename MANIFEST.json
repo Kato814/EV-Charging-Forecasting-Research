@@ -20,8 +20,16 @@
   "detailed_dataset_audit_notes": 11,
   "related_code_records": 23,
   "structured_note_files": 37,
-  "active_research_policy": "problem-first dual-source rolling probabilistic charging-power forecasting with Gate 0-3 validation; OOD retained only as optional robustness evidence",
+  "active_research_policy": "problem-first charging-load forecasting; May Gate 1 accepted; seasonal preparation blocked pending invalid-container accounting fix; OOD not the paper core",
   "remote_owner": "Kato814",
   "remote_repo_suggested": "EV-Charging-Forecasting-Research",
-  "remote_write_status": "connected with active branch, issue and pull-request workflow"
+  "remote_write_status": "connected with active branch, issue and pull-request workflow",
+  "documentation_status_as_of": "2026-09-05",
+  "status_entrypoint": "CURRENT_STATUS.md",
+  "handoff_entrypoint": "HANDOFF.md",
+  "active_issue": 22,
+  "active_pr": 23,
+  "active_task_branch": "data/jpl-2019-seasonal-replication",
+  "accepted_experiment_commit": "c2af2cdf4ecf5dad059d2ac92e929df8df35d42b",
+  "version_scope_note": "version and last_verified_on retain the historical library manifest values; documentation cleanup is not a new scientific/software release"
 }

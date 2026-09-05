@@ -289,7 +289,7 @@ def test_m3_retains_connected_quarantine_row_with_missing_trajectory_features() 
             max_hold_seconds=12,
             tiers=("M1", "M2", "M3"),
         ),
-        include_trajectory_missing_rates=True,
+        preserve_unobserved_trajectory_missingness=True,
     )
 
     assert snapshots.m3_rows

@@ -3797,7 +3797,7 @@ def _prepare_verified_month(
         start_utc=config.utc_start,
         end_utc=config.utc_end,
         policy=snapshot_policy,
-        include_trajectory_missing_rates=True,
+        preserve_unobserved_trajectory_missingness=True,
     )
     if (
         snapshots.qa.get("issue_times") != config.expected_scheduled_issue_times

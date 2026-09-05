@@ -120,7 +120,7 @@ def _seasonal_adapter_inputs(*, empty_trajectory: bool = False) -> tuple[
         start_utc=config.utc_start,
         end_utc=config.utc_end,
         policy=SnapshotPolicy(tiers=config.tiers),
-        include_trajectory_missing_rates=True,
+        preserve_unobserved_trajectory_missingness=True,
     )
     return config, station_rows, result
 
@@ -164,7 +164,7 @@ def _seasonal_subset_adapter_inputs() -> tuple[
         start_utc=config.utc_start,
         end_utc=config.utc_end,
         policy=SnapshotPolicy(tiers=config.tiers),
-        include_trajectory_missing_rates=True,
+        preserve_unobserved_trajectory_missingness=True,
     )
     return config, station_rows, result
 
@@ -364,13 +364,20 @@ def test_m3_validator_rejects_inconsistent_cumulative_observation_state(
     if mutation == "legacy_zero":
         row["elapsed_charging_time_proxy_s"] = 0
         row["cumulative_current_ah"] = 0.0
+        legacy = gate1_data._validate_m3_row(row, 0)
+        assert legacy["elapsed_charging_time_proxy_s"] == 0
+        assert legacy["cumulative_current_ah"] == 0.0
     elif mutation == "missing_with_positive_ratio":
         row["cumulative_current_observed_ratio"] = 0.25
     else:
         row["cumulative_current_observed_ratio"] = None
 
     with pytest.raises(ValueError, match="cumulative.*observ"):
-        gate1_data._validate_m3_row(row, 0)
+        gate1_data._validate_m3_row(
+            row,
+            0,
+            require_unobserved_trajectory_missingness=True,
+        )
 
 
 def test_m3_validator_preserves_observed_zero_current() -> None:
@@ -380,10 +387,21 @@ def test_m3_validator_preserves_observed_zero_current() -> None:
     row["elapsed_charging_time_proxy_s"] = 0
     row["cumulative_current_ah"] = 0.0
 
-    validated = gate1_data._validate_m3_row(row, 0)
+    validated = gate1_data._validate_m3_row(
+        row,
+        0,
+        require_unobserved_trajectory_missingness=True,
+    )
 
     assert validated["elapsed_charging_time_proxy_s"] == 0
     assert validated["cumulative_current_ah"] == 0.0
+
+
+def test_m3_legacy_validator_rejects_missing_cumulative_fields() -> None:
+    _config, _station_rows, result = _seasonal_adapter_inputs(empty_trajectory=True)
+
+    with pytest.raises(ValueError, match="legacy cumulative trajectory"):
+        gate1_data._validate_m3_row(dict(result.m3_rows[0]), 0)
 
 
 def test_seasonal_adapter_compacts_scheduled_incomplete_issue_rows() -> None:

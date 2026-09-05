@@ -1589,8 +1589,15 @@ def _validate_optional_ratio(value: Any, context: str) -> float | None:
     return result
 
 
-def _validate_m3_row(raw: dict[str, Any], ordinal: int) -> dict[str, Any]:
+def _validate_m3_row(
+    raw: dict[str, Any],
+    ordinal: int,
+    *,
+    require_unobserved_trajectory_missingness: bool = False,
+) -> dict[str, Any]:
     context = f"M3 row {ordinal}"
+    if type(require_unobserved_trajectory_missingness) is not bool:
+        raise TypeError("require_unobserved_trajectory_missingness must be a boolean")
     _require_exact_keys(raw, _M3_KEYS, context)
     row = dict(raw)
     row["issue_index"] = _as_nonnegative_int(row["issue_index"], f"{context} issue_index")
@@ -1634,7 +1641,11 @@ def _validate_m3_row(raw: dict[str, Any], ordinal: int) -> dict[str, Any]:
         f"{context} cumulative_current_observed_ratio",
     )
     trajectory_missing = elapsed_charging is None
-    if cumulative_ratio is None or (cumulative_ratio == 0.0) != trajectory_missing:
+    if not require_unobserved_trajectory_missingness and trajectory_missing:
+        raise ValueError(f"{context} legacy cumulative trajectory fields must be numeric")
+    if require_unobserved_trajectory_missingness and (
+        cumulative_ratio is None or (cumulative_ratio == 0.0) != trajectory_missing
+    ):
         raise ValueError(f"{context} cumulative trajectory observation state is inconsistent")
     row["cumulative_current_observed_ratio"] = cumulative_ratio
     modified = _as_optional_int(row["user_input_modified_utc_s"], f"{context} user input cutoff")
@@ -2344,7 +2355,11 @@ def _validate_seasonal_m3_rows(
     normalized: list[Mapping[str, Any]] = []
     previous: tuple[int, int] | None = None
     for ordinal, source in enumerate(result.m3_rows):
-        row = _validate_m3_row(dict(source), ordinal)
+        row = _validate_m3_row(
+            dict(source),
+            ordinal,
+            require_unobserved_trajectory_missingness=True,
+        )
         issue_index = int(row["issue_index"])
         compact_position = compact_positions.get(issue_index)
         if compact_position is None or int(row["issue_time_utc_s"]) != int(

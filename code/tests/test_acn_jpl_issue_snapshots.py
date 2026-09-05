@@ -118,6 +118,29 @@ def test_future_samples_and_late_user_inputs_are_not_visible() -> None:
     assert 999.0 not in tuple(value for value in m3.values() if isinstance(value, float))
 
 
+def test_legacy_default_preserves_unobserved_cumulative_zero_contract() -> None:
+    start = datetime(2019, 5, 1, 7, tzinfo=timezone.utc)
+    end = start + timedelta(hours=28)
+    session = _session(start, end)
+    session["current"] = {"timestamps_utc_s": [], "values": []}
+    session["pilot"] = {"timestamps_utc_s": [], "values": []}
+
+    result = build_issue_snapshots(
+        _station_rows(start, 112),
+        [session],
+        start_utc=start,
+        end_utc=end,
+        policy=SnapshotPolicy(max_hold_seconds=12),
+    )
+
+    row = result.m3_rows[0]
+    assert row["elapsed_charging_time_proxy_s"] == 0
+    assert row["cumulative_current_ah"] == 0.0
+    assert row["cumulative_current_observed_ratio"] == 0.0
+    assert "M3_elapsed_charging_time_proxy" not in result.qa["missing_rates"]
+    assert "M3_cumulative_current_ah" not in result.qa["missing_rates"]
+
+
 def test_active_threshold_preserves_float64_boundary_semantics() -> None:
     start = datetime(2019, 5, 1, 7, tzinfo=timezone.utc)
     end = start + timedelta(hours=28)

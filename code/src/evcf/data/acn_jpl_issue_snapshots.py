@@ -812,12 +812,16 @@ def build_issue_snapshots(
     start_utc: datetime,
     end_utc: datetime,
     policy: SnapshotPolicy,
-    include_trajectory_missing_rates: bool = False,
+    preserve_unobserved_trajectory_missingness: bool = False,
 ) -> IssueSnapshotResult:
-    """Build M1-M4 snapshots with exact issue-time truncation and future labels."""
+    """Build snapshots with exact issue-time truncation and future labels.
 
-    if type(include_trajectory_missing_rates) is not bool:
-        raise TypeError("include_trajectory_missing_rates must be a boolean")
+    The default preserves the frozen May artifact bytes. Seasonal preparation
+    explicitly enables unobserved cumulative-trajectory nulls and their QA rates.
+    """
+
+    if type(preserve_unobserved_trajectory_missingness) is not bool:
+        raise TypeError("preserve_unobserved_trajectory_missingness must be a boolean")
     start = _utc(start_utc)
     end = _utc(end_utc)
     expected_bins = int((end - start).total_seconds() // BIN_SECONDS)
@@ -980,6 +984,10 @@ def build_issue_snapshots(
                 issue_epoch,
             )
             cumulative_observed_seconds = int(cumulative["covered_seconds"])
+            cumulative_trajectory_missing = bool(
+                preserve_unobserved_trajectory_missingness
+                and not cumulative_observed_seconds
+            )
             current_pilot = _held_value_at(
                 session["pilot_times"],
                 session["pilot_values"],
@@ -1012,9 +1020,9 @@ def build_issue_snapshots(
                     "anonymous_session_index": session["anonymous_index"],
                     "elapsed_connection_s": issue_epoch - session["connection"],
                     "elapsed_charging_time_proxy_s": (
-                        cumulative["active_seconds"]
-                        if cumulative_observed_seconds
-                        else None
+                        None
+                        if cumulative_trajectory_missing
+                        else cumulative["active_seconds"]
                     ),
                     "current_current_a": session_current[session["anonymous_index"]],
                     "recent_current_mean_a": (
@@ -1025,9 +1033,9 @@ def build_issue_snapshots(
                     "recent_current_peak_a": recent["peak"],
                     "recent_current_observed_ratio": (int(recent["covered_seconds"]) / BIN_SECONDS),
                     "cumulative_current_ah": (
-                        float(cumulative["area"]) / 3600
-                        if cumulative_observed_seconds
-                        else None
+                        None
+                        if cumulative_trajectory_missing
+                        else float(cumulative["area"]) / 3600
                     ),
                     "cumulative_current_observed_ratio": (
                         cumulative_observed_seconds / (issue_epoch - session["connection"])
@@ -1201,7 +1209,7 @@ def build_issue_snapshots(
                 "M3_known_requested_energy": _missing_rate(m3_rows, "known_kwh_requested"),
             }
         )
-        if include_trajectory_missing_rates:
+        if preserve_unobserved_trajectory_missingness:
             missing_rates.update(
                 {
                     "M3_elapsed_charging_time_proxy": _missing_rate(

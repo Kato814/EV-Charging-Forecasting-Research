@@ -1,6 +1,6 @@
 """Explicitly authorized JPL 2019 method-development acquisition CLI.
 
-Only 2019-01/04/07/10 are installed for the duration of this command.  Final
+Only 2019-01/04/07/10 are installed for the duration of this command. Final
 holdout months 2019-03/06/09/12 remain unavailable by construction.
 """
 
@@ -20,6 +20,7 @@ from evcf.data.acn_jpl_development_months import (
     installed_development_month_contracts,
 )
 from evcf.data.acn_jpl_month_config import jpl_month_config
+
 from scripts.acquire_jpl_seasonal import _default_month_executor, _safe_month_result
 
 DEVELOPMENT_AUTHORIZATION_MESSAGE = (

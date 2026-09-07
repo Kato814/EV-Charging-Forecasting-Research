@@ -4,34 +4,48 @@
 
 ## 当前进度
 
-更新：2026-09-07。**已经完成数据准备、基础模型、季节复核、会话分组消融和预测组合探索，现处于模型方案收敛与独立验证准备阶段。**不是仍在修复旧数据，也不是最终论文方法已经完成。
+更新：2026-09-07。**数据准备、基础模型、季节复核、会话分组消融和预测组合探索均已完成。当前进入模型开发阶段，候选方向是“基于信息可靠性门控的M2/M3双专家预测”。最终论文方法尚未确定，最终独立验证也尚未开始。**
 
-当前状态只在 [CURRENT_STATUS.md](CURRENT_STATUS.md) 维护。已完成任务不因Issue仍开放、PR尚未合并或旧文档存在而自动重跑。
+当前状态只在 [CURRENT_STATUS.md](CURRENT_STATUS.md) 维护。已完成任务不因旧Issue正文、历史分支或旧文档仍存在而自动重跑。
 
 | 入口 | 用途 |
 | --- | --- |
-| [CURRENT_STATUS.md](CURRENT_STATUS.md) | 当前阶段、版本状态、待解决事项及授权边界 |
-| [HANDOFF.md](HANDOFF.md) | 接管所需研究口径、数据快照、执行方式与下一步 |
-| [docs/EXPERIMENT_LEDGER.md](docs/EXPERIMENT_LEDGER.md) | 已执行实验、结论、局限、包/协议/结果SHA及审查来源 |
-| [docs/DATA_USAGE_LEDGER.md](docs/DATA_USAGE_LEDGER.md) | 已用数据与独立验证候选；本地月份盘点及其范围限制 |
+| [CURRENT_STATUS.md](CURRENT_STATUS.md) | 当前阶段、版本状态、唯一研发任务及授权边界 |
+| [HANDOFF.md](HANDOFF.md) | 接管所需研究口径、数据分区、方法方向与下一步 |
+| [docs/EXPERIMENT_LEDGER.md](docs/EXPERIMENT_LEDGER.md) | 已执行实验、结论、局限和结果SHA |
+| [docs/DATA_USAGE_LEDGER.md](docs/DATA_USAGE_LEDGER.md) | 已用数据、方法开发集与最终holdout分区 |
 | [AGENTS.md](AGENTS.md) | 执行代理和本地资产保护规则 |
-| [docs/WORKFLOW.md](docs/WORKFLOW.md) | 主控—用户本地Python—GitHub协作及文档更新规则 |
+| [docs/WORKFLOW.md](docs/WORKFLOW.md) | 主控—用户本地Python—GitHub协作及维护规则 |
 | [ROADMAP.md](ROADMAP.md) | 阶段依赖，不作为自动运行授权 |
-| [docs/REPOSITORY_INDEX.md](docs/REPOSITORY_INDEX.md) | 当前材料、冻结证据与历史设计的分层索引 |
+| [docs/REPOSITORY_INDEX.md](docs/REPOSITORY_INDEX.md) | 当前材料、冻结证据与历史设计索引 |
 
-## 结论边界
+## 当前方法与数据分区
 
-5月pilot为 `PASS_ACTIVE_SESSION_DROP_M4`；新增月份主实验为 `MIXED_SEASONAL_EVIDENCE`。分组消融未支持统一删除一整组会话信息；预测组合中，简单平均优先保留为低复杂度独立验证候选，校准加权未稳定胜过简单平均。完整M3和M2都保留作参照。数据、实验与结论依据统一见实验台账，不把常规组合本身写成论文创新。
+M2使用历史/日历及当前站级聚合状态；完整M3在M2基础上增加当前连接会话的细粒度合法状态。现有结果表明二者信息互补，但M3的额外价值随时距和信息可靠程度变化。
 
-主建模目标是 `station_current_mean_a`，单位A，不是直接实测净有功功率。季节数据准备条件通过，11月保持电流代理限制；kW列未授权。模型预测为负不构成真实V2G证据。双源分解、概率预测和调度收益仍未验证。
+因此当前Issue #29开发标准Mixture-of-Experts/gating框架下的**会话信息可靠性门控与向M2回退机制**。普通动态加权、简单平均或MoE本身不作为论文创新；2026年EV负荷文献已存在动态堆叠和station/horizon-specific gating。
+
+2019年月份用途在新下载前冻结：
+
+- 已使用/探索：02、05、08、11；
+- 方法开发集：01、04、07、10；
+- 最终独立保留集：03、06、09、12。
+
+当前下一阶段只允许开发集01/04/07/10的获取/QA。最终保留集在方法、门控变量、超参数、评价和停止规则全部冻结前不得下载或运行模型。
+
+## 已有结论边界
+
+5月pilot为 `PASS_ACTIVE_SESSION_DROP_M4`；新增月份主实验为 `MIXED_SEASONAL_EVIDENCE`。分组消融未支持统一删除一整组会话信息；简单平均相对M2的15个“月份×时距”组合MAE均下降，但相对M3并非全面占优；校准加权未稳定胜过简单平均。
+
+主建模目标是 `station_current_mean_a`、单位A，不是直接实测净有功功率。季节数据准备为 `CONDITIONAL_PASS`，11月保持 `CURRENT_PROXY_ONLY`，kW列未授权。模型预测为负不构成真实V2G证据。双源分解、概率预测和调度收益仍未验证。
 
 ## 代码、计算与证据
 
-最后已合并预测实验基线为PR #21。季节数据代码固定读取已审PR #23 HEAD；PR #23尚未合并。Issue #25—#27使用外置本地运行包，GitHub当前记录协议、证据身份与主控评论，不声称这些包的源码和完整结果载荷已经进入main。详见 [代码入口说明](code/README.md)。
+PR #21和PR #23均已合并。PR #23合并的是已审季节数据准备与缺测记账修正，不改变后续探索实验的研究结论。Issue #22、#25、#26、#27已按完成关闭；当前研发Issue为 #29。
 
-主控负责研究协议、代码开发/审查、结果审查和仓库维护；用户在现有本地Python环境执行明确命令。Codex暂停承担新任务；Actions只做轻量CI。命令执行前以对应协议和精确版本为准，不因脚本存在而运行旧任务。
+Issue #25—#27使用外置本地运行包，GitHub记录协议、证据身份、SHA和主控复核；完整预测、模型及私有逐点检查点仍只保存在本地。主控负责研究协议、代码开发/审查、结果核验和仓库维护；用户在冻结Python环境执行明确命令。Codex暂停承担新任务。
 
-raw/interim/processed、完整预测、模型、私有索引、凭据和本机绝对路径不得提交Git。运行后的各个外置包目录及 `local_runs/private` 必须保留；原main工作区未提交修改和数据任务worktree不动。禁止为清理旧文档而删除实验资产。
+raw/interim/processed、完整预测、模型、私有索引、凭据和本机绝对路径不得提交Git。运行后的外置包目录及 `local_runs/private` 必须保留；原main工作区未提交修改和数据worktree不得因远端更新被清理。
 
 ## 历史材料
 
@@ -39,7 +53,7 @@ raw/interim/processed、完整预测、模型、私有索引、凭据和本机�
 
 ## 校验
 
-既有校验由获授权的本地环境或CI执行；不要在运行环境盲目升级依赖。本次导航不启动任何下载、训练或环境变更。
+既有校验由获授权的本地环境或CI执行；不要在运行环境盲目升级依赖。README本身不触发下载、训练或环境变更。
 
 ```bash
 python scripts/validate_library.py

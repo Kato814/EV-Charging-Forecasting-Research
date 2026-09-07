@@ -1,55 +1,45 @@
 # EV-Charging-Forecasting-Research
 
-充电站功率/负荷预测研究库。先验证具体预测问题，再确定算法；不以分布外泛化、未见城市或未见站点作为论文核心。此仓库不沿用其他充电站联邦预测项目的模型或结果。
+充电站功率/负荷预测独立研究库。先验证具体预测问题，再确定算法；不以分布外泛化、未见城市或未见站点作为论文核心，不沿用其他充电站联邦预测项目的方法或结果。
 
-## 从这里接管
+## 当前进度
+
+更新：2026-09-07。**已经完成数据准备、基础模型、季节复核、会话分组消融和预测组合探索，现处于模型方案收敛与独立验证准备阶段。**不是仍在修复旧数据，也不是最终论文方法已经完成。
+
+当前状态只在 [CURRENT_STATUS.md](CURRENT_STATUS.md) 维护。已完成任务不因Issue仍开放、PR尚未合并或旧文档存在而自动重跑。
 
 | 入口 | 用途 |
 | --- | --- |
-| [CURRENT_STATUS.md](CURRENT_STATUS.md) | 当前状态、唯一在执行任务与禁止提前开展的工作 |
-| [HANDOFF.md](HANDOFF.md) | 新主控窗口交付说明：证据、版本、修复验收与后续顺序 |
-| [AGENTS.md](AGENTS.md) | 本地执行代理的工作边界 |
-| [docs/WORKFLOW.md](docs/WORKFLOW.md) | 主控—本地 Codex—GitHub 的交接流程 |
-| [docs/REPOSITORY_INDEX.md](docs/REPOSITORY_INDEX.md) | 当前证据、历史材料、未启动模块的分层索引 |
-| [ROADMAP.md](ROADMAP.md) | 已完成、进行中、待授权阶段 |
+| [CURRENT_STATUS.md](CURRENT_STATUS.md) | 当前阶段、版本状态、待解决事项及授权边界 |
+| [HANDOFF.md](HANDOFF.md) | 接管所需研究口径、数据快照、执行方式与下一步 |
+| [docs/EXPERIMENT_LEDGER.md](docs/EXPERIMENT_LEDGER.md) | 已执行实验、结论、局限、包/协议/结果SHA及审查来源 |
+| [docs/DATA_USAGE_LEDGER.md](docs/DATA_USAGE_LEDGER.md) | 已用数据与独立验证候选；本地月份盘点及其范围限制 |
+| [AGENTS.md](AGENTS.md) | 执行代理和本地资产保护规则 |
+| [docs/WORKFLOW.md](docs/WORKFLOW.md) | 主控—用户本地Python—GitHub协作及文档更新规则 |
+| [ROADMAP.md](ROADMAP.md) | 阶段依赖，不作为自动运行授权 |
+| [docs/REPOSITORY_INDEX.md](docs/REPOSITORY_INDEX.md) | 当前材料、冻结证据与历史设计的分层索引 |
 
-**2026-09-05 交接状态：5月 Gate 1 pilot 已完成；季节准备 PR #23 正在修复缺测会话记账问题，尚未验收，禁止启动季节模型。** 最新远端提交、Issue 评论和主控审查可能晚于本文，接管时必须重新读取。
+## 结论边界
 
-## 已有结论与边界
+5月pilot为 `PASS_ACTIVE_SESSION_DROP_M4`；新增月份主实验为 `MIXED_SEASONAL_EVIDENCE`。分组消融未支持统一删除一整组会话信息；预测组合中，简单平均优先保留为低复杂度独立验证候选，校准加权未稳定胜过简单平均。完整M3和M2都保留作参照。数据、实验与结论依据统一见实验台账，不把常规组合本身写成论文创新。
 
-[PR #21](https://github.com/Kato814/EV-Charging-Forecasting-Research/pull/21) 已合并，实验基线提交为 `c2af2cdf4ecf5dad059d2ac92e929df8df35d42b`。JPL 2019-05 pilot 分类为 `PASS_ACTIVE_SESSION_DROP_M4`：HGB-M3 相对 M2 的 15/30/60 min MAE 改善为 11.226% / 14.503% / 18.939%；当前 M4-lite 不进入后续主实验。该结论仅适用于此次单月筛选，并未证明双源分解、概率预测、跨季节效果或调度收益。
+主建模目标是 `station_current_mean_a`，单位A，不是直接实测净有功功率。季节数据准备条件通过，11月保持电流代理限制；kW列未授权。模型预测为负不构成真实V2G证据。双源分解、概率预测和调度收益仍未验证。
 
-正式历史证据位于 [outputs/gate1_pilot/jpl_2019-05/](outputs/gate1_pilot/jpl_2019-05/)，保留原文件与 SHA256SUMS。
+## 代码、计算与证据
 
-## 当前唯一执行任务
+最后已合并预测实验基线为PR #21。季节数据代码固定读取已审PR #23 HEAD；PR #23尚未合并。Issue #25—#27使用外置本地运行包，GitHub当前记录协议、证据身份与主控评论，不声称这些包的源码和完整结果载荷已经进入main。详见 [代码入口说明](code/README.md)。
 
-- Issue：[#22](https://github.com/Kato814/EV-Charging-Forecasting-Research/issues/22)
-- PR：[#23](https://github.com/Kato814/EV-Charging-Forecasting-Research/pull/23)
-- 分支：`data/jpl-2019-seasonal-replication`
-- 工作：保留无效 current/pilot 容器会话的合法结构状态、分支缺测和 coverage 分母，重算受影响季节快照。
-- 审查：[CHANGES_REQUIRED_INVALID_CONTAINER_ACCOUNTING](https://github.com/Kato814/EV-Charging-Forecasting-Research/pull/23#pullrequestreview-5120653692)
+主控负责研究协议、代码开发/审查、结果审查和仓库维护；用户在现有本地Python环境执行明确命令。Codex暂停承担新任务；Actions只做轻量CI。命令执行前以对应协议和精确版本为准，不因脚本存在而运行旧任务。
 
-Codex 已在本地执行该修订。不要另派重复任务、向其分支并行写代码，或因旧 CI 成功而合并旧结果。`8c0eeeaff8367dba3c4790de79ba97a018022e0a` 的季节报告为**修正前证据**。
+raw/interim/processed、完整预测、模型、私有索引、凭据和本机绝对路径不得提交Git。运行后的各个外置包目录及 `local_runs/private` 必须保留；原main工作区未提交修改和数据任务worktree不动。禁止为清理旧文档而删除实验资产。
 
-## 预测对象与研究候选
+## 历史材料
 
-当前使用实测电流构造的 `station_current_mean_a`。5月名义208 V换算只作 `A × 0.208` 的重构量/等价误差，不能称为直接实测有功功率；季节数据未统一授权重构 kW。
+[literature/](literature/)、[datasets/](datasets/)、[related_code/](related_code/) 保留文献、数据审计及外部代码来源。历史设计按仓库索引原位归档，不再充当当前指令。失效状态文字从当前入口删除并通过Git历史追溯；原结果、失败记录、M4负结果和SHA继续保留。
 
-候选后续问题为“发布时间已连接会话与未来到达会话的双源不确定性”。先复核 M3 会话状态价值，再判断分开建模是否优于强直接预测模型。未来调度须区分外生执行负荷与可优化的充电需求，不能把同一 EV 功率同时固定为预测输入又自由作为调度变量。
+## 校验
 
-## 计算与数据边界
-
-GitHub 管代码、配置、审查、轻量 CI 和去标识化汇总；正式数据处理、训练及后续优化在本地执行。CPU pilot 环境由 [environment-gate1-pilot.yml](environment-gate1-pilot.yml) 与运行清单记录。RTX 5080 留给经授权的 GPU 任务；不为当前 CPU 修复修改驱动、系统 CUDA 或 PyTorch。
-
-raw、interim、processed、完整预测、模型、私有索引、Token、本机绝对路径不提交 Git。被忽略的数据当前可能仍在任务 worktree 内：未经本地确认和备份，禁止删除 worktree。
-
-## 文献与历史材料
-
-[literature/](literature/) 是文献及证据库，[datasets/](datasets/) 是数据目录及审计，[related_code/](related_code/) 是外部代码索引。保留历史 v0.4–v0.7 决策、实验协议和阅读笔记以供追溯；它们不再充当当前任务入口。完整分层见 [仓库索引](docs/REPOSITORY_INDEX.md)。不因文档日期较新就把其中的候选方案当作已实现结论。
-
-## 校验入口
-
-在已批准的本地环境或现有 CI 中运行，不要在正在工作的环境中盲目升级依赖：
+既有校验由获授权的本地环境或CI执行；不要在运行环境盲目升级依赖。本次导航不启动任何下载、训练或环境变更。
 
 ```bash
 python scripts/validate_library.py
@@ -58,5 +48,3 @@ python -m compileall -q code/src scripts
 python -m ruff check code/src scripts code/tests
 git diff --check
 ```
-
-新的运行命令以任务分支脚本 `--help` 和相应 Issue 为准；本文不触发下载或训练。

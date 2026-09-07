@@ -80,6 +80,17 @@ def test_issue_grid_excludes_first_24_hours_and_last_4_hours() -> None:
     assert issues[-1] == end - timedelta(hours=4)
 
 
+def test_snapshot_policy_defaults_to_legacy_tiers_and_accepts_seasonal_prefix() -> None:
+    assert SnapshotPolicy().tiers == ("M1", "M2", "M3", "M4")
+    assert SnapshotPolicy(tiers=("M1", "M2", "M3")).tiers == ("M1", "M2", "M3")
+
+    for invalid in ((), ("M1", "M3"), ("M1", "M2", "M3", "M3"), ("M2",)):
+        with pytest.raises(ValueError, match="tiers"):
+            SnapshotPolicy(tiers=invalid)
+    with pytest.raises(TypeError, match="tiers"):
+        SnapshotPolicy(tiers=["M1", "M2", "M3"])  # type: ignore[arg-type]
+
+
 def test_future_samples_and_late_user_inputs_are_not_visible() -> None:
     start = datetime(2019, 5, 1, 7, tzinfo=timezone.utc)
     end = start + timedelta(hours=28)
@@ -102,7 +113,32 @@ def test_future_samples_and_late_user_inputs_are_not_visible() -> None:
     assert m3["known_kwh_requested"] == 10.0
     assert m3["requested_departure_minutes_from_issue"] == 120.0
     assert m3["user_input_modified_utc_s"] <= m3["issue_time_utc_s"]
+    assert m3["elapsed_charging_time_proxy_s"] == 10
+    assert m3["cumulative_current_ah"] == pytest.approx(20 / 3600)
     assert 999.0 not in tuple(value for value in m3.values() if isinstance(value, float))
+
+
+def test_legacy_default_preserves_unobserved_cumulative_zero_contract() -> None:
+    start = datetime(2019, 5, 1, 7, tzinfo=timezone.utc)
+    end = start + timedelta(hours=28)
+    session = _session(start, end)
+    session["current"] = {"timestamps_utc_s": [], "values": []}
+    session["pilot"] = {"timestamps_utc_s": [], "values": []}
+
+    result = build_issue_snapshots(
+        _station_rows(start, 112),
+        [session],
+        start_utc=start,
+        end_utc=end,
+        policy=SnapshotPolicy(max_hold_seconds=12),
+    )
+
+    row = result.m3_rows[0]
+    assert row["elapsed_charging_time_proxy_s"] == 0
+    assert row["cumulative_current_ah"] == 0.0
+    assert row["cumulative_current_observed_ratio"] == 0.0
+    assert "M3_elapsed_charging_time_proxy" not in result.qa["missing_rates"]
+    assert "M3_cumulative_current_ah" not in result.qa["missing_rates"]
 
 
 def test_active_threshold_preserves_float64_boundary_semantics() -> None:
@@ -284,12 +320,18 @@ def test_snapshot_hash_and_shapes_are_reproducible() -> None:
     )
 
     assert first.snapshot_sha256 == second.snapshot_sha256
+    assert (
+        first.snapshot_sha256 == "c3d93f48ee8bbd3bb447cc15473d084ccef70da47677241bf1abbc29f1bc3be8"
+    )
+    assert tuple(first.tier_rows) == ("M1", "M2", "M3", "M4")
     assert first.qa["issue_times"] == 1
     assert first.qa["samples"] == {"M1": 1, "M2": 1, "M3": 1, "M4": 1}
     assert first.qa["ragged_rows"]["M3"] == 1
     assert first.qa["ragged_rows"]["M4"] == 1
     assert first.qa["shapes"]["labels"] == [1, 5]
     assert first.qa["missing_rates"]["M3_current_current"] == 0.0
+    assert "M3_elapsed_charging_time_proxy" not in first.qa["missing_rates"]
+    assert "M3_cumulative_current_ah" not in first.qa["missing_rates"]
     assert first.qa["M4_prefix_length_distribution"]["current"]["count"] == 1
 
 

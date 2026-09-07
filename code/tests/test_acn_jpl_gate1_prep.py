@@ -19,9 +19,11 @@ from evcf.data.acn_jpl_gate1_prep import (
     _public_payloads,
     _validate_output_topology,
     close_public_artifacts,
+    json_safe_payload,
     publish_public_release,
     verify_public_release,
 )
+from evcf.data.acn_jpl_issue_snapshots import SnapshotPolicy, build_issue_snapshots
 from evcf.data.acn_jpl_power_semantics import PowerAuditSession, audit_power_semantics
 from evcf.data.acn_jpl_preparation import PUBLIC_ARTIFACT_NAMES
 
@@ -193,6 +195,96 @@ def test_real_public_payload_composition_passes_its_privacy_gate() -> None:
 
     closed = close_public_artifacts(payloads)
     assert set(closed) == set(PUBLIC_ARTIFACT_NAMES)
+
+
+def test_may_issue_snapshot_qa_retains_legacy_json_bytes_after_deep_freeze() -> None:
+    end = BASE + timedelta(hours=28)
+    station_rows = [
+        {
+            "timestamp_utc": (BASE + timedelta(minutes=15 * index))
+            .isoformat()
+            .replace("+00:00", "Z"),
+            "quarter_hour_index": index % 96,
+            "day_of_week": (BASE + timedelta(minutes=15 * index)).weekday(),
+            "is_weekend": False,
+            "station_current_mean_a": float(index),
+            "observed_coverage_ratio": 1.0,
+            "valid_bin_90": True,
+        }
+        for index in range(112)
+    ]
+    issue = BASE + timedelta(hours=24)
+    snapshots = build_issue_snapshots(
+        station_rows,
+        [
+            {
+                "anonymous_session_index": 7,
+                "connection_utc_s": int((issue - timedelta(hours=1)).timestamp()),
+                "disconnect_utc_s": int(end.timestamp()),
+                "current": {
+                    "timestamps_utc_s": [int((issue - timedelta(seconds=10)).timestamp())],
+                    "values": [2.0],
+                },
+                "pilot": {
+                    "timestamps_utc_s": [int((issue - timedelta(seconds=10)).timestamp())],
+                    "values": [8.0],
+                },
+                "user_inputs": [],
+            }
+        ],
+        start_utc=BASE,
+        end_utc=end,
+        policy=SnapshotPolicy(max_hold_seconds=12),
+    )
+    issue_qa = {
+        **snapshots.qa,
+        "status": "PASS",
+        "expected_scheduled_issue_times": 1,
+        "target_type": "station_current_mean_a",
+    }
+    json_safe_qa = json_safe_payload(issue_qa)
+    assert type(json_safe_qa) is dict
+    assert type(json_safe_qa["samples"]) is dict
+    assert type(json_safe_qa["valid_labels_by_horizon"]) is dict
+    assert type(json_safe_qa["future_fields_found"]) is list
+
+    payloads = _public_payloads(
+        cleaning_qa={"status": "PASS"},
+        cleaning_sensitivity={"status": "PASS"},
+        boundary_audit={"status": "PASS"},
+        power_audit={"status": "CURRENT_PROXY_ONLY"},
+        station_qa={"status": "PASS"},
+        issue_qa=issue_qa,
+        snapshot_manifest={"status": "PASS"},
+        run_manifest={"status": "PASS"},
+    )
+
+    expected = json.dumps(
+        json.loads(json.dumps(dict(snapshots.qa), default=lambda value: dict(value))),
+        ensure_ascii=False,
+        sort_keys=True,
+        indent=2,
+        allow_nan=False,
+    )
+    expected_payload = json.loads(expected)
+    expected_payload.update(
+        {
+            "status": "PASS",
+            "expected_scheduled_issue_times": 1,
+            "target_type": "station_current_mean_a",
+        }
+    )
+    expected_bytes = (
+        json.dumps(
+            expected_payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            indent=2,
+            allow_nan=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+    assert payloads["issue_snapshot_qa.json"] == expected_bytes
 
 
 def test_public_release_is_atomic_and_verifiable(tmp_path: Path) -> None:

@@ -1,0 +1,30 @@
+{
+  "carry_in_count": 0,
+  "cleaned_session_count": 1509,
+  "formal_issue_times": 2784,
+  "full_session_quarantine_count": 0,
+  "invalid_skipped_session_count": 0,
+  "local_session_count": 1509,
+  "month": "2019-08",
+  "official_total": 1509,
+  "power_semantics_status": "KW_RECONSTRUCTION_CANDIDATE",
+  "privacy": {
+    "absolute_paths_emitted": false,
+    "aggregate_only": true,
+    "private_values_emitted": false
+  },
+  "raw_unchanged": true,
+  "ready_for_gate1_baseline": true,
+  "scheduled_issue_times": 2865,
+  "schema_version": "acn-jpl-seasonal-preparation-run/v1",
+  "scope": {
+    "network": false,
+    "optimization": false,
+    "training": false
+  },
+  "sessions_processed": 1509,
+  "station_bins": 2976,
+  "status": "PASS",
+  "trajectory_quarantine_count": 0,
+  "valid_bin_90_count": 2954
+}

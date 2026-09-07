@@ -20,6 +20,7 @@ from evcf.data.acn_jpl_gate0 import (
     chunk_paths,
     jpl_analysis_windows,
 )
+from evcf.data.acn_jpl_month_config import jpl_month_config
 
 
 def _gzip_jsonl(path: Path, records: list[dict[str, object]]) -> None:
@@ -155,6 +156,108 @@ def _synthetic_raw_root(tmp_path: Path) -> Path:
     return raw_root
 
 
+def _synthetic_seasonal_raw_root(
+    tmp_path: Path,
+    *,
+    month: str,
+    carry_count: int,
+) -> tuple[Path, int]:
+    config = jpl_month_config(month)
+    raw_root = tmp_path / month
+    next_index = 1
+    for window in config.day_windows:
+        connection = window.utc_start + timedelta(hours=1)
+        record = _record(
+            next_index,
+            connection=connection,
+            disconnect=connection + timedelta(hours=1),
+        )
+        next_index += 1
+        data_path, manifest_path = chunk_paths(raw_root, "timeseries", window)
+        _gzip_jsonl(data_path, [record])
+        query = ACNQuery(
+            site="jpl",
+            start=window.local_start,
+            end=window.local_end,
+            timeseries=True,
+        )
+        _write_manifest(
+            manifest_path,
+            {
+                "schema_version": "acn-jpl-daily-chunk/v1",
+                "dataset_id": JPL_DAILY_DATASET_ID,
+                "source": ACN_OFFICIAL_SOURCE,
+                "site": "jpl",
+                "timezone": JPL_TIMEZONE,
+                "local_start_inclusive": window.local_start.isoformat(),
+                "local_end_exclusive": window.local_end.isoformat(),
+                "utc_start_inclusive": window.utc_start.isoformat(),
+                "utc_end_exclusive": window.utc_end.isoformat(),
+                "query_condition": query.condition,
+                "endpoint": query.endpoint,
+                "output_file": data_path.name,
+                "record_count": 1,
+                "remote_total_reported": 1,
+                "complete_for_query": True,
+                "downloaded_at_utc": "2019-12-02T00:00:00+00:00",
+                "sha256": hashlib.sha256(data_path.read_bytes()).hexdigest(),
+                "token_stored": False,
+            },
+        )
+
+    for ordinal in range(1, carry_count + 1):
+        connection = config.utc_start - timedelta(minutes=ordinal)
+        disconnect = config.utc_start + timedelta(minutes=30)
+        record = _record(
+            next_index,
+            connection=connection,
+            disconnect=disconnect,
+        )
+        next_index += 1
+        stem = f"carry-{ordinal:04d}"
+        data_path = raw_root / "timeseries" / "carry_in" / f"{stem}.jsonl.gz"
+        manifest_path = raw_root / "manifests" / "carry_in" / f"{stem}.manifest.json"
+        _gzip_jsonl(data_path, [record])
+        query = ACNQuery(
+            site="jpl",
+            start=connection,
+            end=config.local_start,
+            timeseries=True,
+            session_id=str(record["sessionID"]),
+        )
+        _write_manifest(
+            manifest_path,
+            {
+                "schema_version": "acn-jpl-seasonal-carry-in/v1",
+                "dataset_id": f"D0001-jpl-{month}-seasonal-ts",
+                "source": ACN_OFFICIAL_SOURCE,
+                "endpoint": query.endpoint,
+                "site": "jpl",
+                "timezone": config.timezone_name,
+                "month": month,
+                "ordinal": ordinal,
+                "local_month_start": config.local_start.isoformat(),
+                "utc_start_inclusive": query.start_utc.isoformat(),
+                "utc_end_exclusive": query.end_utc.isoformat(),
+                "_id": record["_id"],
+                "sessionID": record["sessionID"],
+                "query_condition": query.condition,
+                "output_file": data_path.name,
+                "record_count": 1,
+                "remote_total_reported": 1,
+                "complete_for_query": True,
+                "downloaded_at_utc": "2019-12-02T00:00:00+00:00",
+                "sha256": hashlib.sha256(data_path.read_bytes()).hexdigest(),
+                "token_stored": False,
+            },
+        )
+
+    state = raw_root / "state" / "progress.json"
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text('{"mutable":true}\n', encoding="utf-8")
+    return raw_root, config.day_count
+
+
 def _fixture_contract(module: object, raw_root: Path, *, pin_digest: bool = True) -> object:
     snapshot = module.canonical_inventory(raw_root)  # type: ignore[attr-defined]
     return replace(
@@ -201,6 +304,140 @@ def test_inventory_digest_uses_canonical_relative_path_size_and_hash(tmp_path: P
     assert snapshot.algorithm == (
         "sha256(ordinal-sorted UTF-8 relative_path<TAB>size<TAB>file_sha256<LF>; final LF)"
     )
+
+
+def test_seasonal_inventory_matches_acquisition_digest_and_excludes_state(tmp_path: Path) -> None:
+    module = importlib.import_module("evcf.data.acn_jpl_preparation")
+    root = tmp_path / "raw"
+    data = root / "timeseries" / "2019-02-01.jsonl.gz"
+    manifest = root / "manifests" / "timeseries" / "2019-02-01.manifest.json"
+    state = root / "state" / "progress.json"
+    data.parent.mkdir(parents=True)
+    manifest.parent.mkdir(parents=True)
+    state.parent.mkdir(parents=True)
+    data.write_bytes(b"data")
+    manifest.write_bytes(b"manifest")
+    state.write_bytes(b"mutable state is intentionally outside the content snapshot")
+
+    snapshot = module.canonical_seasonal_inventory(root)
+    expected_rows = b""
+    for path in sorted((manifest, data), key=lambda item: item.relative_to(root).as_posix()):
+        relative = path.relative_to(root).as_posix()
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        expected_rows += f"{relative}\0{digest}\0{path.stat().st_size}\n".encode()
+
+    assert snapshot.file_count == 2
+    assert snapshot.digest == hashlib.sha256(expected_rows).hexdigest()
+    assert snapshot.algorithm == module.SEASONAL_INVENTORY_DIGEST_ALGORITHM
+    assert snapshot.schema_version == module.SEASONAL_INVENTORY_SCHEMA_VERSION
+    assert all(not entry.relative_path.startswith("state/") for entry in snapshot.entries)
+
+
+@pytest.mark.parametrize(
+    ("month", "carry_count", "expected_days"),
+    [("2019-02", 0, 28), ("2019-08", 1, 31), ("2019-11", 3, 30)],
+)
+def test_month_raw_contract_supports_calendar_days_and_zero_or_many_carry(
+    tmp_path: Path,
+    month: str,
+    carry_count: int,
+    expected_days: int,
+) -> None:
+    module = importlib.import_module("evcf.data.acn_jpl_preparation")
+    config = jpl_month_config(month)
+    raw_root, local_record_count = _synthetic_seasonal_raw_root(
+        tmp_path,
+        month=month,
+        carry_count=carry_count,
+    )
+    inventory = module.canonical_seasonal_inventory(raw_root)
+    contract = module.RawSnapshotContract.for_month(
+        config,
+        local_record_count=local_record_count,
+        carry_in_record_count=carry_count,
+        inventory=inventory,
+    )
+
+    validation = module.validate_raw_snapshot(raw_root, contract=contract)
+    records = list(module.iter_validated_raw_records(raw_root, contract=contract))
+
+    assert contract.day_count == expected_days
+    assert contract.carry_count == carry_count
+    assert contract.inventory_algorithm == module.SEASONAL_INVENTORY_DIGEST_ALGORITHM
+    assert validation.day_count == expected_days
+    assert validation.carry_count == carry_count
+    assert validation.day_record_count == expected_days
+    assert validation.carry_record_count == carry_count
+    assert [record.chunk_kind for record in records[:carry_count]] == [
+        "carry_in"
+    ] * carry_count
+    assert [record.chunk_index for record in records[:carry_count]] == [0] * carry_count
+    if carry_count:
+        assert records[carry_count].local_date == f"{month}-01"
+    else:
+        assert records[0].local_date == f"{month}-01"
+
+
+@pytest.mark.parametrize(
+    "unexpected_relative_path",
+    ("notes.txt", "state/nested/progress.json", "state/progress.log"),
+)
+def test_seasonal_validator_rejects_files_outside_content_and_flat_json_state(
+    tmp_path: Path,
+    unexpected_relative_path: str,
+) -> None:
+    module = importlib.import_module("evcf.data.acn_jpl_preparation")
+    config = jpl_month_config("2019-02")
+    raw_root, local_record_count = _synthetic_seasonal_raw_root(
+        tmp_path,
+        month=config.month,
+        carry_count=0,
+    )
+    contract = module.RawSnapshotContract.for_month(
+        config,
+        local_record_count=local_record_count,
+        carry_in_record_count=0,
+        inventory=module.canonical_seasonal_inventory(raw_root),
+    )
+    unexpected = raw_root / unexpected_relative_path
+    unexpected.parent.mkdir(parents=True, exist_ok=True)
+    unexpected.write_text("not approved\n", encoding="utf-8")
+
+    with pytest.raises(module.RawSnapshotError, match="layout is not exact"):
+        module.validate_raw_snapshot(raw_root, contract=contract)
+
+
+def test_seasonal_contract_rejects_may_and_unapproved_inventory_binding(
+    tmp_path: Path,
+) -> None:
+    module = importlib.import_module("evcf.data.acn_jpl_preparation")
+    raw_root, local_record_count = _synthetic_seasonal_raw_root(
+        tmp_path,
+        month="2019-02",
+        carry_count=0,
+    )
+    inventory = module.canonical_seasonal_inventory(raw_root)
+
+    with pytest.raises(ValueError, match="approved seasonal month"):
+        module.RawSnapshotContract.for_month(
+            jpl_month_config("2019-05"),
+            local_record_count=0,
+            carry_in_record_count=0,
+            inventory=inventory,
+        )
+
+    config = jpl_month_config("2019-02")
+    contract = module.RawSnapshotContract.for_month(
+        config,
+        local_record_count=local_record_count,
+        carry_in_record_count=0,
+        inventory=inventory,
+    )
+    with pytest.raises(module.RawSnapshotError, match="not an approved closed contract"):
+        module.validate_raw_snapshot(
+            raw_root,
+            contract=replace(contract, inventory_algorithm="sha256(arbitrary)"),
+        )
 
 
 def test_raw_snapshot_validates_closed_counts_and_full_month_manifests(tmp_path: Path) -> None:

@@ -296,6 +296,51 @@ def test_cumulative_tier_prefixes_and_raw_dimensions() -> None:
         )
 
 
+def test_seasonal_feature_blocks_need_no_m4_accumulator_or_material() -> None:
+    blocks = build_feature_blocks(_snapshot(), tiers=("M1", "M2", "M3"))
+    manifest = feature_encoding_manifest(blocks)
+
+    assert tuple(blocks) == ("M1", "M2", "M3")
+    assert manifest["tier_order"] == ["M1", "M2", "M3"]
+    assert {
+        tier: (
+            spec["raw_dimension"],
+            spec["missing_indicator_dimension"],
+            spec["encoded_dimension"],
+        )
+        for tier, spec in manifest["tiers"].items()
+    } == {
+        "M1": (195, 0, 195),
+        "M2": (201, 3, 204),
+        "M3": (311, 80, 391),
+    }
+    assert "m4" not in json.dumps(manifest, sort_keys=True).lower()
+
+
+def test_seasonal_feature_blocks_never_access_an_optional_accumulator() -> None:
+    class PoisonAccumulator:
+        def __getattribute__(self, name: str) -> Any:
+            raise AssertionError(f"seasonal encoding accessed accumulator attribute {name}")
+
+    blocks = build_feature_blocks(
+        _snapshot(),
+        PoisonAccumulator(),  # type: ignore[arg-type]
+        tiers=("M1", "M2", "M3"),
+    )
+
+    assert tuple(blocks) == ("M1", "M2", "M3")
+
+
+def test_default_feature_tiers_fail_closed_without_m4_accumulator() -> None:
+    with pytest.raises(TypeError, match="M4.*Accumulator"):
+        build_feature_blocks(_snapshot())
+
+
+def test_missing_m4_accumulator_is_rejected_before_snapshot_access() -> None:
+    with pytest.raises(TypeError, match="M4.*Accumulator"):
+        build_feature_blocks(object())  # type: ignore[arg-type]
+
+
 def test_m4_weighted_hold_slope_joint_gap_and_issue_poison() -> None:
     issue = 1_000
     original = _series(

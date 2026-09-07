@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import copy
+import gc
 import gzip
 import hashlib
 import json
+import math
+import pickle
 import shutil
+import weakref
+from dataclasses import fields, replace
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
 from pathlib import Path
@@ -14,16 +19,26 @@ from zoneinfo import ZoneInfo
 import pytest
 from evcf.data import acn_jpl_full_month_qa as full_qa_module
 from evcf.data import acn_jpl_full_month_ts as full_ts_module
-from evcf.data.acn_api import ACNQuery
+from evcf.data import acn_jpl_month_config as month_config_module
+from evcf.data import acn_jpl_seasonal_acquisition as seasonal_acquisition_module
+from evcf.data.acn_api import ACNClient, ACNQuery
 from evcf.data.acn_jpl_full_month_qa import (
     PUBLIC_ARTIFACT_NAMES,
     _safe_rate,
     audit_quality_records,
     generate_full_month_timeseries_qa,
+    generate_month_timeseries_qa,
     verify_public_artifact_hashes,
 )
 from evcf.data.acn_jpl_full_month_ts import run_full_month_timeseries
 from evcf.data.acn_jpl_gate0 import chunk_paths, jpl_analysis_windows
+from evcf.data.acn_jpl_month_config import (
+    CompleteMetadataScope,
+    jpl_month_config,
+    load_verified_complete_metadata,
+)
+from evcf.data.acn_jpl_official_reference import probe_official_local_month_total
+from evcf.data.acn_jpl_seasonal_acquisition import MonthAcquisitionResult, acquire_jpl_month
 
 ZONE = ZoneInfo("America/Los_Angeles")
 
@@ -878,3 +893,832 @@ def test_ambiguous_orphaned_previous_releases_fail_closed(
         assert _release_snapshot(output_root) == previous
     else:
         assert not output_root.exists()
+
+
+class _GenericProbeResponse:
+    status_code = 200
+
+    def __init__(self, total: int) -> None:
+        self.total = total
+
+    def json(self) -> dict[str, Any]:
+        return {"_meta": {"total": self.total}}
+
+    def raise_for_status(self) -> None:
+        return None
+
+
+class _GenericProbeSession:
+    def __init__(self, total: int) -> None:
+        self.total = total
+        self.auth: tuple[str, str] | None = None
+        self.headers: dict[str, str] = {}
+        self.calls = 0
+
+    def get(self, url: str, *, params: Any = None, timeout: Any = None) -> Any:
+        del url, params, timeout
+        self.calls += 1
+        return _GenericProbeResponse(self.total)
+
+
+class _GenericTimeseriesClient:
+    def __init__(
+        self,
+        local_records: list[dict[str, Any]],
+        carry_records: list[dict[str, Any]],
+    ) -> None:
+        self.local_records = tuple(local_records)
+        self.carry_records = {record["sessionID"]: record for record in carry_records}
+
+    def iter_pages(self, query: ACNQuery):  # type: ignore[no-untyped-def]
+        if query.session_id is not None:
+            items = [self.carry_records[query.session_id]]
+        else:
+            items = [
+                record
+                for record in self.local_records
+                if query.start_utc
+                <= datetime.strptime(record["connectionTime"], "%a, %d %b %Y %H:%M:%S GMT").replace(
+                    tzinfo=timezone.utc
+                )
+                < query.end_utc
+            ]
+        yield _page(items)
+
+
+def _generic_scope_and_acquisition(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    month: str,
+    carry_count: int,
+    invalid_first: bool = False,
+    anomaly_mode: str | None = None,
+) -> tuple[Any, CompleteMetadataScope, Path, Any]:
+    config = jpl_month_config(month)
+    local_records = [
+        _record(index + 200, config.utc_start + timedelta(days=index, minutes=1))
+        for index in range(3)
+    ]
+    if invalid_first:
+        local_records[0].pop("chargingCurrent")
+        local_records[0].pop("pilotSignal")
+    if anomaly_mode is not None:
+        base = config.utc_start + timedelta(days=1, minutes=1)
+        current_times = [base, base + timedelta(hours=1), base + timedelta(seconds=4)]
+        pilot_times = (
+            list(current_times)
+            if anomaly_mode == "synchronized"
+            else [base, base + timedelta(seconds=4), base + timedelta(seconds=8)]
+        )
+        local_records[0]["disconnectTime"] = _stamp(base + timedelta(hours=2))
+        local_records[0]["chargingCurrent"] = {
+            "timestamps": [_stamp(value) for value in current_times],
+            "current": [16.0] * 3,
+        }
+        local_records[0]["pilotSignal"] = {
+            "timestamps": [_stamp(value) for value in pilot_times],
+            "pilot": [16.0] * 3,
+        }
+    carry_records = [
+        _record(index + 500, config.utc_start - timedelta(hours=index + 1))
+        for index in range(carry_count)
+    ]
+    for index, record in enumerate(carry_records):
+        record["disconnectTime"] = _stamp(config.utc_start + timedelta(minutes=index + 1))
+        record["doneChargingTime"] = _stamp(config.utc_start)
+    records = local_records + carry_records
+    metadata_root = tmp_path / "metadata"
+    metadata_root.mkdir(parents=True)
+    data_path = metadata_root / "complete.jsonl.gz"
+    with gzip.open(data_path, "wt", encoding="utf-8", newline="\n") as handle:
+        for record in records:
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
+    digest = hashlib.sha256(data_path.read_bytes()).hexdigest()
+    data_path.with_name(data_path.name + ".manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "endpoint": "sessions/jpl",
+                "site": "jpl",
+                "mode": "metadata",
+                "record_count": len(records),
+                "source_total": len(records),
+                "sha256": digest,
+            }
+        ),
+        encoding="utf-8",
+    )
+    inventory = hashlib.sha256(f"{data_path.name}\0{digest}\0{len(records)}\n".encode()).hexdigest()
+    monkeypatch.setattr(month_config_module, "EXPECTED_COMPLETE_METADATA_FILE_COUNT", 1)
+    monkeypatch.setattr(
+        month_config_module,
+        "EXPECTED_COMPLETE_METADATA_RECORD_COUNT",
+        len(records),
+    )
+    monkeypatch.setattr(
+        month_config_module,
+        "EXPECTED_COMPLETE_METADATA_INVENTORY_SHA256",
+        inventory,
+    )
+    scope = load_verified_complete_metadata(metadata_root, config)
+    raw_root = tmp_path / "raw" / month
+    reference = raw_root / "state" / "official.json"
+    probe_session = _GenericProbeSession(scope.local_month_session_count)
+
+    def live_probe(month_config: Any) -> Any:
+        return probe_official_local_month_total(
+            ACNClient("fixture-probe-token", session=probe_session),  # type: ignore[arg-type]
+            reference,
+            month=month_config,
+        )
+
+    acquisition = acquire_jpl_month(
+        authorized=True,
+        config=config,
+        scope=scope,
+        official_probe=live_probe,
+        raw_root=raw_root,
+        ts_client_factory=lambda: _GenericTimeseriesClient(
+            local_records,
+            carry_records,
+        ),
+        downloaded_at_utc=datetime(2026, 9, 2, tzinfo=timezone.utc),
+    )
+    assert acquisition.status == "COMPLETE"
+    assert probe_session.calls == 1
+    return config, scope, raw_root, acquisition
+
+
+@pytest.mark.parametrize(
+    ("month", "carry_count"),
+    [("2019-02", 0), ("2019-08", 1), ("2019-11", 2)],
+)
+def test_generic_month_qa_closes_dynamic_days_carry_linkage_and_raw_inventory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    month: str,
+    carry_count: int,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month=month,
+        carry_count=carry_count,
+        anomaly_mode="synchronized" if month == "2019-11" else None,
+    )
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+    integrity = result.qa["integrity"]
+    assert result.gate_status == "PASS"
+    assert result.artifact_names == ()
+    assert integrity["daily_chunks"]["expected"] == config.day_count
+    assert integrity["daily_chunks"]["valid"] == config.day_count
+    assert integrity["local_month"]["observed_records"] == 3
+    assert integrity["local_month"]["missing_metadata_pairs"] == 0
+    assert integrity["local_month"]["orphan_timeseries_pairs"] == 0
+    assert integrity["carry_in"]["observed_records"] == carry_count
+    assert integrity["carry_in"]["missing_metadata_pairs"] == 0
+    assert integrity["carry_in"]["orphan_timeseries_pairs"] == 0
+    assert integrity["combined"]["observed_records"] == 3 + carry_count
+    assert integrity["combined"]["unique_pair_count"] == 3 + carry_count
+    assert integrity["raw_inventory"]["unchanged"] is True
+    assert integrity["raw_inventory"]["sha256"] == acquisition.raw_inventory_sha256
+    assert integrity["partial_file_count"] == 0
+    for field in ("chargingCurrent", "pilotSignal"):
+        rate = result.qa["quality"]["series"][field]["invalid_container_rate"]
+        assert math.isfinite(rate)
+        assert rate <= 0.10
+
+
+def test_november_generic_qa_accepts_one_synchronized_trajectory_quarantine(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-11",
+        carry_count=1,
+        anomaly_mode="synchronized",
+    )
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+    assert result.gate_status == "PASS"
+    assert result.qa["integrity"]["combined"]["observed_records"] == 4
+    quarantine = result.qa["trajectory_quarantine"]
+    assert quarantine == {
+        "denominator_sessions": 4,
+        "trajectory_quarantine_count": 1,
+        "trajectory_quarantine_rate": 0.25,
+        "full_session_quarantine_count": 0,
+        "full_session_quarantine_rate": 0.0,
+        "synchronized_utc_nonmonotonic_sessions": 1,
+        "raw_trajectory_anomalies_retained": True,
+        "raw_manifest_modified": False,
+        "raw_timestamps_modified": False,
+        "sort_repair_applied": False,
+        "timestamp_shift_seconds": 0,
+        "interpolation_applied": False,
+        "whole_current_pilot_trajectory_unobservable": True,
+        "coverage_denominator_includes_quarantined": True,
+        "structural_metadata_retained_count": 1,
+        "connected_state_retained_count": 1,
+    }
+    quality = result.qa["quality"]
+    for field in ("chargingCurrent", "pilotSignal"):
+        series = quality["series"][field]
+        assert series["raw_field_coverage"] == {
+            "count": 4,
+            "denominator": 4,
+            "rate": 1.0,
+        }
+        assert series["field_coverage"] == {
+            "count": 4,
+            "denominator": 4,
+            "rate": 1.0,
+        }
+        assert series["analysis_field_coverage"] == {
+            "count": 3,
+            "denominator": 4,
+            "rate": 0.75,
+        }
+        assert series["nonmonotonic_pairs"] == 1
+        assert series["nonmonotonic_affected_sessions"] == 1
+    assert result.qa["gate"]["checks"]["approved_trajectory_quarantine"] is True
+    assert result.qa["gate"]["checks"]["zero_unquarantined_nonmonotonic_anomalies"] is True
+    assert result.qa["gate"]["reason_codes"] == []
+
+
+def test_unsynchronized_utc_reversal_remains_a_fail_closed_timestamp_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-11",
+        carry_count=0,
+        anomaly_mode="unsynchronized",
+    )
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+    assert result.gate_status == "FAIL"
+    assert result.qa["trajectory_quarantine"]["trajectory_quarantine_count"] == 0
+    assert "TIMESTAMP_QUALITY_FAIL" in result.qa["gate"]["reason_codes"]
+
+
+def test_generic_month_qa_fails_when_both_invalid_container_rates_exceed_limit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+        invalid_first=True,
+    )
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+    assert result.gate_status == "FAIL"
+    checks = result.qa["gate"]["checks"]
+    assert checks["current_invalid_rate_at_most_limit"] is False
+    assert checks["pilot_invalid_rate_at_most_limit"] is False
+    for field in ("chargingCurrent", "pilotSignal"):
+        series = result.qa["quality"]["series"][field]
+        rate = series["invalid_container_rate"]
+        assert rate == pytest.approx(1 / 3, abs=1e-8)
+        assert math.isfinite(rate)
+        assert series["field_coverage"]["count"] == 2
+        assert series["raw_field_coverage"]["count"] == 2
+        assert series["raw_field_coverage"]["denominator"] == 3
+        assert series["raw_field_coverage"]["rate"] == pytest.approx(2 / 3)
+        assert series["analysis_field_coverage"] == series["raw_field_coverage"]
+
+
+@pytest.mark.parametrize(
+    "invalid_shape",
+    ["absent", "non_mapping", "timestamps_non_list", "values_non_list", "length_mismatch"],
+)
+@pytest.mark.parametrize("field", ["chargingCurrent", "pilotSignal"])
+def test_invalid_series_container_definition_is_closed(
+    invalid_shape: str,
+    field: str,
+) -> None:
+    record = _record(900, datetime(2019, 5, 2, 8, tzinfo=timezone.utc))
+    value_key = "current" if field == "chargingCurrent" else "pilot"
+    if invalid_shape == "absent":
+        record.pop(field)
+    elif invalid_shape == "non_mapping":
+        record[field] = []
+    elif invalid_shape == "timestamps_non_list":
+        record[field]["timestamps"] = "not-a-list"
+    elif invalid_shape == "values_non_list":
+        record[field][value_key] = "not-a-list"
+    else:
+        record[field][value_key].pop()
+
+    series = audit_quality_records([record], denominator=1)["series"][field]
+
+    assert series["invalid_container_count"] == 1
+    assert series["invalid_container_rate"] == 1.0
+
+
+def test_generic_month_qa_detects_pair_orphans_even_with_valid_hashes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=1,
+    )
+    data_path: Path | None = None
+    for candidate in sorted((raw_root / "timeseries").glob("*.jsonl.gz")):
+        with gzip.open(candidate, "rt", encoding="utf-8") as handle:
+            if handle.read(1):
+                data_path = candidate
+                break
+    assert data_path is not None
+    with gzip.open(data_path, "rt", encoding="utf-8") as handle:
+        records = [json.loads(line) for line in handle if line.strip()]
+    records[0]["_id"] = "private-orphan-object"
+    records[0]["sessionID"] = "private-orphan-session"
+    with (
+        data_path.open("wb") as raw_handle,
+        gzip.GzipFile(filename="", mode="wb", fileobj=raw_handle, mtime=0) as handle,
+    ):
+        for record in records:
+            handle.write((json.dumps(record, sort_keys=True) + "\n").encode())
+    manifest_path = (
+        raw_root
+        / "manifests"
+        / "timeseries"
+        / data_path.name.replace(".jsonl.gz", ".manifest.json")
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["sha256"] = hashlib.sha256(data_path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+    assert result.gate_status == "FAIL"
+    assert result.qa["integrity"]["local_month"]["missing_metadata_pairs"] == 1
+    assert result.qa["integrity"]["local_month"]["orphan_timeseries_pairs"] == 1
+
+
+def test_generic_month_qa_rejects_extra_raw_and_partial_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    extra = raw_root / "timeseries" / "nested" / "extra.jsonl.gz"
+    extra.parent.mkdir()
+    extra.write_bytes(b"not-valid")
+    partial = raw_root / "state" / "private.partial"
+    partial.write_text("sentinel-partial-token", encoding="utf-8")
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+        sensitive_values=("sentinel-partial-token",),
+    )
+
+    assert result.gate_status == "FAIL"
+    assert "RAW_SNAPSHOT_INVALID" in result.qa["gate"]["reason_codes"]
+    assert result.qa["integrity"]["partial_file_count"] == 1
+    assert "sentinel-partial-token" not in repr(result)
+
+
+@pytest.mark.parametrize("target", ["daily_manifest", "unrelated_state", "official"])
+def test_generic_month_qa_requires_closed_raw_and_state_documents(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    target: str,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=1,
+    )
+    sentinel = f"sentinel-{target}-token"
+    if target == "daily_manifest":
+        path = min((raw_root / "manifests" / "timeseries").glob("*.manifest.json"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["token"] = sentinel
+        path.write_text(json.dumps(payload), encoding="utf-8")
+    elif target == "unrelated_state":
+        (raw_root / "state" / "unrelated.json").write_text(
+            json.dumps({"token": sentinel}), encoding="utf-8"
+        )
+    else:
+        path = next(
+            path for path in (raw_root / "state").glob("*.json") if path.name != "progress.json"
+        )
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["token"] = sentinel
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+        sensitive_values=(sentinel,),
+    )
+
+    assert result.gate_status == "FAIL"
+    assert "RAW_SNAPSHOT_INVALID" in result.qa["gate"]["reason_codes"]
+    assert sentinel not in repr(result)
+
+
+@pytest.mark.parametrize(
+    "first_record_count",
+    [1, 999],
+    ids=["same-value", "last-value-correct"],
+)
+def test_generic_month_qa_rejects_duplicate_key_carry_manifests(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    first_record_count: int,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=1,
+    )
+    manifest = raw_root / "manifests" / "carry_in" / "carry-0001.manifest.json"
+    original = manifest.read_text(encoding="utf-8")
+    manifest.write_text(
+        original.replace(
+            "{",
+            f'{{\n  "record_count": {first_record_count},',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    acquisition_payload = acquisition.public_dict()
+    acquisition_payload["raw_inventory_sha256"] = (
+        full_qa_module.canonical_seasonal_inventory(raw_root).digest
+    )
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition_payload,
+    )
+
+    assert result.gate_status == "FAIL"
+    assert result.qa["gate"]["checks"]["raw_snapshot_valid"] is False
+    assert "RAW_SNAPSHOT_INVALID" in result.qa["gate"]["reason_codes"]
+
+
+def test_generic_month_qa_detects_raw_mutation_during_read_only_audit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    data_path = min((raw_root / "timeseries").glob("*.jsonl.gz"))
+    original = full_qa_module.iter_validated_raw_records
+
+    def mutating_records(*args: Any, **kwargs: Any):  # type: ignore[no-untyped-def]
+        yield from original(*args, **kwargs)
+        data_path.write_bytes(data_path.read_bytes() + b"changed")
+
+    monkeypatch.setattr(full_qa_module, "iter_validated_raw_records", mutating_records)
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+    assert result.gate_status == "FAIL"
+    assert result.qa["integrity"]["raw_inventory"]["unchanged"] is False
+    assert "RAW_SNAPSHOT_CHANGED" in result.qa["gate"]["reason_codes"]
+
+
+def _assert_seasonal_acquisition_rejected(
+    *,
+    config: Any,
+    scope: CompleteMetadataScope,
+    raw_root: Path,
+    acquisition_result: object,
+) -> None:
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition_result,  # type: ignore[arg-type]
+    )
+
+    assert result.gate_status == "FAIL"
+    assert result.qa["gate"]["checks"]["acquisition_complete_and_consistent"] is False
+    assert "ACQUISITION_INCOMPLETE" in result.qa["gate"]["reason_codes"]
+
+
+def test_generic_month_qa_accepts_only_the_internally_sealed_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    manual = MonthAcquisitionResult(
+        **{
+            item.name: getattr(acquisition, item.name)
+            for item in fields(MonthAcquisitionResult)
+            if item.init
+        }
+    )
+    forged = (
+        acquisition.public_dict(),
+        manual,
+        replace(acquisition),
+        copy.copy(acquisition),
+        copy.deepcopy(acquisition),
+        pickle.loads(pickle.dumps(acquisition)),
+    )
+
+    genuine = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+    assert genuine.gate_status == "PASS"
+    for candidate in forged:
+        _assert_seasonal_acquisition_rejected(
+            config=config,
+            scope=scope,
+            raw_root=raw_root,
+            acquisition_result=candidate,
+        )
+
+
+def test_generic_month_qa_rejects_result_bound_to_another_verified_scope_instance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    other_scope = load_verified_complete_metadata(tmp_path / "metadata", config)
+    assert other_scope.is_verified_for(config)
+    assert other_scope is not scope
+
+    _assert_seasonal_acquisition_rejected(
+        config=config,
+        scope=other_scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+
+def test_generic_month_qa_rejects_result_after_valid_raw_inventory_is_rewritten(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    data_path = min((raw_root / "timeseries").glob("*.jsonl.gz"))
+    with gzip.open(data_path, "ab"):
+        pass
+    manifest_path = (
+        raw_root
+        / "manifests"
+        / "timeseries"
+        / data_path.name.replace(".jsonl.gz", ".manifest.json")
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["sha256"] = hashlib.sha256(data_path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+    assert result.qa["gate"]["checks"]["raw_snapshot_valid"] is True
+    assert result.qa["gate"]["checks"]["acquisition_complete_and_consistent"] is False
+    assert result.gate_status == "FAIL"
+
+
+def test_sealed_result_rejects_cross_month_verification(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    inventory = full_qa_module.canonical_seasonal_inventory(raw_root)
+
+    assert seasonal_acquisition_module.verify_month_acquisition_result(
+        acquisition,
+        config=config,
+        scope=scope,
+        inventory=inventory,
+    )
+    assert not seasonal_acquisition_module.verify_month_acquisition_result(
+        acquisition,
+        config=jpl_month_config("2019-08"),
+        scope=scope,
+        inventory=inventory,
+    )
+
+
+def test_seasonal_qa_rejects_replace_plus_instance_method_injection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    copied = replace(acquisition)
+    with pytest.raises(AttributeError):
+        object.__setattr__(copied, "is_verified_for", lambda **_kwargs: True)
+    with pytest.raises(AttributeError):
+        object.__setattr__(
+            copied,
+            "public_dict",
+            lambda: MonthAcquisitionResult.public_dict(acquisition),
+        )
+
+    _assert_seasonal_acquisition_rejected(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=copied,
+    )
+
+
+def test_month_result_slots_reject_method_and_public_dict_injection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _config, _scope, _raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+
+    with pytest.raises(AttributeError):
+        object.__setattr__(acquisition, "is_verified_for", lambda **_kwargs: True)
+    with pytest.raises(AttributeError):
+        object.__setattr__(acquisition, "public_dict", dict)
+    with pytest.raises(AttributeError):
+        object.__setattr__(acquisition, "unexpected_attribute", True)
+
+
+def test_seasonal_qa_rejects_genuine_result_field_tampering(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    object.__setattr__(acquisition, "valid_daily_chunks", 0)
+
+    _assert_seasonal_acquisition_rejected(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+
+@pytest.mark.parametrize("target", ["records", "source_evidence"])
+def test_seasonal_qa_rejects_scope_mutation_even_with_instance_verifier_injection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    target: str,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    if target == "records":
+        object.__setattr__(scope, "local_month_records", ())
+    else:
+        assert scope.source_evidence is not None
+        object.__setattr__(scope.source_evidence, "source_inventory_sha256", "0" * 64)
+    with pytest.raises(AttributeError):
+        object.__setattr__(scope, "is_verified_for", lambda _config: True)
+
+    result = generate_month_timeseries_qa(
+        config=config,
+        scope=scope,
+        raw_root=raw_root,
+        acquisition_result=acquisition,
+    )
+
+    assert result.gate_status == "FAIL"
+
+
+def test_month_result_registry_discards_gc_entries_and_rejects_stale_id_entries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, scope, raw_root, acquisition = _generic_scope_and_acquisition(
+        tmp_path,
+        monkeypatch,
+        month="2019-02",
+        carry_count=0,
+    )
+    inventory = full_qa_module.canonical_seasonal_inventory(raw_root)
+    result_id = id(acquisition)
+    reference = weakref.ref(acquisition)
+    stale_entry = seasonal_acquisition_module._VERIFIED_MONTH_RESULTS[result_id]
+    init_values = {
+        item.name: getattr(acquisition, item.name)
+        for item in fields(MonthAcquisitionResult)
+        if item.init
+    }
+
+    del acquisition
+    gc.collect()
+    assert reference() is None
+    assert result_id not in seasonal_acquisition_module._VERIFIED_MONTH_RESULTS
+
+    unsealed = MonthAcquisitionResult(**init_values)
+    seasonal_acquisition_module._VERIFIED_MONTH_RESULTS[id(unsealed)] = stale_entry
+    try:
+        assert not seasonal_acquisition_module.verify_month_acquisition_result(
+            unsealed,
+            config=config,
+            scope=scope,
+            inventory=inventory,
+        )
+    finally:
+        seasonal_acquisition_module._VERIFIED_MONTH_RESULTS.pop(id(unsealed), None)

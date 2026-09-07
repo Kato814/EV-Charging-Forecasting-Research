@@ -1,0 +1,84 @@
+schema_version: acn-jpl-seasonal-preparation-protocol/v2
+months:
+  - 2019-02
+  - 2019-08
+  - 2019-11
+cleaning:
+  sampling_derivation: mode_of_positive_raw_timestamp_differences
+  locf_mode_multiplier: 3
+  locf_cap_seconds: 60
+  boundary_sensitivity_seconds: 60
+aggregation:
+  bin_minutes: 15
+  grid_policy: continuous_physical_utc
+  coverage_thresholds:
+    - 0.8
+    - 0.9
+    - 0.95
+  main_valid_bin_field: valid_bin_90
+  minimum_valid_bin_rate: 0.8
+  main_active_threshold_a: 0.1
+  comparison_active_threshold_a: 1.0
+acquisition_gate:
+  charging_current_invalid_rate_max: 0.1
+  pilot_signal_invalid_rate_max: 0.1
+trajectory_quarantine:
+  approved_month: 2019-11
+  expected_counts:
+    2019-02: 0
+    2019-08: 0
+    2019-11: 1
+  detector: synchronized_current_pilot_raw_order_utc_nonmonotonic
+  expected_nonmonotonic_pairs_per_series: 1
+  expected_backward_seconds: 3596
+  preserve_raw: true
+  preserve_manifest: true
+  preserve_timestamps: true
+  sort_repair: false
+  timestamp_shift_seconds: 0
+  interpolation: false
+  preserve_structural_metadata_when_bounds_valid: true
+  preserve_connected_state_when_bounds_valid: true
+  whole_current_pilot_trajectory_unobservable: true
+  coverage_denominator_includes_quarantined: true
+  invalid_metadata_action: full_session_quarantine
+  month_status: PASS_WITH_TRAJECTORY_QUARANTINE
+  seasonal_status_ceiling: CONDITIONAL_PASS
+missing_trajectory:
+  preserve_invalid_container_structure: true
+  verify_official_structural_metadata: true
+  branchwise_availability: true
+  invalid_metadata_action: stop_month_publication
+  coverage_denominator_includes_structural_placeholders: true
+  whole_current_unobservable_overlap_rejects_target: true
+  pilot_only_missing_rejects_current_target: false
+  impute_future_labels: false
+  coverage_rescale_current: false
+  final_energy_reconstruction: false
+  offline_qa_reasons_are_features: false
+  active_count_semantics: observed_active_lower_bound_unknown_is_not_inactive
+snapshots:
+  lookback_minutes: 1440
+  horizons_minutes:
+    - 15
+    - 30
+    - 60
+    - 120
+    - 240
+  issue_step_minutes: 15
+  tiers:
+    - M1
+    - M2
+    - M3
+features:
+  raw_dimensions:
+    - 195
+    - 201
+    - 311
+  encoded_dimensions:
+    - 195
+    - 204
+    - 391
+publication:
+  aggregate_only: true
+  exact_file_count: 37

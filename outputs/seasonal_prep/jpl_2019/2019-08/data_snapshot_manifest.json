@@ -1,0 +1,26 @@
+{
+  "anonymous_local_indexes_published": false,
+  "code_commit": "6ded3bdd810a8115ea5b8a51091de71fab894a03",
+  "config_sha256": "ee5aa65322df108c837fe4a4fea49e30f1ec412f8ceb46dcd31e23336ef898b5",
+  "encoded_dimensions": [
+    195,
+    204,
+    391
+  ],
+  "full_session_quarantine_count": 0,
+  "large_arrays_published": false,
+  "local_artifact_count": 16,
+  "metadata_record_inventory_sha256": "62f8d00dead0b0f6ebc8f22083904076b42a82a7ae420d17f258bcdd982a9a66",
+  "metadata_source_inventory_sha256": "bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a",
+  "month": "2019-08",
+  "processed_snapshot_sha256": "d938230d57a52b8728580f94737d469be47589c33d98be6aa9a15f5e75a78abb",
+  "raw_dimensions": [
+    195,
+    201,
+    311
+  ],
+  "raw_inventory_sha256": "06b16066eeba18ef33ae0eb26a348111b316d213a8f9be88e9c9067059140f10",
+  "schema_version": "acn-jpl-seasonal-preparation-data-snapshot/v1",
+  "status": "PASS",
+  "trajectory_quarantine_count": 0
+}

@@ -1,0 +1,152 @@
+{
+  "analysis_window": {
+    "local_end_exclusive": "2019-12-01T00:00:00-08:00",
+    "local_start_inclusive": "2019-11-01T00:00:00-07:00",
+    "timezone": "America/Los_Angeles",
+    "utc_end_exclusive": "2019-12-01T08:00:00+00:00",
+    "utc_start_inclusive": "2019-11-01T07:00:00+00:00"
+  },
+  "cleaned_session_count": 1354,
+  "duplicate_conflict": {
+    "conflict_main_policy": "mark_timestamp_missing",
+    "conflict_sensitivity_policy": "last_write_wins",
+    "current_conflicting_timestamps": 189,
+    "exact_duplicate_policy": "retain_first_remove_extra",
+    "pilot_conflicting_timestamps": 3
+  },
+  "expected_sessions": 1354,
+  "invalid_containers": {
+    "charging_current": {
+      "count": 6,
+      "limit": 0.1,
+      "rate": 0.004431314623338257,
+      "status": "PASS"
+    },
+    "denominator": 1354,
+    "pilot_signal": {
+      "count": 6,
+      "limit": 0.1,
+      "rate": 0.004431314623338257,
+      "status": "PASS"
+    }
+  },
+  "invalid_skipped_session_count": 0,
+  "month": "2019-11",
+  "raw_modified": false,
+  "retrospective_done_time": {
+    "online_feature_allowed": false,
+    "original_value_retained_locally": true,
+    "parsed_count": 1348,
+    "present_count": 1348,
+    "unparseable_count": 0
+  },
+  "sampling": {
+    "cap_seconds": 60,
+    "current_hold_seconds": 12,
+    "current_mode_seconds": 4,
+    "derivation": "mode_of_positive_raw_timestamp_differences",
+    "mode_multiplier": 3,
+    "pilot_hold_seconds": 12,
+    "pilot_mode_seconds": 4
+  },
+  "schema_version": "acn-jpl-seasonal-preparation-cleaning-qa/v2",
+  "series": {
+    "current": {
+      "bounded_observation_coverage": 0.9305819616944669,
+      "bounded_value_hours": 93403.42997222228,
+      "conflict_affected_sessions": 64,
+      "conflicting_timestamps": 189,
+      "exact_duplicate_extras": 59,
+      "invalid_timestamps": 0,
+      "invalid_values": 0,
+      "nonmonotonic_pairs": 1,
+      "nonmonotonic_sessions": 1,
+      "raw_samples": 8172792,
+      "retained_sample_rate": 0.9946270503397125,
+      "retained_samples": 8128880,
+      "usable_samples": 8132700
+    },
+    "pilot": {
+      "bounded_observation_coverage": 0.9311483902183074,
+      "bounded_value_hours": 112940.33777777774,
+      "conflict_affected_sessions": 1,
+      "conflicting_timestamps": 3,
+      "exact_duplicate_extras": 262,
+      "invalid_timestamps": 0,
+      "invalid_values": 0,
+      "nonmonotonic_pairs": 1,
+      "nonmonotonic_sessions": 1,
+      "raw_samples": 8178756,
+      "retained_sample_rate": 0.9946543215129539,
+      "retained_samples": 8135035,
+      "usable_samples": 8138853
+    }
+  },
+  "session_accounting": {
+    "acquisition_session_count": 1354,
+    "both_invalid_count": 6,
+    "coverage_denominator_session_count": 1354,
+    "current_analyzable_session_count": 1347,
+    "current_only_invalid_count": 0,
+    "invalid_container_placeholder_count": 6,
+    "metadata_anomaly_count": 0,
+    "metadata_checked_session_count": 6,
+    "metadata_match_session_count": 6,
+    "pilot_analyzable_session_count": 1347,
+    "pilot_only_invalid_count": 0,
+    "structural_retained_session_count": 1354,
+    "trajectory_quarantine_count": 1,
+    "whole_current_unobservable_session_count": 7,
+    "whole_pilot_unobservable_session_count": 7
+  },
+  "sessions_processed": 1354,
+  "status": "PASS",
+  "trajectory_quarantine": {
+    "analysis_field_coverage": {
+      "current": {
+        "count": 1347,
+        "denominator": 1354,
+        "rate": 0.9948301329394387
+      },
+      "pilot": {
+        "count": 1347,
+        "denominator": 1354,
+        "rate": 0.9948301329394387
+      }
+    },
+    "connected_state_retained_count": 1,
+    "coverage_denominator_includes_quarantined": true,
+    "denominator_sessions": 1354,
+    "full_session_quarantine_count": 0,
+    "full_session_quarantine_rate": 0.0,
+    "interpolation_applied": false,
+    "raw_field_coverage": {
+      "current": {
+        "count": 1348,
+        "denominator": 1354,
+        "rate": 0.9955686853766618
+      },
+      "pilot": {
+        "count": 1348,
+        "denominator": 1354,
+        "rate": 0.9955686853766618
+      }
+    },
+    "raw_manifest_modified": false,
+    "raw_timestamps_modified": false,
+    "raw_trajectory_anomalies_retained": true,
+    "sort_repair_applied": false,
+    "structural_metadata_retained_count": 1,
+    "synchronized_utc_nonmonotonic_sessions": 1,
+    "timestamp_shift_seconds": 0,
+    "trajectory_quarantine_count": 1,
+    "trajectory_quarantine_rate": 0.0007385524372230429,
+    "whole_current_pilot_trajectory_unobservable": true
+  },
+  "user_inputs": {
+    "issue_time_truncation_ready": true,
+    "raw_revision_count": 1697,
+    "sanitized_revision_count": 1697,
+    "unparseable_modified_count": 0
+  }
+}

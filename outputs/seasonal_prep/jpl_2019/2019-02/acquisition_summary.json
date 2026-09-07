@@ -1,0 +1,70 @@
+{
+  "carry_in_count": 1,
+  "chunk_integrity": {
+    "carry_completed": 1,
+    "carry_expected": 1,
+    "carry_manifest_sha_json_valid": true,
+    "daily_data_files_present": 28,
+    "daily_expected": 28,
+    "daily_json_valid": 28,
+    "daily_manifest_contracts_valid": 28,
+    "daily_manifests_present": 28,
+    "daily_record_manifest_matches": 28,
+    "daily_record_remote_matches": 28,
+    "daily_sha256_verified": 28,
+    "daily_valid": 28
+  },
+  "combined_session_count": 1289,
+  "expected_daily_chunks": 28,
+  "full_session_quarantine_count": 0,
+  "integrity": {
+    "linkage_exact": true,
+    "official_reference_verified": true,
+    "partial_files_absent": true,
+    "raw_snapshot_valid": true,
+    "raw_unchanged": true,
+    "scope_verified": true
+  },
+  "linkage": {
+    "combined_record_count": 1289,
+    "combined_unique_object_count": 1289,
+    "combined_unique_pair_count": 1289,
+    "combined_unique_session_count": 1289,
+    "daily_record_count": 1288,
+    "daily_unique_object_count": 1288,
+    "daily_unique_pair_count": 1288,
+    "daily_unique_session_count": 1288,
+    "matched_metadata_pairs": 1289,
+    "missing_metadata_pairs": 0,
+    "orphan_timeseries_pairs": 0
+  },
+  "local_session_count": 1288,
+  "metadata_record_inventory_sha256": "62f8d00dead0b0f6ebc8f22083904076b42a82a7ae420d17f258bcdd982a9a66",
+  "metadata_scope": {
+    "carry_in_count": 1,
+    "left_boundary_count": 6,
+    "local_calendar_session_count": 1288,
+    "right_boundary_count": 6,
+    "utc_calendar_session_count": 1288
+  },
+  "metadata_source_inventory_sha256": "bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a",
+  "month": "2019-02",
+  "official_probe": {
+    "reference_valid": true,
+    "request_count": 1,
+    "timeseries": false,
+    "total_matches_local": true
+  },
+  "official_reference_sha256": "2a6916f4d7c5272f3ec178bdfb2ab69d90e6117cafd77bf9375ef219e1938fef",
+  "official_total": 1288,
+  "partial_file_count": 0,
+  "raw_file_count": 58,
+  "raw_inventory_after_sha256": "70a0a6178d39607045a0e048b119ef391fa7a6be96261020a2896e6a4d8742a0",
+  "raw_inventory_before_sha256": "70a0a6178d39607045a0e048b119ef391fa7a6be96261020a2896e6a4d8742a0",
+  "raw_inventory_sha256": "70a0a6178d39607045a0e048b119ef391fa7a6be96261020a2896e6a4d8742a0",
+  "schema_version": "acn-jpl-seasonal-acquisition-summary/v1",
+  "status": "COMPLETE",
+  "trajectory_quarantine_count": 0,
+  "trajectory_quarantine_rate": 0.0,
+  "valid_daily_chunks": 28
+}

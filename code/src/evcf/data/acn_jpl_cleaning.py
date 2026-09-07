@@ -10,7 +10,7 @@ import os
 import re
 from collections import Counter
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from itertools import pairwise
 from pathlib import Path
@@ -88,6 +88,38 @@ class SamplingMode:
 class SamplingModes:
     current: SamplingMode
     pilot: SamplingMode
+
+
+def cleaning_policy_from_sampling_modes(
+    modes: SamplingModes,
+    *,
+    locf_mode_multiplier: int = 3,
+    locf_cap_seconds: int = 60,
+    boundary_sensitivity_seconds: int = 60,
+    required_mode_seconds: int | None = None,
+) -> CleaningPolicy:
+    """Build one policy from the two modes observed in the current month."""
+
+    policy = CleaningPolicy(
+        current_mode_s=modes.current.mode_seconds,
+        pilot_mode_s=modes.pilot.mode_seconds,
+        locf_mode_multiplier=locf_mode_multiplier,
+        locf_cap_s=locf_cap_seconds,
+        boundary_sensitivity_s=boundary_sensitivity_seconds,
+    )
+    if required_mode_seconds is not None:
+        if (
+            not isinstance(required_mode_seconds, int)
+            or isinstance(required_mode_seconds, bool)
+            or required_mode_seconds <= 0
+        ):
+            raise ValueError("required_mode_seconds must be a positive integer")
+        if (
+            policy.current_mode_s != required_mode_seconds
+            or policy.pilot_mode_s != required_mode_seconds
+        ):
+            raise ValueError("frozen snapshot did not reproduce the audited 4-second modes")
+    return policy
 
 
 @dataclass(frozen=True)
@@ -733,6 +765,95 @@ def clean_session(
             policy=policy,
         ),
         user_inputs=sanitize_user_inputs(record.get("userInputs")),
+    )
+
+
+def clean_quarantined_session(
+    record: Mapping[str, Any],
+    *,
+    session_index: int,
+    policy: CleaningPolicy,
+) -> CleanSession:
+    """Retain structural state while making both raw trajectories unobservable."""
+
+    from .acn_jpl_trajectory_quarantine import (
+        TRAJECTORY_QUARANTINE,
+        quarantine_record_for_analysis,
+    )
+
+    decision, projected = quarantine_record_for_analysis(record)
+    if decision.action != TRAJECTORY_QUARANTINE or projected is None:
+        raise ValueError("record is not an approved trajectory-quarantine candidate")
+    cleaned = clean_session(projected, session_index=session_index, policy=policy)
+
+    def retain_raw_denominator(
+        clean: CleanSeries,
+        *,
+        field_name: str,
+        value_name: str,
+    ) -> CleanSeries:
+        raw_series = record.get(field_name)
+        if not isinstance(raw_series, Mapping):
+            raise TypeError("quarantined raw series must be a mapping")
+        timestamps = raw_series.get("timestamps")
+        values = raw_series.get(value_name)
+        if not isinstance(timestamps, list) or not isinstance(values, list):
+            raise TypeError("quarantined raw series arrays must be lists")
+        pairs = tuple(zip(timestamps, values, strict=True))
+        seen_pairs: set[str] = set()
+        duplicate_extras = 0
+        values_by_timestamp: dict[int, set[str]] = {}
+        invalid_timestamps = 0
+        invalid_values = 0
+        for raw_timestamp, raw_value in pairs:
+            signature = json.dumps(
+                [raw_timestamp, raw_value],
+                ensure_ascii=False,
+                sort_keys=True,
+                default=str,
+            )
+            if signature in seen_pairs:
+                duplicate_extras += 1
+            else:
+                seen_pairs.add(signature)
+            try:
+                timestamp = parse_timestamp_utc_s(raw_timestamp)
+            except (TypeError, ValueError):
+                invalid_timestamps += 1
+                continue
+            number = _finite_number(raw_value, nonnegative=field_name == "chargingCurrent")
+            if number is None:
+                invalid_values += 1
+                continue
+            values_by_timestamp.setdefault(timestamp, set()).add(number.hex())
+        conflicting_timestamps = sum(
+            len(signatures) > 1 for signatures in values_by_timestamp.values()
+        )
+        audit = replace(
+            clean.audit,
+            raw_samples=len(values),
+            invalid_timestamps=invalid_timestamps,
+            invalid_values=invalid_values,
+            exact_duplicate_extras=duplicate_extras,
+            conflicting_timestamps=conflicting_timestamps,
+            raw_order_sha256=_audit_digest(timestamps),
+            raw_values_sha256=_audit_digest(values),
+            raw_pairs_sha256=_audit_digest(pairs),
+        )
+        return replace(clean, audit=audit)
+
+    return replace(
+        cleaned,
+        current=retain_raw_denominator(
+            cleaned.current,
+            field_name="chargingCurrent",
+            value_name="current",
+        ),
+        pilot=retain_raw_denominator(
+            cleaned.pilot,
+            field_name="pilotSignal",
+            value_name="pilot",
+        ),
     )
 
 

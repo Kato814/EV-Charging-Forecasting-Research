@@ -1,0 +1,97 @@
+{
+  "boundary_plus_minus_60_seconds": {
+    "current": {
+      "coverage": 0.9829243155227867,
+      "eligible_seconds": 33869389,
+      "observed_seconds": 33291046,
+      "relative_value_hours_change": 3.0535288075837265e-05,
+      "value_hours": 91803.69463888877
+    },
+    "pilot": {
+      "coverage": 0.9833929687955103,
+      "eligible_seconds": 33869389,
+      "observed_seconds": 33306919,
+      "relative_value_hours_change": 0.003284316683863742,
+      "value_hours": 100267.08111111117
+    }
+  },
+  "boundary_sensitivity_seconds": 60,
+  "hold_thresholds": {
+    "current": {
+      "12": {
+        "coverage": 0.9828178555537881,
+        "eligible_seconds": 33714709,
+        "observed_seconds": 33135418,
+        "value_hours": 91800.89147222205
+      },
+      "4": {
+        "coverage": 0.9526417979760703,
+        "eligible_seconds": 33714709,
+        "observed_seconds": 32118041,
+        "value_hours": 88664.76741666657
+      },
+      "60": {
+        "coverage": 0.984186368033015,
+        "eligible_seconds": 33714709,
+        "observed_seconds": 33181557,
+        "value_hours": 91911.99177777761
+      }
+    },
+    "pilot": {
+      "12": {
+        "coverage": 0.9832856929003896,
+        "eligible_seconds": 33714709,
+        "observed_seconds": 33151191,
+        "value_hours": 99938.8502777777
+      },
+      "4": {
+        "coverage": 0.9532544089287557,
+        "eligible_seconds": 33714709,
+        "observed_seconds": 32138695,
+        "value_hours": 96557.1025
+      },
+      "60": {
+        "coverage": 0.9846070449547704,
+        "eligible_seconds": 33714709,
+        "observed_seconds": 33195740,
+        "value_hours": 100059.50888888874
+      }
+    }
+  },
+  "hold_thresholds_seconds": {
+    "current": [
+      4,
+      12,
+      60
+    ],
+    "pilot": [
+      4,
+      12,
+      60
+    ]
+  },
+  "last_write_wins": {
+    "current": {
+      "coverage": 0.9828185080879683,
+      "eligible_seconds": 33714709,
+      "observed_seconds": 33135440,
+      "relative_value_hours_change": 8.68425363877465e-08,
+      "value_hours": 91800.89944444431
+    },
+    "pilot": {
+      "coverage": 0.9832856929003896,
+      "eligible_seconds": 33714709,
+      "observed_seconds": 33151191,
+      "relative_value_hours_change": 0.0,
+      "value_hours": 99938.8502777777
+    }
+  },
+  "last_write_wins_compared": true,
+  "main_hold_seconds": {
+    "current": 12,
+    "pilot": 12
+  },
+  "month": "2019-02",
+  "schema_version": "acn-jpl-seasonal-preparation-cleaning-sensitivity/v1",
+  "status": "PASS"
+}

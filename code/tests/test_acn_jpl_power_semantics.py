@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import importlib
 import json
+import math
 
 import pytest
 from evcf.data.acn_jpl_power_semantics import (
@@ -159,6 +161,41 @@ def test_severe_thresholds_are_strict_not_inclusive() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("changes", "legacy_status", "seasonal_status"),
+    [
+        ({}, KW_RECONSTRUCTION_CANDIDATE, KW_RECONSTRUCTION_CANDIDATE),
+        ({"mapping_rate": 0.99}, CURRENT_PROXY_ONLY, CURRENT_PROXY_ONLY),
+        ({"mapping_rate": 0.949}, POWER_SEMANTICS_FAIL, CURRENT_PROXY_ONLY),
+        ({"monthly_relative_energy_error": 0.501}, POWER_SEMANTICS_FAIL, CURRENT_PROXY_ONLY),
+        ({"monthly_relative_energy_error": -0.501}, POWER_SEMANTICS_FAIL, CURRENT_PROXY_ONLY),
+        ({"statistics_finite": False}, POWER_SEMANTICS_FAIL, CURRENT_PROXY_ONLY),
+        ({"mapping_rate": math.nan}, POWER_SEMANTICS_FAIL, CURRENT_PROXY_ONLY),
+        ({"p90_absolute_percentage_error": math.inf}, POWER_SEMANTICS_FAIL, CURRENT_PROXY_ONLY),
+        (
+            {"eligible_session_count": 0, "retained_session_count": 0},
+            POWER_SEMANTICS_FAIL,
+            CURRENT_PROXY_ONLY,
+        ),
+    ],
+)
+def test_seasonal_power_adapter_reuses_legacy_status_but_never_authorizes_e208(
+    changes: dict[str, object],
+    legacy_status: str,
+    seasonal_status: str,
+) -> None:
+    module = importlib.import_module("evcf.data.acn_jpl_power_semantics")
+    inputs = _candidate_inputs(**changes)
+
+    decision = module.seasonal_power_decision(inputs)
+
+    assert decision.legacy_classifier_status == legacy_status
+    assert decision.legacy_classifier_status == classify_power_semantics(inputs)
+    assert decision.power_semantics_status == seasonal_status
+    assert decision.e208_authorized is False
+    assert decision.continue_current_pipeline is True
+
+
 def _mapped_space(floor: int, number: int) -> str:
     return f"AG-{floor}F{number:02d}"
 
@@ -180,6 +217,42 @@ def _exact_session(
         is_weekend=is_weekend,
         retained=retained,
     )
+
+
+def test_seasonal_power_audit_is_closed_and_keeps_ampere_pipeline_available() -> None:
+    module = importlib.import_module("evcf.data.acn_jpl_power_semantics")
+    sessions = [_exact_session(space_id=_mapped_space(1, 1))]
+
+    legacy = audit_power_semantics(sessions)
+    seasonal = module.audit_seasonal_power_semantics(sessions)
+
+    assert legacy["schema_version"] == "acn-jpl-power-semantics-audit/v1"
+    assert "legacy_classifier_status" not in legacy
+    assert seasonal["schema_version"] == "acn-jpl-seasonal-power-semantics-audit/v1"
+    assert seasonal["legacy_classifier_status"] == KW_RECONSTRUCTION_CANDIDATE
+    assert seasonal["status"] == KW_RECONSTRUCTION_CANDIDATE
+    assert seasonal["e208_authorized"] is False
+    assert seasonal["continue_current_pipeline"] is True
+    assert seasonal["decision"]["reconstructed_kw_column_authorized"] is False
+    assert seasonal["online_feature_policy"]["e208_allowed"] is False
+    assert "q1" not in legacy["cohorts"]["primary"]["effective_voltage_v"]
+    assert "q3" not in legacy["cohorts"]["primary"]["effective_voltage_v"]
+    assert seasonal["cohorts"]["primary"]["effective_voltage_v"]["q1"] == 208.0
+    assert seasonal["cohorts"]["primary"]["effective_voltage_v"]["q3"] == 208.0
+    assert set(seasonal) == {
+        "schema_version",
+        "status",
+        "legacy_classifier_status",
+        "e208_authorized",
+        "continue_current_pipeline",
+        "evidence",
+        "static_mirror",
+        "mapping",
+        "cohorts",
+        "decision",
+        "online_feature_policy",
+        "privacy",
+    }
 
 
 def test_complete_mapping_and_exact_energy_can_be_a_candidate() -> None:

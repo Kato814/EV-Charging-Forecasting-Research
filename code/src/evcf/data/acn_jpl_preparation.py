@@ -30,9 +30,19 @@ from .acn_jpl_gate0 import (
     jpl_analysis_windows,
     validate_chunk,
 )
+from .acn_jpl_month_config import (
+    SEASONAL_MONTHS,
+    JPLMonthConfig,
+    is_canonical_jpl_month_config,
+)
 
 INVENTORY_DIGEST_ALGORITHM = (
     "sha256(ordinal-sorted UTF-8 relative_path<TAB>size<TAB>file_sha256<LF>; final LF)"
+)
+SEASONAL_INVENTORY_DIGEST_ALGORITHM = (
+    "sha256(ordinal-sorted UTF-8 "
+    "relative_path<NUL>file_sha256<NUL>byte_size<LF>; "
+    "*.jsonl.gz and *.manifest.json only)"
 )
 DEFAULT_RAW_ROOT = Path("data/raw/acn/jpl/gate0/2019-05-full-ts")
 DEFAULT_INTERIM_ROOT = Path("data/interim/acn/jpl/2019-05")
@@ -44,6 +54,7 @@ ANALYSIS_START_UTC = JPL_ANALYSIS_START.astimezone(timezone.utc)
 ANALYSIS_END_UTC = JPL_ANALYSIS_END.astimezone(timezone.utc)
 
 INVENTORY_SCHEMA_VERSION = "acn-jpl-raw-inventory/v1"
+SEASONAL_INVENTORY_SCHEMA_VERSION = "acn-jpl-seasonal-raw-inventory/v1"
 DAILY_MANIFEST_SCHEMA_VERSION = "acn-jpl-daily-chunk/v1"
 CARRY_MANIFEST_SCHEMA_VERSION = "acn-jpl-full-month-carry-in/v1"
 PREPARATION_SCHEMA_VERSION = "acn-jpl-gate1-preparation/v1"
@@ -96,6 +107,57 @@ class RawSnapshotContract:
     total_record_count: int = 1645
     total_bytes: int | None = 61_625_542
     inventory_sha256: str | None = EXPECTED_RAW_INVENTORY_SHA256
+    inventory_schema_version: str = INVENTORY_SCHEMA_VERSION
+    inventory_algorithm: str = INVENTORY_DIGEST_ALGORITHM
+    month_config: JPLMonthConfig | None = field(default=None, repr=False)
+    dataset_id: str = FULL_MONTH_DATASET_ID
+    carry_chunk_stems: tuple[str, ...] = ("carry_in",)
+
+    @classmethod
+    def for_month(
+        cls,
+        config: JPLMonthConfig,
+        *,
+        local_record_count: int,
+        carry_in_record_count: int,
+        inventory: InventorySnapshot,
+    ) -> RawSnapshotContract:
+        """Bind a seasonal month contract to its completed content inventory."""
+
+        if not is_canonical_jpl_month_config(config) or config.month not in SEASONAL_MONTHS:
+            raise ValueError("config must be an approved seasonal month contract")
+        for name, value in (
+            ("local_record_count", local_record_count),
+            ("carry_in_record_count", carry_in_record_count),
+        ):
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                raise ValueError(f"{name} must be a nonnegative integer")
+        if (
+            inventory.schema_version != SEASONAL_INVENTORY_SCHEMA_VERSION
+            or inventory.algorithm != SEASONAL_INVENTORY_DIGEST_ALGORITHM
+        ):
+            raise ValueError("inventory is not a canonical seasonal content inventory")
+        if re.fullmatch(r"[0-9a-f]{64}", inventory.digest) is None:
+            raise ValueError("seasonal inventory digest must be a lowercase SHA-256")
+        carry_stems = tuple(
+            f"carry-{ordinal:04d}" for ordinal in range(1, carry_in_record_count + 1)
+        )
+        return cls(
+            file_count=inventory.file_count,
+            manifest_count=config.day_count + carry_in_record_count,
+            day_count=config.day_count,
+            carry_count=carry_in_record_count,
+            day_record_count=local_record_count,
+            carry_record_count=carry_in_record_count,
+            total_record_count=local_record_count + carry_in_record_count,
+            total_bytes=inventory.total_bytes,
+            inventory_sha256=inventory.digest,
+            inventory_schema_version=SEASONAL_INVENTORY_SCHEMA_VERSION,
+            inventory_algorithm=SEASONAL_INVENTORY_DIGEST_ALGORITHM,
+            month_config=config,
+            dataset_id=f"D0001-jpl-{config.month}-seasonal-ts",
+            carry_chunk_stems=carry_stems,
+        )
 
 
 FROZEN_RAW_CONTRACT = RawSnapshotContract()
@@ -121,6 +183,7 @@ class InventorySnapshot:
     digest: str
     total_bytes: int
     algorithm: str = INVENTORY_DIGEST_ALGORITHM
+    schema_version: str = INVENTORY_SCHEMA_VERSION
 
     @property
     def file_count(self) -> int:
@@ -196,6 +259,45 @@ def canonical_inventory(root: str | Path) -> InventorySnapshot:
         entries=entries,
         digest=digest.hexdigest(),
         total_bytes=sum(entry.size for entry in entries),
+    )
+
+
+def canonical_seasonal_inventory(root: str | Path) -> InventorySnapshot:
+    """Hash immutable seasonal data/manifests using the acquisition framing.
+
+    Mutable probe and progress state is deliberately excluded. Exact expected
+    chunk paths are validated separately; this digest is not a layout check.
+    """
+
+    base = Path(root)
+    if not base.is_dir():
+        raise RawSnapshotError("inventory root is not a directory")
+    paths: list[tuple[str, Path]] = []
+    for path in base.rglob("*"):
+        if path.is_symlink():
+            raise RawSnapshotError("inventory root contains a symbolic link")
+        if not path.is_file() or not (
+            path.name.endswith(".jsonl.gz") or path.name.endswith(".manifest.json")
+        ):
+            continue
+        relative_path = path.relative_to(base).as_posix()
+        if "\0" in relative_path or "\r" in relative_path or "\n" in relative_path:
+            raise RawSnapshotError("inventory path cannot be represented canonically")
+        paths.append((relative_path, path))
+
+    digest = hashlib.sha256()
+    entries: list[InventoryEntry] = []
+    for relative_path, path in sorted(paths, key=lambda item: item[0]):
+        file_sha256 = _sha256_file(path)
+        byte_size = path.stat().st_size
+        digest.update(f"{relative_path}\0{file_sha256}\0{byte_size}\n".encode())
+        entries.append(InventoryEntry(relative_path, byte_size, file_sha256))
+    return InventorySnapshot(
+        entries=tuple(entries),
+        digest=digest.hexdigest(),
+        total_bytes=sum(entry.size for entry in entries),
+        algorithm=SEASONAL_INVENTORY_DIGEST_ALGORITHM,
+        schema_version=SEASONAL_INVENTORY_SCHEMA_VERSION,
     )
 
 
@@ -446,6 +548,34 @@ def _is_nonnegative_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
+def _closed_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in payload:
+            raise ValueError("JSON object contains duplicate keys")
+        payload[key] = value
+    return payload
+
+
+def load_closed_json_object(
+    path: str | Path,
+    *,
+    description: str,
+) -> dict[str, Any]:
+    """Load one UTF-8 JSON object while rejecting every duplicate key."""
+
+    try:
+        payload = json.loads(
+            Path(path).read_text(encoding="utf-8"),
+            object_pairs_hook=_closed_json_object,
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+        raise RawSnapshotError(f"{description} is not valid closed JSON") from exc
+    if not isinstance(payload, dict):
+        raise RawSnapshotError(f"{description} root is not an object")
+    return payload
+
+
 def _read_json_object(path: Path, *, description: str) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -540,9 +670,223 @@ def _validate_carry_chunk(raw_root: Path) -> int:
     return len(records)
 
 
+def _seasonal_carry_paths(raw_root: Path, stem: str) -> tuple[Path, Path]:
+    return (
+        raw_root / "timeseries" / "carry_in" / f"{stem}.jsonl.gz",
+        raw_root / "manifests" / "carry_in" / f"{stem}.manifest.json",
+    )
+
+
+def _validate_seasonal_carry_chunk(
+    raw_root: Path,
+    *,
+    config: JPLMonthConfig,
+    dataset_id: str,
+    stem: str,
+    ordinal: int,
+) -> int:
+    data_path, manifest_path = _seasonal_carry_paths(raw_root, stem)
+    if not data_path.is_file() or not manifest_path.is_file():
+        raise RawSnapshotError("seasonal carry-in data or manifest is missing")
+    manifest = load_closed_json_object(
+        manifest_path,
+        description="seasonal carry-in manifest",
+    )
+    records = list(_iter_gzip_objects(data_path))
+    if len(records) != 1:
+        raise RawSnapshotError("seasonal carry-in must contain exactly one record")
+    record = records[0]
+    object_id = record.get("_id")
+    session_id = record.get("sessionID")
+    if not isinstance(object_id, str) or not object_id:
+        raise RawSnapshotError("seasonal carry-in record has an invalid private identifier")
+    if not isinstance(session_id, str) or not session_id:
+        raise RawSnapshotError("seasonal carry-in record has an invalid private identifier")
+    try:
+        connection = parse_acn_datetime(record.get("connectionTime"))
+        disconnect = parse_acn_datetime(record.get("disconnectTime"))
+    except (TypeError, ValueError) as exc:
+        raise RawSnapshotError("seasonal carry-in record has an invalid session boundary") from exc
+    if connection is None or disconnect is None or not connection < config.utc_start < disconnect:
+        raise RawSnapshotError("seasonal carry-in record does not cross the month boundary")
+
+    query = ACNQuery(
+        site="jpl",
+        start=connection,
+        end=config.local_start,
+        timeseries=True,
+        session_id=session_id,
+    )
+    expected_context = {
+        "schema_version": "acn-jpl-seasonal-carry-in/v1",
+        "dataset_id": dataset_id,
+        "source": ACN_OFFICIAL_SOURCE,
+        "endpoint": query.endpoint,
+        "site": "jpl",
+        "timezone": config.timezone_name,
+        "month": config.month,
+        "ordinal": ordinal,
+        "local_month_start": config.local_start.isoformat(),
+        "utc_start_inclusive": query.start_utc.isoformat(),
+        "utc_end_exclusive": query.end_utc.isoformat(),
+        "_id": object_id,
+        "sessionID": session_id,
+        "query_condition": query.condition,
+        "output_file": data_path.name,
+    }
+    expected_keys = set(expected_context) | {
+        "record_count",
+        "remote_total_reported",
+        "complete_for_query",
+        "downloaded_at_utc",
+        "sha256",
+        "token_stored",
+    }
+    if set(manifest) != expected_keys or any(
+        manifest.get(key) != value for key, value in expected_context.items()
+    ):
+        raise RawSnapshotError("seasonal carry-in manifest contract does not match")
+    if manifest.get("record_count") != 1 or isinstance(manifest.get("record_count"), bool):
+        raise RawSnapshotError("seasonal carry-in manifest record count does not match")
+    if manifest.get("remote_total_reported") != 1 or isinstance(
+        manifest.get("remote_total_reported"), bool
+    ):
+        raise RawSnapshotError("seasonal carry-in remote total does not match")
+    if manifest.get("complete_for_query") is not True:
+        raise RawSnapshotError("seasonal carry-in manifest is not complete for its query")
+    if manifest.get("token_stored") is not False:
+        raise RawSnapshotError("seasonal carry-in manifest contains an unsafe credential declaration")
+    if not is_valid_utc_timestamp(manifest.get("downloaded_at_utc")):
+        raise RawSnapshotError("seasonal carry-in manifest download timestamp is invalid")
+    if manifest.get("sha256") != _sha256_file(data_path):
+        raise RawSnapshotError("seasonal carry-in data hash does not match its manifest")
+    return 1
+
+
 def _assert_contract_value(name: str, observed: int | str, expected: int | str | None) -> None:
     if expected is not None and observed != expected:
         raise RawSnapshotError(f"raw snapshot {name} does not match the frozen contract")
+
+
+def _contract_inventory(
+    root: Path,
+    contract: RawSnapshotContract,
+) -> InventorySnapshot:
+    binding = (contract.inventory_schema_version, contract.inventory_algorithm)
+    if binding == (INVENTORY_SCHEMA_VERSION, INVENTORY_DIGEST_ALGORITHM):
+        if contract.month_config is not None:
+            raise RawSnapshotError("legacy inventory cannot be bound to a seasonal month")
+        return canonical_inventory(root)
+    if binding == (
+        SEASONAL_INVENTORY_SCHEMA_VERSION,
+        SEASONAL_INVENTORY_DIGEST_ALGORITHM,
+    ):
+        config = contract.month_config
+        if config is None or not is_canonical_jpl_month_config(config):
+            raise RawSnapshotError("seasonal inventory requires a canonical month contract")
+        return canonical_seasonal_inventory(root)
+    raise RawSnapshotError("raw snapshot inventory algorithm is not an approved closed contract")
+
+
+def _seasonal_expected_paths(contract: RawSnapshotContract) -> set[str]:
+    config = contract.month_config
+    if config is None:
+        return set()
+    expected = {
+        relative
+        for window in config.day_windows
+        for relative in (
+            f"timeseries/{window.day_key}.jsonl.gz",
+            f"manifests/timeseries/{window.day_key}.manifest.json",
+        )
+    }
+    for stem in contract.carry_chunk_stems:
+        expected.add(f"timeseries/carry_in/{stem}.jsonl.gz")
+        expected.add(f"manifests/carry_in/{stem}.manifest.json")
+    return expected
+
+
+def _seasonal_layout_is_exact(root: Path, contract: RawSnapshotContract) -> bool:
+    """Check the content allowlist while isolating mutable acquisition state."""
+
+    expected_files = _seasonal_expected_paths(contract)
+    expected_directories = {
+        Path(relative).parent.as_posix() for relative in expected_files
+    }
+    expected_directories.update({"timeseries", "manifests", "state"})
+    actual_content: set[str] = set()
+    for path in root.rglob("*"):
+        relative = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            return False
+        if path.is_dir():
+            if relative not in expected_directories:
+                return False
+            continue
+        if not path.is_file():
+            return False
+        if relative in expected_files:
+            actual_content.add(relative)
+            continue
+        # Probe references and progress are mutable orchestration state, not
+        # immutable raw content. Only flat JSON files in state/ are isolated.
+        if (
+            relative.startswith("state/")
+            and relative.count("/") == 1
+            and path.suffix == ".json"
+            and not path.name.endswith(".manifest.json")
+        ):
+            continue
+        return False
+    return actual_content == expected_files
+
+
+def _validate_contract_shape(contract: RawSnapshotContract) -> None:
+    config = contract.month_config
+    if config is None:
+        if (
+            contract.inventory_schema_version != INVENTORY_SCHEMA_VERSION
+            or contract.inventory_algorithm != INVENTORY_DIGEST_ALGORITHM
+            or contract.dataset_id != FULL_MONTH_DATASET_ID
+            or contract.day_count != FROZEN_RAW_CONTRACT.day_count
+            or contract.carry_count != FROZEN_RAW_CONTRACT.carry_count
+            or contract.carry_record_count != FROZEN_RAW_CONTRACT.carry_record_count
+            or contract.carry_chunk_stems != FROZEN_RAW_CONTRACT.carry_chunk_stems
+        ):
+            raise RawSnapshotError("legacy May raw contract shape is invalid")
+        return
+    if not is_canonical_jpl_month_config(config) or config.month not in SEASONAL_MONTHS:
+        raise RawSnapshotError("seasonal raw contract month is not canonical")
+    count_fields = (
+        contract.file_count,
+        contract.manifest_count,
+        contract.day_count,
+        contract.carry_count,
+        contract.day_record_count,
+        contract.carry_record_count,
+        contract.total_record_count,
+    )
+    if not all(_is_nonnegative_int(value) for value in count_fields):
+        raise RawSnapshotError("seasonal raw contract counts must be nonnegative integers")
+    expected_stems = tuple(
+        f"carry-{ordinal:04d}" for ordinal in range(1, contract.carry_count + 1)
+    )
+    if contract.carry_chunk_stems != expected_stems:
+        raise RawSnapshotError("seasonal carry-in ordinals are not canonical")
+    if (
+        contract.day_count != config.day_count
+        or contract.manifest_count != contract.day_count + contract.carry_count
+        or contract.file_count != 2 * contract.manifest_count
+        or contract.carry_record_count != contract.carry_count
+        or contract.total_record_count
+        != contract.day_record_count + contract.carry_record_count
+        or contract.dataset_id != f"D0001-jpl-{config.month}-seasonal-ts"
+        or contract.total_bytes is None
+        or not _is_nonnegative_int(contract.total_bytes)
+        or contract.inventory_sha256 is None
+        or re.fullmatch(r"[0-9a-f]{64}", contract.inventory_sha256) is None
+    ):
+        raise RawSnapshotError("seasonal raw contract aggregate fields are inconsistent")
 
 
 def validate_raw_snapshot(
@@ -553,19 +897,30 @@ def validate_raw_snapshot(
     """Validate the complete raw snapshot before any downstream record is released."""
 
     root = Path(raw_root)
-    inventory = canonical_inventory(root)
+    _validate_contract_shape(contract)
+    inventory = _contract_inventory(root, contract)
     _assert_contract_value("file count", inventory.file_count, contract.file_count)
     _assert_contract_value("byte count", inventory.total_bytes, contract.total_bytes)
     _assert_contract_value("inventory digest", inventory.digest, contract.inventory_sha256)
 
-    manifest_count = sum(1 for path in (root / "manifests").rglob("*.json") if path.is_file())
+    manifest_pattern = "*.json" if contract.month_config is None else "*.manifest.json"
+    manifest_count = sum(
+        1 for path in (root / "manifests").rglob(manifest_pattern) if path.is_file()
+    )
     _assert_contract_value("manifest count", manifest_count, contract.manifest_count)
     gzip_count = sum(1 for path in (root / "timeseries").rglob("*.jsonl.gz") if path.is_file())
     _assert_contract_value("gzip count", gzip_count, contract.day_count + contract.carry_count)
 
     day_record_count = 0
-    windows = tuple(jpl_analysis_windows())
+    config = contract.month_config
+    windows = tuple(jpl_analysis_windows()) if config is None else config.day_windows
     _assert_contract_value("day count", len(windows), contract.day_count)
+    if config is not None:
+        actual_paths = {entry.relative_path for entry in inventory.entries}
+        if actual_paths != _seasonal_expected_paths(contract):
+            raise RawSnapshotError("seasonal raw content file set is not exact")
+        if not _seasonal_layout_is_exact(root, contract):
+            raise RawSnapshotError("seasonal raw layout is not exact")
     for window in windows:
         data_path, manifest_path = chunk_paths(root, "timeseries", window)
         result = validate_chunk(
@@ -578,20 +933,35 @@ def validate_raw_snapshot(
             raise RawSnapshotError(f"daily manifest/data validation failed: {result.reason}")
         day_record_count += result.record_count
 
-    carry_record_count = _validate_carry_chunk(root)
+    if config is None:
+        carry_record_count = _validate_carry_chunk(root)
+    else:
+        carry_record_count = sum(
+            _validate_seasonal_carry_chunk(
+                root,
+                config=config,
+                dataset_id=contract.dataset_id,
+                stem=stem,
+                ordinal=ordinal,
+            )
+            for ordinal, stem in enumerate(contract.carry_chunk_stems, start=1)
+        )
     total_record_count = day_record_count + carry_record_count
     _assert_contract_value("day record count", day_record_count, contract.day_record_count)
     _assert_contract_value("carry record count", carry_record_count, contract.carry_record_count)
     _assert_contract_value("object total", total_record_count, contract.total_record_count)
-    return RawSnapshotValidation(
+    validation = RawSnapshotValidation(
         inventory=inventory,
         manifest_count=manifest_count,
         day_count=len(windows),
-        carry_count=1,
+        carry_count=contract.carry_count,
         day_record_count=day_record_count,
         carry_record_count=carry_record_count,
         total_record_count=total_record_count,
     )
+    after = _contract_inventory(root, contract)
+    assert_raw_snapshot_unchanged(inventory, after)
+    return validation
 
 
 def iter_validated_raw_records(
@@ -603,16 +973,24 @@ def iter_validated_raw_records(
 
     root = Path(raw_root)
     validation = validate_raw_snapshot(root, contract=contract)
-    chunks: list[tuple[Literal["carry_in", "day"], str | None, Path]] = [
-        (
-            "carry_in",
-            None,
-            root / "timeseries" / "carry_in" / "carry_in.jsonl.gz",
-        )
-    ]
+    config = contract.month_config
+    windows = tuple(jpl_analysis_windows()) if config is None else config.day_windows
+    if config is None:
+        chunks: list[tuple[Literal["carry_in", "day"], str | None, Path]] = [
+            (
+                "carry_in",
+                None,
+                root / "timeseries" / "carry_in" / "carry_in.jsonl.gz",
+            )
+        ]
+    else:
+        chunks = [
+            ("carry_in", None, _seasonal_carry_paths(root, stem)[0])
+            for stem in contract.carry_chunk_stems
+        ]
     chunks.extend(
         ("day", window.day_key, chunk_paths(root, "timeseries", window)[0])
-        for window in jpl_analysis_windows()
+        for window in windows
     )
     ordinal = 0
     for chunk_kind, local_date, data_path in chunks:
@@ -627,3 +1005,7 @@ def iter_validated_raw_records(
             ordinal += 1
     if ordinal != validation.total_record_count:
         raise RawSnapshotError("raw snapshot changed during deterministic iteration")
+    assert_raw_snapshot_unchanged(
+        validation.inventory,
+        _contract_inventory(root, contract),
+    )

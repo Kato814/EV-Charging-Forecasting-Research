@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 from evcf.data.acn_jpl_development_months import DEVELOPMENT_MONTHS, FINAL_HOLDOUT_MONTHS
 from evcf.data.acn_jpl_month_config import jpl_month_config
+
 from scripts.acquire_jpl_development import (
     DEVELOPMENT_AUTHORIZATION_MESSAGE,
     DEVELOPMENT_MISSING_TOKEN_MESSAGE,

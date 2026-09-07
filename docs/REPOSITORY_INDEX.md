@@ -6,9 +6,9 @@
 
 | 文件 | 用途 |
 | --- | --- |
-| CURRENT_STATUS.md | 当前模型开发阶段、Issue #29、数据分区及授权边界 |
+| CURRENT_STATUS.md | 当前模型开发阶段、Issue #29、开发集获取与授权边界 |
 | HANDOFF.md | 接管口径、方法方向、数据分区、版本和资产保护 |
-| [EXPERIMENT_LEDGER.md](EXPERIMENT_LEDGER.md) | PR #21/#23及Issue #25—#29的执行、审查、结果与SHA |
+| [EXPERIMENT_LEDGER.md](EXPERIMENT_LEDGER.md) | PR #21/#23/#30及Issue #25—#29的执行、审查、结果与SHA |
 | [DATA_USAGE_LEDGER.md](DATA_USAGE_LEDGER.md) | 已用月份、开发集/最终holdout分区、本地盘点结果 |
 | [WORKFLOW.md](WORKFLOW.md) | 主控/用户Python分工及同轮更新规则 |
 | [AGENTS.md](../AGENTS.md) | 工作区、隐私和授权保护 |
@@ -22,10 +22,11 @@
 | 5月数据准备 | PR #18，`outputs/acn_gate1_prep/jpl_2019-05/` | 已合并快照与语义证据 |
 | 5月pilot | PR #21，`outputs/gate1_pilot/jpl_2019-05/` | 已合并单月筛选，原13件与M4负结果不变 |
 | 季节数据准备 | PR #23，`outputs/seasonal_prep/`、`outputs/seasonal_prep_corrections/` | 已合并；数据准备 `CONDITIONAL_PASS`，11月 `CURRENT_PROXY_ONLY` |
+| 开发集获取入口 | PR #30，`acn_jpl_development_months.py`、`scripts/acquire_jpl_development.py` | 已合并；只允许01/04/07/10，最终holdout03/06/09/12阻断；尚未下载新数据 |
 | 季节复核及诊断 | Issue #25，外置运行包与回传ZIP | 已审执行/汇总，Issue已完成关闭；`MIXED_SEASONAL_EVIDENCE` |
 | 特征分组消融及导出恢复 | Issue #26，外置运行包及恢复ZIP | 已审探索交付，Issue已完成关闭 |
 | 预测组合 | Issue #27，外置运行包与回传ZIP | 已审探索交付，Issue已完成关闭 |
-| 当前方法开发 | Issue #29 | 信息可靠性门控的M2/M3双专家预测；尚未运行新数据/模型 |
+| 当前方法开发 | Issue #29 | 信息可靠性门控的M2/M3双专家预测；下一步为开发集获取/QA |
 | 月份盘点摘要 | [evidence/month_inventory_20260907.json](evidence/month_inventory_20260907.json) | 脱敏目录摘要；不是数据完整性证书 |
 
 外置运行包、完整预测检查点和私有数组仍留本地。仓库保存其SHA、协议和审查来源，不冒称所有复现材料已入Git。
@@ -46,9 +47,9 @@
 
 ## Issue与PR的解释
 
-#19/#21为5月pilot；#20为已关闭重复方案。#22/#23季节获取和缺测修复均已完成，PR #23已合并。#25—#27已完成并关闭，保留其探索/诊断证据但不再作为当前执行入口。当前唯一研发Issue为#29。
+#19/#21为5月pilot；#20为已关闭重复方案。#22/#23季节获取和缺测修复均已完成，PR #23已合并。#25—#27已完成并关闭，保留其探索/诊断证据但不再作为当前执行入口。PR #30已合并开发集获取代码；当前唯一研发Issue为#29。
 
-早期#1—#6、#10、#15等历史审计/后续方向，不因当前方法开发自动验收或关闭。Gate 2、概率、调度、联邦和GPU扩展仍需单独授权。
+早期#1—#6、#10、#15等历史审计/后续方向，不因当前方法开发自动验收或关闭。Gate2、概率、调度、联邦和GPU扩展仍需单独授权。
 
 ## 远端维护与本地资产不是一回事
 

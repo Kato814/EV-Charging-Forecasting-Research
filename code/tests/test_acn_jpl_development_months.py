@@ -3,10 +3,10 @@ from __future__ import annotations
 import hashlib
 from datetime import timedelta
 
-import pytest
 import evcf.data.acn_jpl_full_month_qa as full_month_qa
 import evcf.data.acn_jpl_preparation as preparation
 import evcf.data.acn_jpl_seasonal_acquisition as acquisition
+import pytest
 from evcf.data.acn_jpl_development_months import (
     DEVELOPMENT_MONTHS,
     FINAL_HOLDOUT_MONTHS,
@@ -16,9 +16,9 @@ from evcf.data.acn_jpl_development_months import (
 )
 from evcf.data.acn_jpl_month_config import jpl_month_config, summarize_complete_metadata
 from evcf.data.acn_jpl_preparation import (
-    InventorySnapshot,
     SEASONAL_INVENTORY_DIGEST_ALGORITHM,
     SEASONAL_INVENTORY_SCHEMA_VERSION,
+    InventorySnapshot,
 )
 from evcf.data.acn_jpl_trajectory_quarantine import (
     TRAJECTORY_QUARANTINE,

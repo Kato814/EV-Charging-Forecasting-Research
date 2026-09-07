@@ -125,7 +125,7 @@ def installed_development_month_contracts() -> Iterator[Mapping[str, JPLMonthCon
     contracts = dict(development_month_contracts())
     compatibility_modules = _seasonal_compatibility_modules()
     for module in compatibility_modules:
-        if tuple(getattr(module, "SEASONAL_MONTHS", ())) != _EXPECTED_SEASONAL_MONTHS:
+        if tuple(module.SEASONAL_MONTHS) != _EXPECTED_SEASONAL_MONTHS:  # type: ignore[attr-defined]
             raise DevelopmentMonthContractError("imported seasonal allowlist drifted")
 
     import evcf.data.acn_jpl_full_month_qa as full_month_qa
@@ -133,7 +133,8 @@ def installed_development_month_contracts() -> Iterator[Mapping[str, JPLMonthCon
     old_approved = month_config._APPROVED_MONTHS
     old_configs = month_config._MONTH_CONFIGS
     old_module_months = tuple(
-        (module, getattr(module, "SEASONAL_MONTHS")) for module in compatibility_modules
+        (module, module.SEASONAL_MONTHS)  # type: ignore[attr-defined]
+        for module in compatibility_modules
     )
     old_quarantine_builder = full_month_qa.build_trajectory_quarantine_audit
 
@@ -141,7 +142,7 @@ def installed_development_month_contracts() -> Iterator[Mapping[str, JPLMonthCon
     month_config._MONTH_CONFIGS = {**old_configs, **contracts}
     extended_seasonal = (*_EXPECTED_SEASONAL_MONTHS, *DEVELOPMENT_MONTHS)
     for module in compatibility_modules:
-        setattr(module, "SEASONAL_MONTHS", extended_seasonal)
+        module.SEASONAL_MONTHS = extended_seasonal  # type: ignore[attr-defined]
     full_month_qa.build_trajectory_quarantine_audit = _development_quarantine_wrapper(
         old_quarantine_builder
     )
@@ -161,6 +162,6 @@ def installed_development_month_contracts() -> Iterator[Mapping[str, JPLMonthCon
     finally:
         full_month_qa.build_trajectory_quarantine_audit = old_quarantine_builder
         for module, old_months in old_module_months:
-            setattr(module, "SEASONAL_MONTHS", old_months)
+            module.SEASONAL_MONTHS = old_months  # type: ignore[attr-defined]
         month_config._APPROVED_MONTHS = old_approved
         month_config._MONTH_CONFIGS = old_configs

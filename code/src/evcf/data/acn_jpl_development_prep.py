@@ -1,17 +1,20 @@
 """Fail-closed preparation controller for the four JPL 2019 development months.
 
 This module reuses the reviewed single-month seasonal preparation path while
-keeping the historical 02/08/11 three-month publication contract unchanged.
-Only 2019-01/04/07/10 may be materialized here; final holdout months are never
-installed by this controller.
+keeping the historical 02/08/11 protocol and three-month publication contract
+unchanged. Only 2019-01/04/07/10 may be materialized here; final holdout months
+are never installed by this controller.
 """
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 from .acn_jpl_development_months import (
     DEVELOPMENT_MONTHS,
@@ -20,15 +23,16 @@ from .acn_jpl_development_months import (
 )
 from .acn_jpl_month_config import jpl_month_config
 from .acn_jpl_seasonal_prep import (
-    DEFAULT_SEASONAL_PROTOCOL_PATH,
     MonthPreparationResult,
     SeasonalPreparationError,
-    load_seasonal_preparation_protocol,
+    SeasonalPreparationProtocol,
     prepare_jpl_seasonal_month,
     verify_implementation_commit,
 )
 
+DEFAULT_DEVELOPMENT_PROTOCOL_PATH = Path("code/configs/acn_jpl_development_prep_2019.yaml")
 DEVELOPMENT_IMPLEMENTATION_PATHS = (
+    "code/configs/acn_jpl_development_prep_2019.yaml",
     "code/src/evcf/data/acn_jpl_development_months.py",
     "code/src/evcf/data/acn_jpl_development_prep.py",
     "scripts/prepare_jpl_development.py",
@@ -66,6 +70,266 @@ class DevelopmentPreparationResult:
             raise SeasonalPreparationError("DEVELOPMENT_RESULT_INVALID")
         if self.holdout_accessed is not False:
             raise SeasonalPreparationError("HOLDOUT_ACCESS_INVALID")
+
+
+def _exact_mapping(value: object, keys: tuple[str, ...], context: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping) or tuple(value) != keys:
+        raise SeasonalPreparationError("PROTOCOL_SCHEMA_INVALID")
+    if any(type(key) is not str for key in value):
+        raise SeasonalPreparationError("PROTOCOL_SCHEMA_INVALID")
+    return value
+
+
+def load_development_preparation_protocol(
+    path: str | Path = DEFAULT_DEVELOPMENT_PROTOCOL_PATH,
+) -> SeasonalPreparationProtocol:
+    """Load the closed 01/04/07/10 protocol without reusing the 02/08/11 identity."""
+
+    import yaml
+
+    class UniqueLoader(yaml.SafeLoader):
+        pass
+
+    def construct_mapping(
+        loader: yaml.SafeLoader,
+        node: yaml.nodes.MappingNode,
+        deep: bool = False,
+    ) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in loader.construct_pairs(node, deep=deep):
+            if type(key) is not str or key in result:
+                raise SeasonalPreparationError("PROTOCOL_SCHEMA_INVALID")
+            result[key] = value
+        return result
+
+    UniqueLoader.add_constructor(
+        yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+        construct_mapping,
+    )
+    source = Path(path)
+    try:
+        raw = source.read_bytes()
+        parsed = yaml.load(raw.decode("utf-8"), Loader=UniqueLoader)
+    except SeasonalPreparationError:
+        raise
+    except (OSError, UnicodeError, yaml.YAMLError) as exc:
+        raise SeasonalPreparationError("PROTOCOL_SCHEMA_INVALID") from exc
+
+    root = _exact_mapping(
+        parsed,
+        (
+            "schema_version",
+            "months",
+            "cleaning",
+            "aggregation",
+            "acquisition_gate",
+            "trajectory_quarantine",
+            "missing_trajectory",
+            "snapshots",
+            "features",
+            "publication",
+            "final_holdout",
+        ),
+        "PROTOCOL",
+    )
+    cleaning = _exact_mapping(
+        root["cleaning"],
+        (
+            "sampling_derivation",
+            "locf_mode_multiplier",
+            "locf_cap_seconds",
+            "boundary_sensitivity_seconds",
+        ),
+        "CLEANING",
+    )
+    aggregation = _exact_mapping(
+        root["aggregation"],
+        (
+            "bin_minutes",
+            "grid_policy",
+            "coverage_thresholds",
+            "main_valid_bin_field",
+            "minimum_valid_bin_rate",
+            "main_active_threshold_a",
+            "comparison_active_threshold_a",
+        ),
+        "AGGREGATION",
+    )
+    acquisition_gate = _exact_mapping(
+        root["acquisition_gate"],
+        ("charging_current_invalid_rate_max", "pilot_signal_invalid_rate_max"),
+        "ACQUISITION_GATE",
+    )
+    quarantine = _exact_mapping(
+        root["trajectory_quarantine"],
+        (
+            "policy",
+            "expected_counts",
+            "detector",
+            "preserve_raw",
+            "preserve_manifest",
+            "preserve_timestamps",
+            "sort_repair",
+            "timestamp_shift_seconds",
+            "interpolation",
+            "full_session_quarantine_allowed",
+        ),
+        "TRAJECTORY_QUARANTINE",
+    )
+    quarantine_counts = _exact_mapping(
+        quarantine["expected_counts"],
+        DEVELOPMENT_MONTHS,
+        "TRAJECTORY_QUARANTINE_COUNTS",
+    )
+    missing = _exact_mapping(
+        root["missing_trajectory"],
+        (
+            "preserve_invalid_container_structure",
+            "verify_official_structural_metadata",
+            "branchwise_availability",
+            "invalid_metadata_action",
+            "coverage_denominator_includes_structural_placeholders",
+            "whole_current_unobservable_overlap_rejects_target",
+            "pilot_only_missing_rejects_current_target",
+            "impute_future_labels",
+            "coverage_rescale_current",
+            "final_energy_reconstruction",
+            "offline_qa_reasons_are_features",
+            "active_count_semantics",
+        ),
+        "MISSING_TRAJECTORY",
+    )
+    snapshots = _exact_mapping(
+        root["snapshots"],
+        ("lookback_minutes", "horizons_minutes", "issue_step_minutes", "tiers"),
+        "SNAPSHOTS",
+    )
+    features = _exact_mapping(
+        root["features"],
+        ("raw_dimensions", "encoded_dimensions"),
+        "FEATURES",
+    )
+    publication = _exact_mapping(
+        root["publication"],
+        (
+            "local_interim_processed_only",
+            "public_seasonal_release_created",
+            "aggregate_status_stdout_only",
+        ),
+        "PUBLICATION",
+    )
+    holdout = _exact_mapping(
+        root["final_holdout"],
+        ("months", "access_allowed"),
+        "FINAL_HOLDOUT",
+    )
+
+    valid = bool(
+        root["schema_version"] == "acn-jpl-development-preparation-protocol/v1"
+        and root["months"] == list(DEVELOPMENT_MONTHS)
+        and cleaning
+        == {
+            "sampling_derivation": "mode_of_positive_raw_timestamp_differences",
+            "locf_mode_multiplier": 3,
+            "locf_cap_seconds": 60,
+            "boundary_sensitivity_seconds": 60,
+        }
+        and aggregation
+        == {
+            "bin_minutes": 15,
+            "grid_policy": "continuous_physical_utc",
+            "coverage_thresholds": [0.8, 0.9, 0.95],
+            "main_valid_bin_field": "valid_bin_90",
+            "minimum_valid_bin_rate": 0.8,
+            "main_active_threshold_a": 0.1,
+            "comparison_active_threshold_a": 1.0,
+        }
+        and acquisition_gate
+        == {
+            "charging_current_invalid_rate_max": 0.1,
+            "pilot_signal_invalid_rate_max": 0.1,
+        }
+        and quarantine_counts == {month: 0 for month in DEVELOPMENT_MONTHS}
+        and quarantine["policy"] == "reject_any_candidate"
+        and quarantine["detector"]
+        == "synchronized_current_pilot_raw_order_utc_nonmonotonic"
+        and quarantine["preserve_raw"] is True
+        and quarantine["preserve_manifest"] is True
+        and quarantine["preserve_timestamps"] is True
+        and quarantine["sort_repair"] is False
+        and quarantine["timestamp_shift_seconds"] == 0
+        and quarantine["interpolation"] is False
+        and quarantine["full_session_quarantine_allowed"] is False
+        and missing
+        == {
+            "preserve_invalid_container_structure": True,
+            "verify_official_structural_metadata": True,
+            "branchwise_availability": True,
+            "invalid_metadata_action": "stop_month_preparation",
+            "coverage_denominator_includes_structural_placeholders": True,
+            "whole_current_unobservable_overlap_rejects_target": True,
+            "pilot_only_missing_rejects_current_target": False,
+            "impute_future_labels": False,
+            "coverage_rescale_current": False,
+            "final_energy_reconstruction": False,
+            "offline_qa_reasons_are_features": False,
+            "active_count_semantics": "observed_active_lower_bound_unknown_is_not_inactive",
+        }
+        and snapshots
+        == {
+            "lookback_minutes": 1440,
+            "horizons_minutes": [15, 30, 60, 120, 240],
+            "issue_step_minutes": 15,
+            "tiers": ["M1", "M2", "M3"],
+        }
+        and features
+        == {
+            "raw_dimensions": [195, 201, 311],
+            "encoded_dimensions": [195, 204, 391],
+        }
+        and publication
+        == {
+            "local_interim_processed_only": True,
+            "public_seasonal_release_created": False,
+            "aggregate_status_stdout_only": True,
+        }
+        and holdout == {"months": list(FINAL_HOLDOUT_MONTHS), "access_allowed": False}
+    )
+    if not valid:
+        raise SeasonalPreparationError("PROTOCOL_SCHEMA_INVALID")
+
+    return SeasonalPreparationProtocol(
+        config_sha256=hashlib.sha256(raw).hexdigest(),
+        locf_mode_multiplier=3,
+        locf_cap_seconds=60,
+        boundary_sensitivity_seconds=60,
+        coverage_thresholds=(0.8, 0.9, 0.95),
+        minimum_valid_bin_rate=0.8,
+        main_active_threshold_a=0.1,
+        comparison_active_threshold_a=1.0,
+        lookback_minutes=1440,
+        horizons_minutes=(15, 30, 60, 120, 240),
+        issue_step_minutes=15,
+        trajectory_quarantine_month="NONE",
+        trajectory_quarantine_expected_counts=(0, 0, 0, 0),  # type: ignore[arg-type]
+        trajectory_quarantine_backward_seconds=0,
+        trajectory_quarantine_preserves_raw=True,
+        trajectory_quarantine_preserves_connected=True,
+        preserve_invalid_container_structure=True,
+        enforce_known_incomplete_current=True,
+    )
+
+
+@contextmanager
+def _installed_development_protocol_loader():  # type: ignore[no-untyped-def]
+    import evcf.data.acn_jpl_seasonal_prep as seasonal_prep
+
+    original = seasonal_prep.load_seasonal_preparation_protocol
+    seasonal_prep.load_seasonal_preparation_protocol = load_development_preparation_protocol
+    try:
+        yield
+    finally:
+        seasonal_prep.load_seasonal_preparation_protocol = original
 
 
 def _verify_file_at_commit(root: Path, commit: str, relative: str) -> None:
@@ -125,7 +389,7 @@ def prepare_jpl_development_data(
     processed_root: str | Path,
     code_commit: str,
     repo_root: str | Path = ".",
-    protocol_path: str | Path = DEFAULT_SEASONAL_PROTOCOL_PATH,
+    protocol_path: str | Path = DEFAULT_DEVELOPMENT_PROTOCOL_PATH,
     month_runner: Callable[..., MonthPreparationResult] | None = None,
     implementation_verifier: Callable[..., None] | None = None,
 ) -> DevelopmentPreparationResult:
@@ -150,11 +414,11 @@ def prepare_jpl_development_data(
         else implementation_verifier
     )
     verifier(code_commit, repo_root=repo_root)
-    protocol = load_seasonal_preparation_protocol(protocol_path)
+    protocol = load_development_preparation_protocol(protocol_path)
     runner = prepare_jpl_seasonal_month if month_runner is None else month_runner
 
     results: list[MonthPreparationResult] = []
-    with installed_development_month_contracts():
+    with installed_development_month_contracts(), _installed_development_protocol_loader():
         for month in DEVELOPMENT_MONTHS:
             config = jpl_month_config(month)
             result = runner(
@@ -196,8 +460,10 @@ def prepare_jpl_development_data(
 
 
 __all__ = [
+    "DEFAULT_DEVELOPMENT_PROTOCOL_PATH",
     "DEVELOPMENT_IMPLEMENTATION_PATHS",
     "DevelopmentPreparationResult",
+    "load_development_preparation_protocol",
     "prepare_jpl_development_data",
     "verify_development_implementation_commit",
 ]

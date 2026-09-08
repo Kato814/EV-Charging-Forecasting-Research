@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 from evcf.data.acn_jpl_development_prep import DevelopmentPreparationResult
+
 from scripts.prepare_jpl_development import (
     DEVELOPMENT_PREPARATION_AUTHORIZATION_MESSAGE,
     build_parser,

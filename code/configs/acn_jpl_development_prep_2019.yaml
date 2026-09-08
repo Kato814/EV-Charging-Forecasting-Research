@@ -1,0 +1,86 @@
+schema_version: acn-jpl-development-preparation-protocol/v1
+months:
+  - 2019-01
+  - 2019-04
+  - 2019-07
+  - 2019-10
+cleaning:
+  sampling_derivation: mode_of_positive_raw_timestamp_differences
+  locf_mode_multiplier: 3
+  locf_cap_seconds: 60
+  boundary_sensitivity_seconds: 60
+aggregation:
+  bin_minutes: 15
+  grid_policy: continuous_physical_utc
+  coverage_thresholds:
+    - 0.8
+    - 0.9
+    - 0.95
+  main_valid_bin_field: valid_bin_90
+  minimum_valid_bin_rate: 0.8
+  main_active_threshold_a: 0.1
+  comparison_active_threshold_a: 1.0
+acquisition_gate:
+  charging_current_invalid_rate_max: 0.1
+  pilot_signal_invalid_rate_max: 0.1
+trajectory_quarantine:
+  policy: reject_any_candidate
+  expected_counts:
+    2019-01: 0
+    2019-04: 0
+    2019-07: 0
+    2019-10: 0
+  detector: synchronized_current_pilot_raw_order_utc_nonmonotonic
+  preserve_raw: true
+  preserve_manifest: true
+  preserve_timestamps: true
+  sort_repair: false
+  timestamp_shift_seconds: 0
+  interpolation: false
+  full_session_quarantine_allowed: false
+missing_trajectory:
+  preserve_invalid_container_structure: true
+  verify_official_structural_metadata: true
+  branchwise_availability: true
+  invalid_metadata_action: stop_month_preparation
+  coverage_denominator_includes_structural_placeholders: true
+  whole_current_unobservable_overlap_rejects_target: true
+  pilot_only_missing_rejects_current_target: false
+  impute_future_labels: false
+  coverage_rescale_current: false
+  final_energy_reconstruction: false
+  offline_qa_reasons_are_features: false
+  active_count_semantics: observed_active_lower_bound_unknown_is_not_inactive
+snapshots:
+  lookback_minutes: 1440
+  horizons_minutes:
+    - 15
+    - 30
+    - 60
+    - 120
+    - 240
+  issue_step_minutes: 15
+  tiers:
+    - M1
+    - M2
+    - M3
+features:
+  raw_dimensions:
+    - 195
+    - 201
+    - 311
+  encoded_dimensions:
+    - 195
+    - 204
+    - 391
+publication:
+  local_interim_processed_only: true
+  public_seasonal_release_created: false
+  aggregate_status_stdout_only: true
+final_holdout:
+  months:
+    - 2019-03
+    - 2019-06
+    - 2019-09
+    - 2019-12
+  access_allowed: false

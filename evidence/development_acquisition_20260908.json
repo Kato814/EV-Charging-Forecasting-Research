@@ -1,0 +1,30 @@
+{
+  "schema_version": "evcf-development-acquisition-evidence/v1",
+  "source_status_file_sha256": "7a11053b5a1d7230be595c5e7692349a381ca9b67ccf1418d58426aa86e8a1e9",
+  "launcher_schema_version": "evcf-development-acquisition-launcher/v1.1",
+  "status": "COMPLETE",
+  "expected_code_commit": "e8370693c31f540d90c9a17e47534fbb0034e777",
+  "metadata_source_inventory_sha256": "bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a",
+  "metadata_candidate_count": 1,
+  "metadata_named_candidate_count": 3,
+  "metadata_structural_candidate_count": 4,
+  "metadata_validation_reason_counts": {
+    "PASS": 1,
+    "SOURCE_LAYOUT": 3,
+    "SOURCE_MANIFEST": 3
+  },
+  "development_months": {
+    "2019-01": {"local_records": 1372, "carry_records": 0, "combined_records": 1372, "valid_daily_chunks": 31, "qa_status": "PASS"},
+    "2019-04": {"local_records": 1524, "carry_records": 0, "combined_records": 1524, "valid_daily_chunks": 30, "qa_status": "PASS"},
+    "2019-07": {"local_records": 1489, "carry_records": 0, "combined_records": 1489, "valid_daily_chunks": 31, "qa_status": "PASS"},
+    "2019-10": {"local_records": 1672, "carry_records": 1, "combined_records": 1673, "valid_daily_chunks": 31, "qa_status": "PASS"}
+  },
+  "trajectory_quarantine_total": 0,
+  "full_session_quarantine_total": 0,
+  "holdout_accessed": false,
+  "models_trained": false,
+  "processed_data_created": false,
+  "existing_worktrees_preserved": true,
+  "automatic_cleanup": false,
+  "interpretation": "Development raw acquisition and full-month QA accepted; next step is development-set preparation/processed snapshots. Final holdout remains sealed."
+}

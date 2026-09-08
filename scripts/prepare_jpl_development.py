@@ -17,6 +17,7 @@ from typing import Any, TextIO
 DEVELOPMENT_PREPARATION_AUTHORIZATION_MESSAGE = (
     "未授权 JPL 2019 方法开发月份数据准备；必须显式提供 --authorize-development-prepare。"
 )
+_DEFAULT_PROTOCOL_PATH = Path("code/configs/acn_jpl_development_prep_2019.yaml")
 _SAFE_REASON_CODES = frozenset(
     {
         "ACQUISITION_INTEGRITY_FAILED",
@@ -94,7 +95,7 @@ def run_development_prepare_cli(
     processed_root: str | Path,
     code_commit: str,
     repo_root: str | Path = ".",
-    protocol_path: str | Path = "code/configs/acn_jpl_seasonal_prep_2019.yaml",
+    protocol_path: str | Path = _DEFAULT_PROTOCOL_PATH,
     runner: Callable[..., object] | None = None,
     stdout: TextIO = sys.stdout,
 ) -> int:
@@ -177,7 +178,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--protocol-path",
         type=Path,
-        default=Path("code/configs/acn_jpl_seasonal_prep_2019.yaml"),
+        default=_DEFAULT_PROTOCOL_PATH,
     )
     return parser
 

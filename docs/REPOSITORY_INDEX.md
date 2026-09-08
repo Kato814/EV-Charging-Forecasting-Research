@@ -1,18 +1,18 @@
 # 仓库分层索引
 
-更新：2026-09-07。当前入口只使用 [CURRENT_STATUS](../CURRENT_STATUS.md) 和 [HANDOFF](../HANDOFF.md)。本索引区分当前任务、已审证据及历史设计，不自动授权本地操作。
+更新：2026-09-08。当前入口只使用 [CURRENT_STATUS](../CURRENT_STATUS.md) 和 [HANDOFF](../HANDOFF.md)。本索引区分当前任务、已审证据及历史设计，不自动授权本地操作。
 
 ## 当前入口与台账
 
 | 文件 | 用途 |
 | --- | --- |
-| CURRENT_STATUS.md | 当前模型开发阶段、Issue #29、开发集获取与授权边界 |
+| CURRENT_STATUS.md | 当前模型开发阶段、Issue #29、开发集processed准备与授权边界 |
 | HANDOFF.md | 接管口径、方法方向、数据分区、版本和资产保护 |
-| [EXPERIMENT_LEDGER.md](EXPERIMENT_LEDGER.md) | PR #21/#23/#30及Issue #25—#29的执行、审查、结果与SHA |
-| [DATA_USAGE_LEDGER.md](DATA_USAGE_LEDGER.md) | 已用月份、开发集/最终holdout分区、本地盘点结果 |
+| [EXPERIMENT_LEDGER.md](EXPERIMENT_LEDGER.md) | 已执行实验、PR #34协议/代码及当前证据身份 |
+| [DATA_USAGE_LEDGER.md](DATA_USAGE_LEDGER.md) | 已用月份、开发集/最终holdout分区及当前数据用途 |
 | [WORKFLOW.md](WORKFLOW.md) | 主控/用户Python分工及同轮更新规则 |
 | [AGENTS.md](../AGENTS.md) | 工作区、隐私和授权保护 |
-| [ROADMAP.md](../ROADMAP.md) | 后续依赖，不是自动运行指令 |
+| [ROADMAP.md](../ROADMAP.md) | 阶段依赖，不是自动运行指令 |
 
 ## 已冻结证据与实际存放位置
 
@@ -20,36 +20,38 @@
 | --- | --- | --- |
 | 5月完整获取 | PR #16，`outputs/acn_gate0/jpl_2019-05-full-ts/` | 已合并历史获取证据 |
 | 5月数据准备 | PR #18，`outputs/acn_gate1_prep/jpl_2019-05/` | 已合并快照与语义证据 |
-| 5月pilot | PR #21，`outputs/gate1_pilot/jpl_2019-05/` | 已合并单月筛选，原13件与M4负结果不变 |
-| 季节数据准备 | PR #23，`outputs/seasonal_prep/`、`outputs/seasonal_prep_corrections/` | 已合并；数据准备 `CONDITIONAL_PASS`，11月 `CURRENT_PROXY_ONLY` |
-| 开发集获取入口 | PR #30，`acn_jpl_development_months.py`、`scripts/acquire_jpl_development.py` | 已合并；只允许01/04/07/10，最终holdout03/06/09/12阻断；尚未下载新数据 |
-| 季节复核及诊断 | Issue #25，外置运行包与回传ZIP | 已审执行/汇总，Issue已完成关闭；`MIXED_SEASONAL_EVIDENCE` |
-| 特征分组消融及导出恢复 | Issue #26，外置运行包及恢复ZIP | 已审探索交付，Issue已完成关闭 |
-| 预测组合 | Issue #27，外置运行包与回传ZIP | 已审探索交付，Issue已完成关闭 |
-| 当前方法开发 | Issue #29 | 信息可靠性门控的M2/M3双专家预测；下一步为开发集获取/QA |
-| 月份盘点摘要 | [evidence/month_inventory_20260907.json](evidence/month_inventory_20260907.json) | 脱敏目录摘要；不是数据完整性证书 |
+| 5月pilot | PR #21，`outputs/gate1_pilot/jpl_2019-05/` | 已合并，M4负结果保留 |
+| 季节数据准备 | PR #23 | 已合并；`CONDITIONAL_PASS`，11月 `CURRENT_PROXY_ONLY` |
+| 开发集获取入口 | PR #30 | 已合并；01/04/07/10 raw本地获取已完成并QA PASS |
+| **开发集数据准备入口** | **PR #34，`acn_jpl_development_prep_2019.yaml`、`acn_jpl_development_prep.py`、`scripts/prepare_jpl_development.py`** | **已合并；当前等待用户本地processed准备** |
+| 季节复核及诊断 | Issue #25，外置运行包与回传ZIP | 已审，`MIXED_SEASONAL_EVIDENCE` |
+| 特征分组消融 | Issue #26 | 已审探索交付 |
+| 预测组合 | Issue #27 | 已审探索交付；简单平均为强基线 |
+| 当前方法开发 | Issue #29 | 先完成开发集processed审查，再进入可靠性门控训练 |
+| 月份盘点摘要 | [evidence/month_inventory_20260907.json](evidence/month_inventory_20260907.json) | 历史脱敏目录摘要 |
+| 开发集raw摘要 | [evidence/development_acquisition_20260908.json](evidence/development_acquisition_20260908.json) | 四个开发月获取/QA脱敏摘要 |
 
-外置运行包、完整预测检查点和私有数组仍留本地。仓库保存其SHA、协议和审查来源，不冒称所有复现材料已入Git。
+外置运行包、raw/interim/processed、完整预测检查点和私有数组仍留本地。仓库保存协议、SHA及去标识化证据，不冒称私有复现材料已全部入Git。
 
 ## 数据用途索引
 
 - 已使用/探索：2019-02、05、08、11；
-- 方法开发集：2019-01、04、07、10；
-- 最终独立保留集：2019-03、06、09、12。
+- 方法开发集：2019-01、04、07、10；raw已获取，当前只允许processed准备/后续方法开发；
+- 最终独立保留集：2019-03、06、09、12；继续封存。
 
-这一分区在新下载前冻结。当前下一阶段只允许开发集获取/QA，最终保留集不得提前获取或用于模型选择。详细规则见 [DATA_USAGE_LEDGER](DATA_USAGE_LEDGER.md)。
+PR #34采用独立开发集协议；旧02/08/11季节YAML不扩展到开发集。详细规则见 [DATA_USAGE_LEDGER](DATA_USAGE_LEDGER.md)。
 
 ## 历史设计：原位归档，非当前指令
 
-`literature/`、`datasets/`、`related_code/` 是文献、数据审计和外部代码来源。`research/`中v0.4/v0.5/v0.6/v0.7设计，`experiments/gate0_gate2_protocol_v0.6.md`、`docs/ROUND2*`、`docs/ROUND3*` 和 `docs/superpowers/plans/` 是历史研究/实施材料，不等于已经执行或新授权。
+`literature/`、`datasets/`、`related_code/` 以及 `research/` 中早期设计继续用于追溯，不等于当前执行授权。旧计划不因文件存在而自动运行。
 
-它们保留原路径及日期以维持引用和 `scripts/validate_library.py` 依赖；不为“仓库整洁”删除冻结结果、失败记录、原清单或SHA。失效当前操作文字从入口移除，历史内容通过Git追溯。
+冻结结果、失败记录、SHA和M4负结果保留。失效当前操作文字从入口移除，历史内容通过Git追溯。
 
 ## Issue与PR的解释
 
-#19/#21为5月pilot；#20为已关闭重复方案。#22/#23季节获取和缺测修复均已完成，PR #23已合并。#25—#27已完成并关闭，保留其探索/诊断证据但不再作为当前执行入口。PR #30已合并开发集获取代码；当前唯一研发Issue为#29。
+#22/#23季节数据修复已完成；#25—#27已完成并关闭。PR #30完成开发集raw获取入口，PR #34完成开发集processed准备入口。当前唯一研发Issue为#29。
 
-早期#1—#6、#10、#15等历史审计/后续方向，不因当前方法开发自动验收或关闭。Gate2、概率、调度、联邦和GPU扩展仍需单独授权。
+Gate2、概率、调度、联邦和GPU扩展仍需单独授权。
 
 ## 远端维护与本地资产不是一回事
 

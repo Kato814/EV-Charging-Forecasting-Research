@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -158,9 +159,7 @@ def test_parser_requires_explicit_roots_and_has_no_month_override() -> None:
         ]
     )
     assert args.authorize_development_prepare is True
-    assert args.protocol_path == __import__("pathlib").Path(
-        "code/configs/acn_jpl_development_prep_2019.yaml"
-    )
+    assert args.protocol_path == Path("code/configs/acn_jpl_development_prep_2019.yaml")
     assert not hasattr(args, "month")
     assert not hasattr(args, "months")
     assert not hasattr(args, "public_root")

@@ -2,31 +2,25 @@
 
 更新日期：2026-09-08。本文件是当前状态的唯一入口；历史执行记录见 [实验台账](docs/EXPERIMENT_LEDGER.md)，数据用途见 [数据台账](docs/DATA_USAGE_LEDGER.md)，接管规则见 [HANDOFF](HANDOFF.md)。
 
-**通俗说明：现在仍处于模型开发阶段。新的方法开发月份 2019-01/04/07/10 已经全部下载并通过全月获取QA；下一步不是再次下载，而是把这四个月按已冻结的数据语义构造成可训练的 processed 快照，再开发会话信息可靠性门控。最终验证月份 2019-03/06/09/12 继续封存。**
+**通俗说明：当前仍处于模型开发阶段。方法开发月份2019-01/04/07/10的raw已经全部获取并通过全月QA；开发集专用的数据准备代码和协议也已经完成审查并合入main。下一步是用户本地生成四个月的interim/processed、15 min聚合和M1–M3快照，完成后才开始可靠性门控模型开发。最终验证月份2019-03/06/09/12继续封存。**
 
 ## 1. 当前唯一研发任务
 
 | 项目 | 当前状态 |
 | --- | --- |
 | 当前Issue | [#29 基于信息可靠性门控的M2/M3双专家预测](https://github.com/Kato814/EV-Charging-Forecasting-Research/issues/29) |
-| 当前阶段 | **模型开发**；当前子步骤为开发集数据准备，不是旧数据返工，也不是最终论文验证 |
+| 当前阶段 | **模型开发**；当前子步骤为开发集本地数据准备 |
 | 基础专家 | M2：历史/日历+当前站级聚合状态；M3：M2+当前连接会话细粒度合法状态 |
-| 门控方向 | 只用issue-time可得的会话观测完整度、连接规模、预测时距及M2/M3预测差等低维变量决定M3权重；信息不足时向M2回退 |
-| 强基线 | M2、完整M3、0.5简单平均；普通MoE/动态加权本身不作为创新 |
+| 门控方向 | issue-time可得的会话观测完整度、连接规模、预测时距、M2/M3预测差等低维变量决定M3权重；信息不足时向M2回退 |
+| 强基线 | M2、完整M3、0.5简单平均 |
 | 开发集raw | **2019-01/04/07/10 已获取并QA PASS** |
-| 下一步 | 为01/04/07/10生成interim/processed、15 min聚合、M1–M3样本与快照SHA；之后才进入门控器训练 |
-| 最终holdout | 2019-03/06/09/12；当前仍禁止时序获取和模型运行 |
-| Codex | 暂停新任务；主控开发/审查，用户用冻结Python环境执行明确授权任务 |
+| 开发集准备代码 | **PR #34已合并，等待本地执行** |
+| 最终holdout | 2019-03/06/09/12；仍禁止时序获取和模型运行 |
+| 模型训练 | 当前尚未开始新开发集模型训练 |
 
-## 2. 开发集获取结果
+## 2. 开发集raw获取已验收
 
-用户回传 `evcf_development_acquisition_status_20260907T182836Z.json`，状态为 `COMPLETE`。原文件SHA256：
-
-```text
-7a11053b5a1d7230be595c5e7692349a381ca9b67ccf1418d58426aa86e8a1e9
-```
-
-冻结完整历史metadata源SHA256继续匹配：
+回传文件 `evcf_development_acquisition_status_20260907T182836Z.json` 状态为 `COMPLETE`。冻结完整历史metadata源SHA256继续匹配：
 
 ```text
 bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a
@@ -39,53 +33,64 @@ bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a
 | 2019-07 | 1489 | 0 | 1489 | 31/31 | PASS |
 | 2019-10 | 1672 | 1 | 1673 | 31/31 | PASS |
 
-四个月 `trajectory_quarantine_count=0`、`full_session_quarantine_count=0`、月级 `reason_codes=[]`。本次没有训练模型，也没有创建processed数据；`holdout_accessed=false`。脱敏证据见 [development_acquisition_20260908.json](evidence/development_acquisition_20260908.json)。
+四个月 `trajectory_quarantine_count=0`、`full_session_quarantine_count=0`，没有模型训练或processed输出，`holdout_accessed=false`。`SOURCE_LAYOUT=3`/`SOURCE_MANIFEST=3`仅是其他metadata候选被拒绝的筛选诊断，不是月份运行失败。
 
-`metadata_validation_reason_counts` 中的 `SOURCE_LAYOUT=3`、`SOURCE_MANIFEST=3` 只是**候选metadata目录筛选诊断**：v1.1扫描到4个结构候选，其中仅1个通过冻结源验证；其余3个被拒绝。它们不是开发月份运行失败。最终总状态和四个月月级状态均为PASS。
+## 3. PR #34：开发集专用数据准备协议与入口
 
-## 3. 数据分区继续冻结
+PR #34最终HEAD：
 
-已参与开发或后验探索：`2019-02 / 05 / 08 / 11`，不能重新声明为独立holdout。
+```text
+75590bf788712aaad3138367fe9e470b11777644
+```
 
-- **方法开发集：2019-01、04、07、10**；raw现已获取并通过本轮获取QA，后续允许用于数据准备与门控方法开发；
-- **最终独立保留集：2019-03、06、09、12**；方法、门控变量、损失、阈值、评价和停止规则全部冻结后才允许获取/运行；
-- 不根据后续预测表现换月。
+main合并提交：
 
-## 4. 代码、版本、验收与合并状态
+```text
+2643e15a7099b5b25ec0d4f8d22ee4195ac4b6f1
+```
 
-- PR #21 已合并：5月预测实验，`c2af2cdf4ecf5dad059d2ac92e929df8df35d42b`；结论 `PASS_ACTIVE_SESSION_DROP_M4`。
-- PR #23 已合并：季节数据准备已审HEAD `4c2b1988ea9927b27287d6935bd22d01bd9df875`；main合并 `faa4cc8ad9051bd2f17f695e7c7741d769aee263`。旧季节数据准备仍为 `CONDITIONAL_PASS`，11月 `CURRENT_PROXY_ONLY`，季节kW未授权。
-- PR #30 已合并：开发集获取入口最终HEAD `e8370693c31f540d90c9a17e47534fbb0034e777`，main合并 `1d4c5f377f757aaea80b23987047f97899e958a4`；CI为1048 passed、2 skipped，compileall和Ruff均PASS。
-- Issue #22、#25、#26、#27已完成关闭；Issue #29为当前研发任务。
+最终CI：`1058 passed, 2 skipped`，`compileall PASS`，`Ruff PASS`。
 
-执行完成、CI通过、科学假设通过和PR合并是不同状态，不混用。
+关键设计：
 
-## 5. 启动器故障记录
+1. 新增 `code/configs/acn_jpl_development_prep_2019.yaml`，协议身份只对应01/04/07/10；
+2. 清洗、15 min聚合、snapshot和M1–M3特征数值规则与已审季节单月路径一致；
+3. 四个开发月trajectory/full-session quarantine期望均为0；发现新同步时间倒退即fail-closed；
+4. 只生成本地ignored的interim/processed和脱敏汇总，不创建旧02/08/11的37件季节发布包；
+5. 旧 `acn_jpl_seasonal_prep_2019.yaml` 保持其02/08/11、11月唯一3596 s例外和历史发布身份，不被改写；
+6. 最终holdout 03/06/09/12仍不安装、不授权；
+7. 不训练模型、不重新下载raw。
 
-首版 `evcf_dev_acquisition_launcher_v1.py` 曾在联网前以 `VERIFIED_METADATA_NOT_LOCATED` 停止。原因是启动器对完整历史metadata目录名称假设过窄，而不是metadata丢失或下载失败。v1.1改为依据冻结的42个JSONL+42个manifest结构、33638记录和源SHA识别，不依赖目录名；本次成功运行复用了已创建的独立development worktree，没有自动清理既有资产。
+第一版代码曾准备直接复用旧季节YAML。主控在任何本地processed结果产生之前否决了这一协议身份，并改为独立开发集YAML；这是预运行协议修正，不是依据模型结果调整。
 
-## 6. 已有研究结果与方法边界
+## 4. 数据分区继续冻结
 
-| 工作 | 已审结论 |
-| --- | --- |
-| 5月pilot | 会话状态有增量价值；M4-lite不保留进入主线 |
-| 2/8/11月季节复核 | 8月通过原月度筛选；2月和11月未满足全部条件；总体 `MIXED_SEASONAL_EVIDENCE` |
-| 负值/日级诊断 | 存在非微小负预测，但仅置零不能解释或消除主要相对退化；预测负号不是V2G证据 |
-| 会话特征分组消融 | 不支持统一删除实时状态/进度/用户申报中的任一整组 |
-| 预测组合 | 简单平均相对M2的15个“月份×时距”MAE均下降；相对M3非全面占优；校准加权未稳定胜过简单平均 |
+- 已使用/探索：2019-02、05、08、11；
+- **方法开发集：2019-01、04、07、10**，raw已获取，允许数据准备和门控开发；
+- **最终独立保留集：2019-03、06、09、12**，在门控变量、模型、超参数、阈值、非负处理、评价、统计和停止规则全部冻结前不得获取时序或运行模型。
 
-现有证据支持“**M2与M3包含互补信息，会话信息的增量价值随时距和信息可靠程度变化**”。2026年已有EV负荷动态堆叠、station/horizon-specific gating和多专家融合，当前方法不能把“动态加权/MoE”本身作为创新。候选贡献必须落在不同信息层级专家、会话可观测性驱动门控、信息不足时可解释回退，以及严格issue-time因果边界。
+不根据后续预测表现换月。
 
-若开发集上可靠性门控不能稳定超过简单平均，或收益只能靠高复杂度/不可解释调参取得，则停止该方向，不消耗最终holdout。
+## 5. 已有研究结论
 
-## 7. 长期边界与资产保护
+- 5月pilot：`PASS_ACTIVE_SESSION_DROP_M4`；M3近端有增量价值，M4-lite退出主线。
+- 2/8/11季节复核：总体 `MIXED_SEASONAL_EVIDENCE`。
+- 负值诊断：存在非微小负预测，但仅置零不能解释主要M3退化；负预测不是V2G测量证据。
+- 会话分组消融：不支持统一删除实时状态、进度或用户申报任一整组。
+- 预测组合：0.5简单平均相对M2的15个“月份×时距”MAE均下降，但相对M3非全面占优；校准权重未稳定胜过简单平均。
 
-目标保持 `station_current_mean_a`、单位A。缺测不是零；整段current缺测不能被高coverage掩盖；最终kWh、未来离开/轨迹、未来到达、离线异常原因和测试误差不能进入在线特征或门控。现有清洗的非负目标不能反推原始数据绝无V2G。
+因此当前假设是：M2/M3信息互补，而M3增量价值随时距和会话信息可靠性变化。普通MoE/动态加权本身不是创新；当前可检验贡献是**会话可观测性驱动的低维门控与向M2回退**。
 
-不重下旧02/05/08/11 raw，也不重新获取已成功的01/04/07/10。保留用户原main未提交修改、所有登记worktree、raw/interim/processed，以及运行后的 `evcf_seasonal_runner_v1_1`、`evcf_session_ablation_v1`、`evcf_forecast_combination_v1` 和各自 `local_runs/private`。开发worktree和新raw同样保留，不自动清理。
+若开发集上可靠性门控不能稳定超过简单平均，或只能靠高复杂度不可解释调参取得收益，则停止该方向，不消耗最终holdout。
 
-不恢复M4，不启动Gate2/概率/联邦/调度。
+## 6. 下一步与资产保护
 
-## 8. 状态维护规则
+下一步只运行PR #34合并后的开发集准备入口：复用已有raw worktree，生成01/04/07/10的interim/processed、15 min聚合、M1–M3快照与processed SHA。完成并审查后再进入模型训练。
 
-每次新增数据授权、方法冻结、实验完成、故障恢复或结论变化，主控必须在同轮更新本页、HANDOFF及相关台账，并校对README/ROADMAP/code/README/索引。失效当前指令直接替换；历史证据通过Git历史、Issue/PR和台账保留。
+不重下任何已完成raw；不切换/清理已有数据worktree；保留原main未提交修改、旧季节worktree和三套外置实验目录及其 `local_runs/private`。不执行 `reset --hard`、`clean`、盲目stash或force push。
+
+不恢复M4，不启动Gate2、概率预测、联邦学习或调度。
+
+## 7. 状态维护规则
+
+每次新增数据授权、数据准备完成、方法冻结、实验完成、故障恢复或结论变化，主控必须在同轮更新本页、HANDOFF及相关台账，并校对README/ROADMAP/code/README/索引。失效当前指令直接替换；历史证据通过Git历史、Issue/PR和台账保留。

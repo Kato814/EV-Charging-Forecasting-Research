@@ -53,12 +53,13 @@ def _seasonal_compatibility_modules() -> tuple[ModuleType, ...]:
     # Delayed imports avoid expanding the import surface for callers that only
     # need the partition constants or a dry month-contract inspection.
     import evcf.data.acn_jpl_full_month_qa as full_month_qa
+    import evcf.data.acn_jpl_gate1_prep as gate1_prep
     import evcf.data.acn_jpl_preparation as preparation
     import evcf.data.acn_jpl_seasonal_acquisition as acquisition
     import evcf.data.acn_jpl_seasonal_prep as seasonal_prep
     import evcf.forecasting.acn_jpl_gate1_data as gate1_data
 
-    return acquisition, full_month_qa, preparation, seasonal_prep, gate1_data
+    return acquisition, full_month_qa, gate1_prep, preparation, seasonal_prep, gate1_data
 
 
 def _development_quarantine_wrapper(original: Any) -> Any:

@@ -21,17 +21,32 @@ PR #21为5月预测实验基线；PR #23季节数据准备已合并。旧季节�
 
 ### PR #34：interim/processed准备
 
-PR #34最终HEAD：`75590bf788712aaad3138367fe9e470b11777644`；main合并：`2643e15a7099b5b25ec0d4f8d22ee4195ac4b6f1`。最终CI：1058 passed、2 skipped，compileall/Ruff PASS。
+PR #34最终HEAD：`75590bf788712aaad3138367fe9e470b11777644`；main合并：`2643e15a7099b5b25ec0d4f8d22ee4195ac4b6f1`。
 
 新增：
-
 - `code/configs/acn_jpl_development_prep_2019.yaml`：01/04/07/10专用冻结协议；
 - `evcf.data.acn_jpl_development_prep`：固定四月控制器，复用已审 `prepare_jpl_seasonal_month`；
 - `scripts/prepare_jpl_development.py`：显式授权的本地数据准备CLI。
 
 协议规定四个开发月trajectory/full-session quarantine均为0；只生成本地ignored interim/processed、15 min、M1–M3 snapshot/feature blocks和SHA，不创建旧02/08/11的37件季节发布。最终holdout继续阻断。
 
-旧 `code/configs/acn_jpl_seasonal_prep_2019.yaml` 保持其02/08/11身份、11月历史特例和旧发布合同，不作为开发集协议。
+### PR #37：清洗校验兼容性修复
+
+首次Windows processed准备经只读诊断定位：`evcf.data.acn_jpl_gate1_prep.validate_seasonal_cleaning_documents()` 仍使用按值导入的旧02/08/11 `SEASONAL_MONTHS`，而PR #34开发上下文未扩展该模块，因此2019-01在清洗文档校验时被拒绝。
+
+PR #37最终HEAD：`e47f05cb7a663df9c599270ac939c9301d26840b`；main合并：`c1ff4e675ae14e7667e0c6b7f887fb15319aff38`。最终CI：1058 passed、2 skipped，compileall/Ruff PASS。
+
+修复只把 `acn_jpl_gate1_prep` 加入临时月份兼容列表并在上下文退出时恢复；没有改清洗参数、协议、特征、quarantine、模型或holdout权限。
+
+## 当前本地执行入口
+
+当前只允许使用外置 `evcf_dev_preparation_launcher_v1_1.py` 重试01/04/07/10 processed准备：
+
+- 精确绑定PR #37 main合并提交；
+- 使用新的detached code worktree，不删除旧PR #34代码worktree；
+- 重试前再次校验metadata/raw，并要求四个月当前不存在interim/processed月份目录；
+- 不联网、不训练模型、不访问03/06/09/12；
+- 成功后只回传脱敏status JSON。
 
 ## 已执行的外置运行包
 
@@ -55,4 +70,4 @@ PR #34最终HEAD：`75590bf788712aaad3138367fe9e470b11777644`；main合并：`26
 
 本地继续使用 `evcf-gate1-pilot` / Python3.11.16，不无条件升级。开发集processed准备为本地CPU数据处理，不需要ACN token、不下载新raw、不训练模型。
 
-raw/interim/processed、完整预测、模型和私有路径不提交。用户原main未提交修改和已有worktree不清理；本地准备使用独立代码worktree并写入已有development数据worktree的ignored目录。
+raw/interim/processed、完整预测、模型和私有路径不提交。用户原main未提交修改和已有worktree不清理；旧PR #34 code worktree和新v2 code worktree均保留。

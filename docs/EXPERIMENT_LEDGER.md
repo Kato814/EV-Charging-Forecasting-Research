@@ -1,12 +1,13 @@
 # 实验与证据台账
 
-更新：2026-09-07。当前任务见 [CURRENT_STATUS](../CURRENT_STATUS.md)。本台账记录已执行/已审查事实及版本身份；“接受交付”不等于科学假设通过。
+更新：2026-09-08。当前任务见 [CURRENT_STATUS](../CURRENT_STATUS.md)。本台账记录已执行/已审查事实及版本身份；“接受交付”不等于科学假设通过。
 
 ## 1. 版本与发布状态
 
 - 5月预测实验：PR #21 已合并，`c2af2cdf4ecf5dad059d2ac92e929df8df35d42b`。
 - 季节数据/代码：PR #23 已合并；已审HEAD `4c2b1988ea9927b27287d6935bd22d01bd9df875`，main合并 `faa4cc8ad9051bd2f17f695e7c7741d769aee263`；修复实现 `6ded3bdd810a8115ea5b8a51091de71fab894a03`。数据准备 `CONDITIONAL_PASS`，11月 `CURRENT_PROXY_ONLY`，季节kW未授权。
-- 开发集获取入口：PR #30 已合并；最终HEAD `e8370693c31f540d90c9a17e47534fbb0034e777`，main合并 `1d4c5f377f757aaea80b23987047f97899e958a4`。CI：1048 passed、2 skipped，compileall与Ruff PASS。该PR只发布代码，尚未获取01/04/07/10数据。
+- 开发集获取入口：PR #30 已合并；最终HEAD `e8370693c31f540d90c9a17e47534fbb0034e777`，main合并 `1d4c5f377f757aaea80b23987047f97899e958a4`。CI：1048 passed、2 skipped，compileall与Ruff PASS。
+- 开发集raw获取/QA：用户本地v1.1启动器已完成01/04/07/10四个月获取；主控接受汇总交付。尚未创建processed快照、尚未训练新模型。
 - Issue #22、#25、#26、#27均已完成关闭；当前方法开发Issue为 [#29](https://github.com/Kato814/EV-Charging-Forecasting-Research/issues/29)。
 - Issue #25—#27的外置源码包、完整预测检查点和私有数组由用户本地保存；仓库登记协议、SHA、审查与去标识化结论，不冒称所有私有复现材料都已入库。
 
@@ -20,13 +21,39 @@
 | 逐日与负值诊断 | 读取既有检查点，新增拟合0 | 负值不全是微小误差，但单纯置零不足以消除主要退化；非V2G测量证据 | Issue #25 |
 | 三组会话特征删除 | 15项控制+570次消融；导出恢复不重训 | `EXPLORATORY_POSTHOC_NOT_CONFIRMATORY`；没有稳定支持统一删除整组 | Issue #26 |
 | 预测组合 | 30项控制+300次校准拟合；测试预测复用 | 同为探索；简单平均留作强基线，校准加权未稳定超过简单平均 | Issue #27 |
-| 月份目录盘点 | 3个登记worktree，只查目录，未训练/读数据内容 | 只发现已用四个月；新开发/holdout月份需另外获取 | DATA_USAGE_LEDGER |
-| 开发集获取代码 | PR #30合并；固定01/04/07/10，holdout03/06/09/12阻断；完整CI通过 | 只提供安全获取/QA入口，不是模型结果 | PR #30 |
+| 月份目录盘点 | 3个登记worktree，只查目录，未训练/读数据内容 | 当时只发现已用四个月；新开发月份需另外获取 | DATA_USAGE_LEDGER |
+| 开发集获取代码 | PR #30合并；固定01/04/07/10，holdout03/06/09/12阻断；完整CI通过 | 安全获取/QA入口 | PR #30 |
+| 开发集raw获取/QA | v1.1启动器；01/04/07/10均完成官方API获取与月级QA | 四月均PASS；holdout未访问；未生成processed、未训练模型 | Issue #29 / evidence/development_acquisition_20260908.json |
 | 可靠性门控方法开发 | 尚未执行新训练 | 当前研发方向；开发集/最终保留集已在下载前冻结 | Issue #29 |
 
 执行次数、私有文件保全和逐点回放一致性依据本地工具记录；主控做代码/提交证据审查及可由上传汇总独立复算的统计，不冒称重跑用户私有模型。
 
-## 3. 季节主实验正式结果
+## 3. 开发集raw获取结果
+
+用户回传 `evcf_development_acquisition_status_20260907T182836Z.json`；原文件SHA256：
+
+```text
+7a11053b5a1d7230be595c5e7692349a381ca9b67ccf1418d58426aa86e8a1e9
+```
+
+冻结metadata源SHA256：
+
+```text
+bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a
+```
+
+| 月份 | local | carry-in | combined | 有效日块 | QA |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 2019-01 | 1372 | 0 | 1372 | 31/31 | PASS |
+| 2019-04 | 1524 | 0 | 1524 | 30/30 | PASS |
+| 2019-07 | 1489 | 0 | 1489 | 31/31 | PASS |
+| 2019-10 | 1672 | 1 | 1673 | 31/31 | PASS |
+
+四个月trajectory quarantine=0、full-session quarantine=0、reason_codes均为空。`status=COMPLETE`、`holdout_accessed=false`、`models_trained=false`、`processed_data_created=false`。
+
+v1.1报告4个metadata结构候选，其中1个通过冻结源验证；另外3个候选触发 `SOURCE_LAYOUT` 与 `SOURCE_MANIFEST` 并被拒绝。这是目录候选筛选诊断，不是四个开发月份失败。脱敏证据见 [development_acquisition_20260908.json](../evidence/development_acquisition_20260908.json)。
+
+## 4. 季节主实验正式结果
 
 | 月份 | 全月formal | 测试样本/计划 | 测试日 | M3相对M2 MAE改善：15/30/60/120/240 min |
 | --- | ---: | ---: | ---: | --- |
@@ -36,7 +63,7 @@
 
 正值表示误差下降。跨月1/3通过，未达到预声明2/3；后续探索不重判原门控。2月早于5月，使用5月开发出的配置属于回溯方法实验，不是真实部署时序或分布外泛化验证。
 
-## 4. 探索结果及不利证据
+## 5. 探索结果及不利证据
 
 - 分组删除对完整M3：DROP_STATE 6/15改善、9/15退化；DROP_PROGRESS 5/15改善、10/15退化；DROP_REQUEST 10/15改善、5/15退化。没有统一删除整组的稳定依据。
 - 简单平均相对M2的15个“月份×时距”MAE均改善，10个描述性区间全正；相对完整M3为10改善/5退化。11月15 min相对M3退化6.3404%；11月120 min相对M2虽MAE改善0.5834%，RMSE退化2.1556%。
@@ -45,7 +72,7 @@
 
 这些后验结果说明M2与M3存在互补性，同时会话信息增量受时距和信息质量影响。它们用于提出Issue #29的可靠性门控假设，但不能作为新方法的独立验证。
 
-## 5. 当前方法开发假设
+## 6. 当前方法开发假设
 
 候选方法采用标准Mixture-of-Experts/gating结构：M2为站级状态专家，完整M3为会话状态专家。门控只使用issue-time可得的低维可靠性变量和horizon，并在会话信息不足时向M2收缩/回退。
 
@@ -53,15 +80,15 @@
 
 若开发集上不能稳定超过简单平均，或必须依赖高复杂度不可解释调参，则停止该方向，不进入最终holdout。
 
-## 6. 新数据分区与下一步
+## 7. 新数据分区与下一步
 
 - 已使用/探索：02、05、08、11；
-- 方法开发集：01、04、07、10；
-- 最终独立保留集：03、06、09、12。
+- 方法开发集：01、04、07、10；raw已获取并QA通过；
+- 最终独立保留集：03、06、09、12；继续封存。
 
-该分区在新下载/新模型结果出现前冻结，详细规则见 [DATA_USAGE_LEDGER](DATA_USAGE_LEDGER.md)。PR #30只允许开发集。当前下一本地任务是开发集获取/QA；最终保留集尚未授权。
+下一子步骤不是再次下载，而是为开发集构建清洗/15 min/M1–M3/泄漏审计/processed snapshot。详细规则见 [DATA_USAGE_LEDGER](DATA_USAGE_LEDGER.md)。
 
-## 7. 冻结身份（SHA256）
+## 8. 冻结身份（SHA256）
 
 参数源：PR #21 `model_selection_manifest.json`：`a43ac609629d0dfa1568ce19d8e51666cbeb8392d96cbe976927f9397f19cb0d`。
 
@@ -106,6 +133,6 @@ evcf_combination_summary_ad7ab376.zip
 e967160302aec902c482ce29e020c999af645b94339cd397f7757366957d446b
 ```
 
-## 8. 故障恢复与历史证据
+## 9. 故障恢复与历史证据
 
-v1季节启动源码检查缺陷由v1.1修复。消融 `PUBLIC_HASHES` 为Windows CRLF/LF清单兼容问题，恢复只规范新ZIP清单，保持载荷且新增拟合0。旧错误、原目录、未补写completed标记、恢复ZIP和M4负结果继续保留；不为仓库整洁重写历史证据。
+v1季节启动源码检查缺陷由v1.1修复。消融 `PUBLIC_HASHES` 为Windows CRLF/LF清单兼容问题，恢复只规范新ZIP清单，保持载荷且新增拟合0。开发集获取首版启动器曾在联网前以 `VERIFIED_METADATA_NOT_LOCATED` 停止，原因是metadata目录定位规则过窄；v1.1按冻结结构与SHA识别后成功完成四个月获取。旧错误、原目录、未补写completed标记、恢复ZIP和M4负结果继续保留；不为仓库整洁重写历史证据。

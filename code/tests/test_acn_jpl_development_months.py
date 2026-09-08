@@ -6,6 +6,9 @@ from datetime import timedelta
 import evcf.data.acn_jpl_full_month_qa as full_month_qa
 import evcf.data.acn_jpl_preparation as preparation
 import evcf.data.acn_jpl_seasonal_acquisition as acquisition
+import evcf.data.acn_jpl_seasonal_prep as seasonal_prep
+import evcf.data.acn_jpl_trajectory_quarantine as quarantine_module
+import evcf.forecasting.acn_jpl_gate1_data as gate1_data
 import pytest
 from evcf.data.acn_jpl_development_months import (
     DEVELOPMENT_MONTHS,
@@ -46,7 +49,10 @@ def test_installed_context_approves_development_only_and_restores_registry() -> 
         acquisition.SEASONAL_MONTHS,
         full_month_qa.SEASONAL_MONTHS,
         preparation.SEASONAL_MONTHS,
+        seasonal_prep.SEASONAL_MONTHS,
+        gate1_data.SEASONAL_MONTHS,
         full_month_qa.build_trajectory_quarantine_audit,
+        quarantine_module.build_trajectory_quarantine_audit,
     )
     with installed_development_month_contracts() as contracts:
         assert tuple(contracts) == DEVELOPMENT_MONTHS
@@ -54,6 +60,12 @@ def test_installed_context_approves_development_only_and_restores_registry() -> 
         assert acquisition.SEASONAL_MONTHS == expected_extended
         assert full_month_qa.SEASONAL_MONTHS == expected_extended
         assert preparation.SEASONAL_MONTHS == expected_extended
+        assert seasonal_prep.SEASONAL_MONTHS == expected_extended
+        assert gate1_data.SEASONAL_MONTHS == expected_extended
+        assert (
+            full_month_qa.build_trajectory_quarantine_audit
+            is quarantine_module.build_trajectory_quarantine_audit
+        )
         for month in DEVELOPMENT_MONTHS:
             assert jpl_month_config(month) is contracts[month]
         for month in FINAL_HOLDOUT_MONTHS:
@@ -64,7 +76,10 @@ def test_installed_context_approves_development_only_and_restores_registry() -> 
         acquisition.SEASONAL_MONTHS,
         full_month_qa.SEASONAL_MONTHS,
         preparation.SEASONAL_MONTHS,
+        seasonal_prep.SEASONAL_MONTHS,
+        gate1_data.SEASONAL_MONTHS,
         full_month_qa.build_trajectory_quarantine_audit,
+        quarantine_module.build_trajectory_quarantine_audit,
     ) == original_guards
     for month in (*DEVELOPMENT_MONTHS, *FINAL_HOLDOUT_MONTHS):
         with pytest.raises(ValueError, match="approved JPL month"):
@@ -115,6 +130,9 @@ def test_development_context_reaches_reviewed_raw_and_qa_guards_without_unlockin
         assert qa_result.gate_status == "FAIL"
         assert qa_result.qa["gate"]["reason_codes"] == ["SCOPE_NOT_VERIFIED"]
 
+        assert seasonal_prep.SEASONAL_MONTHS[-4:] == DEVELOPMENT_MONTHS
+        assert gate1_data.SEASONAL_MONTHS[-4:] == DEVELOPMENT_MONTHS
+
     for month in FINAL_HOLDOUT_MONTHS:
         with pytest.raises(ValueError, match="approved JPL month"):
             jpl_month_config(month)
@@ -123,7 +141,7 @@ def test_development_context_reaches_reviewed_raw_and_qa_guards_without_unlockin
 def test_development_quarantine_policy_accepts_no_anomaly_and_rejects_any_new_signature() -> None:
     with installed_development_month_contracts():
         config = jpl_month_config("2019-04")
-        clean = full_month_qa.build_trajectory_quarantine_audit(
+        clean = quarantine_module.build_trajectory_quarantine_audit(
             config,
             (),
             denominator_sessions=10,
@@ -140,13 +158,21 @@ def test_development_quarantine_policy_accepts_no_anomaly_and_rejects_any_new_si
             synchronized_raw_ordinals=(3,),
             metadata_bounds_valid=True,
         )
-        blocked = full_month_qa.build_trajectory_quarantine_audit(
+        blocked = quarantine_module.build_trajectory_quarantine_audit(
             config,
             (unexpected,),
             denominator_sessions=10,
         )
         assert blocked.approved is False
         assert blocked.trajectory_quarantine_count == 1
+        assert (
+            full_month_qa.build_trajectory_quarantine_audit(
+                config,
+                (unexpected,),
+                denominator_sessions=10,
+            ).approved
+            is False
+        )
 
 
 def test_development_months_have_expected_physical_utc_grids() -> None:

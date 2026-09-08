@@ -4,6 +4,7 @@ import hashlib
 from datetime import timedelta
 
 import evcf.data.acn_jpl_full_month_qa as full_month_qa
+import evcf.data.acn_jpl_gate1_prep as gate1_prep
 import evcf.data.acn_jpl_preparation as preparation
 import evcf.data.acn_jpl_seasonal_acquisition as acquisition
 import evcf.data.acn_jpl_seasonal_prep as seasonal_prep
@@ -48,6 +49,7 @@ def test_installed_context_approves_development_only_and_restores_registry() -> 
     original_guards = (
         acquisition.SEASONAL_MONTHS,
         full_month_qa.SEASONAL_MONTHS,
+        gate1_prep.SEASONAL_MONTHS,
         preparation.SEASONAL_MONTHS,
         seasonal_prep.SEASONAL_MONTHS,
         gate1_data.SEASONAL_MONTHS,
@@ -59,6 +61,7 @@ def test_installed_context_approves_development_only_and_restores_registry() -> 
         expected_extended = ("2019-02", "2019-08", "2019-11", *DEVELOPMENT_MONTHS)
         assert acquisition.SEASONAL_MONTHS == expected_extended
         assert full_month_qa.SEASONAL_MONTHS == expected_extended
+        assert gate1_prep.SEASONAL_MONTHS == expected_extended
         assert preparation.SEASONAL_MONTHS == expected_extended
         assert seasonal_prep.SEASONAL_MONTHS == expected_extended
         assert gate1_data.SEASONAL_MONTHS == expected_extended
@@ -75,6 +78,7 @@ def test_installed_context_approves_development_only_and_restores_registry() -> 
     assert (
         acquisition.SEASONAL_MONTHS,
         full_month_qa.SEASONAL_MONTHS,
+        gate1_prep.SEASONAL_MONTHS,
         preparation.SEASONAL_MONTHS,
         seasonal_prep.SEASONAL_MONTHS,
         gate1_data.SEASONAL_MONTHS,
@@ -132,6 +136,7 @@ def test_development_context_reaches_reviewed_raw_and_qa_guards_without_unlockin
 
         assert seasonal_prep.SEASONAL_MONTHS[-4:] == DEVELOPMENT_MONTHS
         assert gate1_data.SEASONAL_MONTHS[-4:] == DEVELOPMENT_MONTHS
+        assert gate1_prep.SEASONAL_MONTHS[-4:] == DEVELOPMENT_MONTHS
 
     for month in FINAL_HOLDOUT_MONTHS:
         with pytest.raises(ValueError, match="approved JPL month"):

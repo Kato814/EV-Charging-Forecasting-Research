@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 from evcf.data.acn_jpl_development_months import DEVELOPMENT_MONTHS, FINAL_HOLDOUT_MONTHS
 from evcf.data.acn_jpl_development_prep import (
+    DEFAULT_DEVELOPMENT_PROTOCOL_PATH,
     DevelopmentPreparationResult,
+    load_development_preparation_protocol,
     prepare_jpl_development_data,
     verify_development_implementation_commit,
 )
@@ -69,6 +71,21 @@ def _roots(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     return metadata, raw, interim, processed
 
 
+def test_development_protocol_is_distinct_and_keeps_old_protocol_unchanged() -> None:
+    development = load_development_preparation_protocol()
+    seasonal = load_seasonal_preparation_protocol()
+
+    assert DEFAULT_DEVELOPMENT_PROTOCOL_PATH.name == "acn_jpl_development_prep_2019.yaml"
+    assert development.config_sha256 != seasonal.config_sha256
+    assert development.trajectory_quarantine_month == "NONE"
+    assert development.trajectory_quarantine_expected_counts == (0, 0, 0, 0)
+    assert seasonal.trajectory_quarantine_month == "2019-11"
+    assert seasonal.trajectory_quarantine_expected_counts == (0, 0, 1)
+    assert development.lookback_minutes == seasonal.lookback_minutes == 1440
+    assert development.horizons_minutes == seasonal.horizons_minutes == (15, 30, 60, 120, 240)
+    assert development.coverage_thresholds == seasonal.coverage_thresholds == (0.8, 0.9, 0.95)
+
+
 def test_unauthorized_stops_before_filesystem_or_verifier(tmp_path: Path) -> None:
     def forbidden(*args: object, **kwargs: object) -> None:
         raise AssertionError(f"must not run: {args} {kwargs}")
@@ -89,7 +106,8 @@ def test_unauthorized_stops_before_filesystem_or_verifier(tmp_path: Path) -> Non
 
 def test_fixed_order_uses_development_months_only_and_restores_holdout(tmp_path: Path) -> None:
     metadata, raw, interim, processed = _roots(tmp_path)
-    protocol = load_seasonal_preparation_protocol()
+    protocol = load_development_preparation_protocol()
+    original_seasonal_sha = load_seasonal_preparation_protocol().config_sha256
     code_commit = "a" * 40
     calls: list[str] = []
 
@@ -100,6 +118,7 @@ def test_fixed_order_uses_development_months_only_and_restores_holdout(tmp_path:
         assert kwargs["raw_root"] == raw / month
         assert kwargs["interim_root"] == interim / month
         assert kwargs["processed_root"] == processed / month
+        assert kwargs["protocol_path"] == DEFAULT_DEVELOPMENT_PROTOCOL_PATH
         return _fake_month_result(
             month=month,
             code_commit=code_commit,
@@ -119,9 +138,11 @@ def test_fixed_order_uses_development_months_only_and_restores_holdout(tmp_path:
 
     assert type(result) is DevelopmentPreparationResult
     assert result.status == "COMPLETE"
+    assert result.protocol_sha256 == protocol.config_sha256
     assert tuple(item.month for item in result.months) == DEVELOPMENT_MONTHS
     assert calls == list(DEVELOPMENT_MONTHS)
     assert result.holdout_accessed is False
+    assert load_seasonal_preparation_protocol().config_sha256 == original_seasonal_sha
     for month in (*DEVELOPMENT_MONTHS, *FINAL_HOLDOUT_MONTHS):
         with pytest.raises(ValueError, match="approved JPL month"):
             jpl_month_config(month)
@@ -129,7 +150,7 @@ def test_fixed_order_uses_development_months_only_and_restores_holdout(tmp_path:
 
 def test_unapproved_quarantine_result_fails_and_restores_registry(tmp_path: Path) -> None:
     metadata, raw, interim, processed = _roots(tmp_path)
-    protocol = load_seasonal_preparation_protocol()
+    protocol = load_development_preparation_protocol()
     code_commit = "b" * 40
 
     def runner(**kwargs: object) -> MonthPreparationResult:

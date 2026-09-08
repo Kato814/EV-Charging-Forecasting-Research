@@ -55,8 +55,10 @@ def _seasonal_compatibility_modules() -> tuple[ModuleType, ...]:
     import evcf.data.acn_jpl_full_month_qa as full_month_qa
     import evcf.data.acn_jpl_preparation as preparation
     import evcf.data.acn_jpl_seasonal_acquisition as acquisition
+    import evcf.data.acn_jpl_seasonal_prep as seasonal_prep
+    import evcf.forecasting.acn_jpl_gate1_data as gate1_data
 
-    return acquisition, full_month_qa, preparation
+    return acquisition, full_month_qa, preparation, seasonal_prep, gate1_data
 
 
 def _development_quarantine_wrapper(original: Any) -> Any:
@@ -118,8 +120,8 @@ def installed_development_month_contracts() -> Iterator[Mapping[str, JPLMonthCon
     """Temporarily extend only the reviewed path needed for development months.
 
     The canonical registry, imported seasonal allowlists, and quarantine policy
-    are restored exactly on exit, including when acquisition fails. Holdout
-    months never become canonical through this context.
+    are restored exactly on exit, including when acquisition or preparation
+    fails. Holdout months never become canonical through this context.
     """
 
     contracts = dict(development_month_contracts())
@@ -129,6 +131,7 @@ def installed_development_month_contracts() -> Iterator[Mapping[str, JPLMonthCon
             raise DevelopmentMonthContractError("imported seasonal allowlist drifted")
 
     import evcf.data.acn_jpl_full_month_qa as full_month_qa
+    import evcf.data.acn_jpl_trajectory_quarantine as quarantine
 
     old_approved = month_config._APPROVED_MONTHS
     old_configs = month_config._MONTH_CONFIGS
@@ -136,16 +139,19 @@ def installed_development_month_contracts() -> Iterator[Mapping[str, JPLMonthCon
         (module, module.SEASONAL_MONTHS)  # type: ignore[attr-defined]
         for module in compatibility_modules
     )
-    old_quarantine_builder = full_month_qa.build_trajectory_quarantine_audit
+    old_full_qa_quarantine_builder = full_month_qa.build_trajectory_quarantine_audit
+    old_quarantine_builder = quarantine.build_trajectory_quarantine_audit
+    if old_full_qa_quarantine_builder is not old_quarantine_builder:
+        raise DevelopmentMonthContractError("quarantine compatibility binding drifted")
 
     month_config._APPROVED_MONTHS = (*old_approved, *DEVELOPMENT_MONTHS)
     month_config._MONTH_CONFIGS = {**old_configs, **contracts}
     extended_seasonal = (*_EXPECTED_SEASONAL_MONTHS, *DEVELOPMENT_MONTHS)
     for module in compatibility_modules:
         module.SEASONAL_MONTHS = extended_seasonal  # type: ignore[attr-defined]
-    full_month_qa.build_trajectory_quarantine_audit = _development_quarantine_wrapper(
-        old_quarantine_builder
-    )
+    development_builder = _development_quarantine_wrapper(old_quarantine_builder)
+    full_month_qa.build_trajectory_quarantine_audit = development_builder
+    quarantine.build_trajectory_quarantine_audit = development_builder
 
     try:
         for month, config in contracts.items():
@@ -160,7 +166,8 @@ def installed_development_month_contracts() -> Iterator[Mapping[str, JPLMonthCon
             raise DevelopmentMonthContractError("final holdout month became approved")
         yield contracts
     finally:
-        full_month_qa.build_trajectory_quarantine_audit = old_quarantine_builder
+        quarantine.build_trajectory_quarantine_audit = old_quarantine_builder
+        full_month_qa.build_trajectory_quarantine_audit = old_full_qa_quarantine_builder
         for module, old_months in old_module_months:
             module.SEASONAL_MONTHS = old_months  # type: ignore[attr-defined]
         month_config._APPROVED_MONTHS = old_approved

@@ -4,13 +4,12 @@ import gzip
 import hashlib
 import json
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import numpy as np
 import pytest
-
 from evcf.forecasting.acn_jpl_development_experts import (
     HORIZONS_MINUTES,
     DevelopmentExpertError,

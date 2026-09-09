@@ -4,12 +4,13 @@
 
 ## 1. 版本与发布状态
 
-- 5月预测实验：PR #21 已合并，`c2af2cdf4ecf5dad059d2ac92e929df8df35d42b`。
-- 季节数据/代码：PR #23 已合并；数据准备 `CONDITIONAL_PASS`，11月 `CURRENT_PROXY_ONLY`，季节kW未授权。
+- 5月预测实验：PR #21已合并，`c2af2cdf4ecf5dad059d2ac92e929df8df35d42b`。
+- 季节数据/代码：PR #23已合并；数据准备 `CONDITIONAL_PASS`，11月 `CURRENT_PROXY_ONLY`，季节kW未授权。
 - 开发集raw/processed：01/04/07/10均已完成；processed源状态SHA256 `4573b5e43094ebb8a3c85c71358aac8d93dd3e3926fe9b04366e9fe2a42dd153`。
 - processed兼容性修复：PR #37已合并，main `c1ff4e675ae14e7667e0c6b7f887fb15319aff38`。
-- 开发集M2/M3 OOS专家基础入口：PR #41已合并，main `653cb447382044911ce655175239f52f83dc892a`。
-- **专家v1预检兼容修复：PR #43已合并，main `7dda9d38a091f731c6f5c4ea74e293936996884c`；最终CI 1068 passed、2 skipped，compileall/Ruff PASS。**
+- M2/M3 OOS专家基础入口：PR #41已合并，main `653cb447382044911ce655175239f52f83dc892a`。
+- JSON标签键顺序修复：PR #43已合并，main `7dda9d38a091f731c6f5c4ea74e293936996884c`。
+- **Windows EOL实现身份校验修复：PR #45已合并，main `e5fe6d0aee9035374b6fb3240d3c5ebe2f1b7df7`；最终CI 1071 passed、2 skipped，compileall/Ruff PASS。**
 - 当前方法开发Issue为 [#29](https://github.com/Kato814/EV-Charging-Forecasting-Research/issues/29)。
 
 ## 2. 已审工作一览
@@ -21,9 +22,10 @@
 | 负值诊断/会话消融 | 诊断+570次消融 | 单纯置零不足；不支持统一删除整组 | Issue #25/#26 |
 | 预测组合 | 30项控制+300次校准拟合 | 0.5简单平均为强基线；校准加权未稳定超过 | Issue #27 |
 | 开发集raw/processed | 01/04/07/10 | 四月PASS；holdout未访问 | Issue #29 / evidence |
-| 开发集专家协议/基础入口 | 固定May HGB参数、日级OOS、共同测试行、私有缓存 | 科学协议已冻结；PR #41 | PR #41 |
-| **首次专家v1预检** | **模型拟合前STOPPED** | **JSON标签键顺序实现错误；expert/gate均未训练；holdout未访问** | **Issue #29 / PR #43 evidence** |
-| **专家v1.1兼容修复** | **真实sort_keys序列化回归 + 全量CI** | **只修JSON键顺序语义；科学协议不变** | **PR #43** |
+| 专家科学协议/基础入口 | 固定May HGB参数、日级OOS、共同测试行、私有缓存 | 科学协议冻结 | PR #41 |
+| v1本地启动 | 模型拟合前STOPPED | JSON标签键顺序实现bug；无expert/gate/holdout | PR #43 / evidence |
+| v1.1本地启动 | processed/environment preflight PASS后INCOMPLETE | Windows EOL导致 `IMPLEMENTATION_DRIFT` 误判；无模型持久化、无gate、无holdout | `evidence/development_expert_v1_1_preflight_failure_20260909.json` |
+| **EOL-safe实现绑定** | **CRLF-only/真实修改/错误HEAD回归测试 + 全量CI** | **只修跨平台代码身份校验；科学协议不变** | **PR #45** |
 | 可靠性门控 | 尚未执行 | 当前研发方向 | Issue #29 |
 
 ## 3. 开发集processed身份
@@ -33,8 +35,6 @@ processed code = c1ff4e675ae14e7667e0c6b7f887fb15319aff38
 processed protocol SHA256 = 4f2baf0439202bc1db9771a0db530ad9823d9d1261bbcea4c914925beeea5fe1
 metadata SHA256 = bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a
 ```
-
-Snapshots：
 
 ```text
 2019-01 e4f49d92c7c95e8b4bf8069f14729f5262ac58761bccff5fd2fabef8acabda12
@@ -47,21 +47,21 @@ Snapshots：
 
 ## 4. 专家预测冻结协议
 
-协议ID `JPL_DEVELOPMENT_HGB_EXPERT_OOS_20260909_V1`。May模型选择源manifest SHA256：
+协议ID `JPL_DEVELOPMENT_HGB_EXPERT_OOS_20260909_V1`；May模型选择源manifest SHA256：
 
 ```text
 a43ac609629d0dfa1568ce19d8e51666cbeb8392d96cbe976927f9397f19cb0d
 ```
 
-规则：M2/M3沿用May已选tier×horizon HGB参数；horizon=15/30/60/120/240 min；每月当地18日起OOS，每个当地午夜重训；训练行必须 `issue < cutoff` 且 `issue+h <= cutoff`；M2/M3共享测试行和truth；0.5简单平均同步计算；主预测无clipping/calibration；完整逐点预测仅本地私有缓存；本轮`gate_trained=false`。
+M2/M3沿用May已选tier×horizon HGB参数；horizon=15/30/60/120/240 min；每月当地18日起OOS，每个当地午夜重训；训练行必须 `issue < cutoff` 且 `issue+h <= cutoff`；M2/M3共享测试行和truth；0.5简单平均同步计算；主预测无clipping/calibration；完整逐点预测仅本地私有缓存；本轮`gate_trained=false`。
 
-## 5. 首次v1预检失败与PR #43
+## 5. 两次启动失败的技术结论
 
-首次外置v1启动器找到1个开发数据候选，但在模型训练前以 `DEVELOPMENT_PROCESSED_NOT_VERIFIED` 停止。状态记录：`expert_models_trained=false`、`gate_trained=false`、`holdout_accessed=false`，网络仅执行Git fetch，无ACN数据请求，既有worktree保留。
+v1根因：canonical JSON使用 `sort_keys=True`，读取器错误依赖对象键顺序。PR #43改为集合校验+冻结顺序读取。
 
-主控静态审查确认：processed准备器用 `json.dumps(..., sort_keys=True)` 生成 `labels.jsonl.gz`，嵌套horizon键迭代顺序因此为字符串字典序；PR #41读取器错误要求插入顺序。JSON对象键顺序不属于标签语义，因此这是读取实现bug，不是数据问题。
+v1.1根因：原实现用 `git show` 的LF blob原始字节直接比较Windows working-tree字节，CRLF合法物化会被误判为漂移。PR #45改为精确HEAD、tracked regular-file存在、Git规范化`git diff --quiet`；CRLF-only通过，真实修改和错误HEAD继续fail closed。
 
-PR #43新增窄兼容层和v1.1 CLI：验证精确horizon键集合，随后仍按15/30/60/120/240固定顺序取值。回归测试直接使用与真实processed相同的 `sort_keys=True` 序列化。修复不改snapshot、特征、目标、HGB参数、切分、指标或holdout边界。
+两次失败均不产生可用于研究结论的专家结果；不修改processed，不访问最终holdout，不训练可靠性门控。
 
 ## 6. 已有科学结论
 
@@ -69,4 +69,4 @@ PR #43新增窄兼容层和v1.1 CLI：验证精确horizon键集合，随后仍�
 
 ## 7. 当前下一步
 
-当前只授权v1.1外置启动器重新执行固定专家OOS预测。只回传脱敏状态JSON；成功后20个逐点预测缓存留仓库外本地并必须保留。旧v1启动器停用，不再执行。主控先审M2/M3/0.5开发基线，之后才设计可靠性门控训练。最终holdout 03/06/09/12继续封存。
+当前只授权 `evcf_dev_expert_launcher_v1_2.py`：SHA256 `42f4bee442b1586330344b15073079dab70fa093ee070c9131fcf5444e0d7abf`，绑定PR #45 main `e5fe6d0aee9035374b6fb3240d3c5ebe2f1b7df7`。v1/v1.1均停用。成功后只回传脱敏状态JSON；20个逐点预测缓存和`private_manifest.json`留仓库外本地并必须保留。主控先审M2/M3/0.5开发基线，之后才设计可靠性门控训练。最终holdout 03/06/09/12继续封存。

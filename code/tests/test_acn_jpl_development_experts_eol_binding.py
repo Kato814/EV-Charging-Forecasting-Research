@@ -4,9 +4,10 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
 from evcf.forecasting.acn_jpl_development_experts import DevelopmentExpertError
-from evcf.forecasting.acn_jpl_development_experts_compat import _verify_git_semantic_checkout
+from evcf.forecasting.acn_jpl_development_experts_compat import (
+    _verify_git_semantic_checkout,
+)
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -14,8 +15,7 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
         ["git", *args],
         cwd=root,
         check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         encoding="utf-8",
     )

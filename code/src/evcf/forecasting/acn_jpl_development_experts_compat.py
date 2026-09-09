@@ -1,8 +1,14 @@
-"""Compatibility repair for canonically sorted development-expert label JSON.
+"""Compatibility repairs for development-expert execution.
 
 The accepted development snapshots serialize JSON with ``sort_keys=True``.
-JSON object key order is not semantic, so the expert reader must validate the
-exact horizon-key set and then read values in the frozen horizon order.
+JSON object key order is not semantic, so the expert reader validates the exact
+horizon-key set and reads values in the frozen horizon order.
+
+Windows Git worktrees may also materialize tracked text as CRLF while Git blobs
+remain LF. Implementation identity therefore uses exact HEAD plus Git's own
+normalized diff semantics rather than raw working-tree byte equality. Real
+tracked content changes still fail closed.
+
 No model, feature, target, split, or evaluation rule is changed here.
 """
 
@@ -12,6 +18,7 @@ import gzip
 import json
 import math
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +42,7 @@ def _load_labels_order_insensitive(
     processed: Path,
     row_count: int,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Load the frozen horizon labels without depending on JSON object key order."""
+    """Load frozen horizon labels without depending on JSON object key order."""
 
     issue_times: list[int] = []
     rows: list[list[float]] = []
@@ -94,10 +101,69 @@ def _load_labels_order_insensitive(
     return times, labels_array
 
 
+def _run_git(root: Path, args: Sequence[str]) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+
+
+def _verify_git_semantic_checkout(
+    code_commit: str,
+    *,
+    repo_root: str | Path,
+    paths: Sequence[str],
+) -> None:
+    """Verify exact checkout identity while allowing Git-normalized EOL materialization."""
+
+    if not isinstance(code_commit, str) or len(code_commit) != 40:
+        raise DevelopmentExpertError("IMPLEMENTATION_DRIFT")
+    root = Path(repo_root).resolve(strict=True)
+    head = _run_git(root, ("rev-parse", "HEAD"))
+    if head.returncode != 0 or head.stdout.decode("ascii", errors="ignore").strip() != code_commit:
+        raise DevelopmentExpertError("IMPLEMENTATION_DRIFT")
+
+    for relative in paths:
+        current = root / relative
+        if not current.is_file() or current.is_symlink():
+            raise DevelopmentExpertError("IMPLEMENTATION_DRIFT")
+        exists = _run_git(root, ("cat-file", "-e", f"{code_commit}:{relative}"))
+        if exists.returncode != 0:
+            raise DevelopmentExpertError("IMPLEMENTATION_DRIFT")
+
+    diff = _run_git(
+        root,
+        ("diff", "--quiet", "--no-ext-diff", code_commit, "--", *tuple(paths)),
+    )
+    if diff.returncode != 0:
+        raise DevelopmentExpertError("IMPLEMENTATION_DRIFT")
+
+
 def install_label_loader_compat() -> None:
     """Install the narrow process-local label-order repair in the base controller."""
 
     _base._load_labels = _load_labels_order_insensitive
+
+
+def _verify_base_implementation_commit(
+    code_commit: str,
+    *,
+    repo_root: str | Path,
+) -> None:
+    _verify_git_semantic_checkout(
+        code_commit,
+        repo_root=repo_root,
+        paths=_base.IMPLEMENTATION_PATHS,
+    )
+
+
+def install_implementation_verifier_compat() -> None:
+    """Replace only the process-local raw-byte verifier with Git semantic identity."""
+
+    _base.verify_development_expert_implementation_commit = _verify_base_implementation_commit
 
 
 def verify_compat_implementation_commit(
@@ -105,24 +171,13 @@ def verify_compat_implementation_commit(
     *,
     repo_root: str | Path,
 ) -> None:
-    """Bind the compatibility layer and v1.1 CLI to the exact checkout commit."""
+    """Bind compatibility files to the exact checkout using Git-normalized semantics."""
 
-    if not isinstance(code_commit, str) or len(code_commit) != 40:
-        raise DevelopmentExpertError("IMPLEMENTATION_DRIFT")
-    root = Path(repo_root).resolve(strict=True)
-    for relative in COMPAT_IMPLEMENTATION_PATHS:
-        current = root / relative
-        if not current.is_file() or current.is_symlink():
-            raise DevelopmentExpertError("IMPLEMENTATION_DRIFT")
-        completed = subprocess.run(
-            ["git", "show", f"{code_commit}:{relative}"],
-            cwd=root,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
-        if completed.returncode != 0 or completed.stdout != current.read_bytes():
-            raise DevelopmentExpertError("IMPLEMENTATION_DRIFT")
+    _verify_git_semantic_checkout(
+        code_commit,
+        repo_root=repo_root,
+        paths=COMPAT_IMPLEMENTATION_PATHS,
+    )
 
 
 def load_development_expert_protocol(
@@ -149,5 +204,7 @@ def run_development_experts(**kwargs: Any) -> _base.DevelopmentExpertRunResult:
     code_commit = kwargs.get("code_commit")
     repo_root = kwargs.get("repo_root")
     verify_compat_implementation_commit(code_commit, repo_root=repo_root)
+    _verify_base_implementation_commit(code_commit, repo_root=repo_root)
     install_label_loader_compat()
+    install_implementation_verifier_compat()
     return _base.run_development_experts(**kwargs)

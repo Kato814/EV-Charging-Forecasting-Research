@@ -21,6 +21,7 @@ gate1 = [
   "scikit-learn==1.9.0",
   "joblib==1.6.0",
   "pyarrow==25.0.1",
+  "threadpoolctl==3.6.0",
 ]
 
 [tool.setuptools]
@@ -35,3 +36,6 @@ testpaths = ["code/tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.ruff.lint.per-file-ignores]
+"code/src/evcf/forecasting/acn_jpl_development_experts.py" = ["RUF100"]

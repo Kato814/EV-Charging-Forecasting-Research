@@ -1,131 +1,74 @@
 # 主控交付说明｜充电站功率/负荷预测独立研究
 
-更新：2026-09-08。先读 [CURRENT_STATUS](CURRENT_STATUS.md)，再读本文、[实验台账](docs/EXPERIMENT_LEDGER.md)和[数据用途台账](docs/DATA_USAGE_LEDGER.md)。
+更新：2026-09-09。先读 [CURRENT_STATUS](CURRENT_STATUS.md)，再读本文、[实验台账](docs/EXPERIMENT_LEDGER.md)和[数据用途台账](docs/DATA_USAGE_LEDGER.md)。
 
 ## 1. 接管结论
 
-**当前仍处于模型开发阶段。01/04/07/10 raw获取与全月QA已完成。首次processed准备失败已通过只读诊断定位为代码兼容性遗漏：`acn_jpl_gate1_prep`仍持有旧02/08/11 `SEASONAL_MONTHS`绑定。PR #37已修复、全量CI通过并合并。当前重新授权四个月processed准备；最终holdout仍封存，尚未训练开发集模型。**
+**当前处于模型开发阶段。开发集2019-01/04/07/10的raw获取与processed准备均已完成并通过；首次processed兼容性故障已由PR #37修复并在v1.1实机重试中关闭。下一步是建立开发集M2/M3专家预测、0.5简单平均强基线，并开发会话信息可靠性门控。最终holdout 2019-03/06/09/12继续封存。**
 
 当前唯一研发Issue为 [#29](https://github.com/Kato814/EV-Charging-Forecasting-Research/issues/29)。主控负责协议、代码、审查和仓库维护；用户仅执行明确授权的本地Python命令。
 
 ## 2. 研究与数据边界
 
-主目标保持 `station_current_mean_a`，单位A。M2=历史/日历+当前站级聚合状态；M3=M2+当前连接会话细粒度合法状态。M4历史负结果保留，不恢复主线。
+主目标固定为 `station_current_mean_a`，单位A。M2=24 h历史/日历+当前站级聚合状态；M3=M2+当前连接会话细粒度合法状态。M4历史负结果保留，不恢复主线。
 
-数据分区固定：
+数据分区：
 - 已使用/探索：2019-02/05/08/11；
-- 方法开发集：2019-01/04/07/10；
-- 最终独立保留集：2019-03/06/09/12。
+- 方法开发集：2019-01/04/07/10；raw和processed均完成；
+- 最终独立保留集：2019-03/06/09/12；方法冻结前不得获取时序或运行模型。
 
-03/06/09/12在门控变量、模型、超参数、阈值、评价和停止规则全部冻结前不得获取时序或运行模型。
+## 3. 开发集processed完成身份
 
-## 3. 版本状态
-
-- PR #21已合并：5月pilot；
-- PR #23已合并：季节数据/缺测记账；
-- PR #30已合并：开发集raw获取入口；
-- PR #34已合并：开发集processed准备入口与独立开发协议；
-- PR #37已合并：开发月清洗校验兼容性修复。
-
-PR #37固定身份：
+用户回传 `evcf_development_preparation_status_20260909T044544Z.json`：
 
 ```text
-final HEAD e47f05cb7a663df9c599270ac939c9301d26840b
-main merge c1ff4e675ae14e7667e0c6b7f887fb15319aff38
+source status SHA256 4573b5e43094ebb8a3c85c71358aac8d93dd3e3926fe9b04366e9fe2a42dd153
+code commit c1ff4e675ae14e7667e0c6b7f887fb15319aff38
+protocol SHA256 4f2baf0439202bc1db9771a0db530ad9823d9d1261bbcea4c914925beeea5fe1
+metadata SHA256 bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a
 ```
 
-PR #37最终CI：
+| 月份 | sessions | valid90 / bins | formal / scheduled | snapshot SHA256 | 状态 |
+| --- | ---: | ---: | ---: | --- | --- |
+| 2019-01 | 1372 | 2970 / 2976 | 2836 / 2865 | `e4f49d92c7c95e8b4bf8069f14729f5262ac58761bccff5fd2fabef8acabda12` | PASS |
+| 2019-04 | 1524 | 2772 / 2880 | 2552 / 2769 | `f05e4892f4583c24ffe7d7da54c4cf929bd31714343c906c703b505043ccb299` | PASS |
+| 2019-07 | 1489 | 2931 / 2976 | 2742 / 2865 | `9eea83e13ea6fbe5fef694c5de93b5bc4c4a82f7efe00e90e4fadd6d0b9e9ff2` | PASS |
+| 2019-10 | 1673 | 2943 / 2976 | 2742 / 2865 | `e9d321a47a05baee829d2692f9ca491fd9e20563d477e6385fb2296834825296` | PASS |
 
-```text
-1058 passed, 2 skipped
-compileall PASS
-Ruff PASS
-```
+总formal 10872 / scheduled 11364；valid90 11616 / 11808。四个月raw unchanged、trajectory/full-session quarantine均0、holdout未访问、模型未训练。
 
-开发集协议仍为 `code/configs/acn_jpl_development_prep_2019.yaml`，只绑定01/04/07/10。旧02/08/11季节YAML及11月唯一3596 s例外保持原身份，不扩展到开发月。
+四个月power audit均为 `KW_RECONSTRUCTION_CANDIDATE`，但这不等于授权kW建模；当前预测仍仅使用A口径。
 
-## 4. raw开发集已验收
+## 4. processed故障历史
 
-冻结metadata源SHA256：
+v1首次准备失败并未生成四个月interim/processed残留。只读诊断定位为 `acn_jpl_gate1_prep` 旧02/08/11 `SEASONAL_MONTHS`按值绑定遗漏。PR #37只扩展并恢复这一临时开发月兼容绑定，未改变清洗、coverage、特征、quarantine或holdout规则；最终CI 1058 passed、2 skipped，compileall/Ruff PASS。v1.1随后完整PASS。
 
-```text
-bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a
-```
+## 5. 已审实验结论
 
-| 月份 | local | carry-in | combined | 有效日块 | QA |
-| --- | ---: | ---: | ---: | ---: | --- |
-| 2019-01 | 1372 | 0 | 1372 | 31/31 | PASS |
-| 2019-04 | 1524 | 0 | 1524 | 30/30 | PASS |
-| 2019-07 | 1489 | 0 | 1489 | 31/31 | PASS |
-| 2019-10 | 1672 | 1 | 1673 | 31/31 | PASS |
+- 5月pilot：`PASS_ACTIVE_SESSION_DROP_M4`；
+- 2/8/11季节复核：总体 `MIXED_SEASONAL_EVIDENCE`；
+- 负值诊断：单纯置零不足以解释主要退化，负预测不是V2G测量证据；
+- 会话分组消融：不支持统一删除整组；
+- 预测组合：0.5简单平均是强基线，校准加权未稳定超过它。
 
-四个月trajectory/full-session quarantine均为0。
+因此当前方法假设是：**M2/M3信息互补，M3增量价值受horizon和会话可观测/可靠程度影响。**
 
-## 5. 首次processed失败与只读诊断
+## 6. 当前模型开发方向
 
-首次 `evcf_dev_preparation_launcher_v1.py` 返回：
+候选方法采用标准MoE/gating结构，但普通动态加权不是创新点。门控只允许使用issue-time可得低维变量：connected数、current/pilot observed ratio、用户申报可用比例、M3 missingness摘要、M2/M3预测差及horizon等；不得使用测试误差、测试标签、最终kWh、未来离开/轨迹、未来到达结果或离线异常原因。
 
-```text
-status=INCOMPLETE
-reason_code=DEVELOPMENT_PREPARATION_INCOMPLETE
-preparation_reason_code=UNEXPECTED_ERROR
-```
+开发阶段至少比较：M2、完整M3、0.5简单平均、可靠性门控。若门控不能稳定超过简单平均，或必须靠高复杂度不可解释调参取得收益，则停止该方向，不消耗最终holdout。
 
-只读诊断文件 `evcf_development_preparation_diagnostic_20260908T141021Z.json`：
+## 7. 下一步最小动作
 
-- `status=COMPLETED`；
-- `diagnostic.status=DIAGNOSED`；
-- `writes_suppressed=true`；
-- 2019-01异常类型 `ValueError`；
-- 调用栈落到 `evcf.data.acn_jpl_gate1_prep.validate_seasonal_cleaning_documents()`；
-- 失败行对应 `config.month not in SEASONAL_MONTHS`；
-- 四个月在首次失败后都没有interim/processed月份目录或processed manifest；
-- `holdout_accessed=false`、`models_trained=false`。
+1. 主控冻结开发集M2/M3专家预测协议与内部开发切分；
+2. 开发本地预测/缓存入口，固定HGB专家配置和共同有效样本；
+3. 用户仅在明确授权后运行开发集专家预测；
+4. 主控先审M2/M3/简单平均基线，再实现可靠性门控；
+5. 门控方案冻结后才允许最终holdout。
 
-因此根因被判定为PR #34开发上下文兼容列表遗漏，不是1月raw数据质量结论。
+当前不恢复M4，不启动Gate2、概率、联邦或调度。
 
-## 6. PR #37修复内容
+## 8. 资产保护
 
-`installed_development_month_contracts()` 现在把 `evcf.data.acn_jpl_gate1_prep` 与其他按值导入 `SEASONAL_MONTHS` 的已审模块一并临时扩展到01/04/07/10，并在上下文退出时恢复原02/08/11绑定。新增回归断言覆盖扩展和恢复。
-
-未修改：
-- 清洗/15 min/coverage/issue-time数值规则；
-- 开发集YAML；
-- trajectory quarantine策略；
-- M1/M2/M3特征；
-- holdout权限；
-- 任何模型或既有结果。
-
-## 7. 当前授权：processed重试
-
-使用新的外置 `evcf_dev_preparation_launcher_v1_1.py`：
-
-- 精确绑定PR #37 main合并提交；
-- 使用新的 `-jpl-development-prep-code-v2` detached code worktree，旧PR #34代码worktree保留；
-- 重试前再次验证metadata和四个月raw；
-- 若任何开发月interim/processed目录已经出现则停止，不覆盖；
-- 仅生成01/04/07/10的interim/processed、15 min、M1–M3和snapshot SHA；
-- 不联网、不训练模型、不访问03/06/09/12；
-- 只回传脱敏status JSON。
-
-processed审查通过后，才进入M2/M3开发集预测和可靠性门控训练。
-
-## 8. 方法方向与停止规则
-
-现有证据支持M2/M3信息互补，M3增量价值随时距和会话信息可靠性变化。候选方法仍是**会话可观测性驱动的低维门控与向M2回退**；普通MoE/动态加权不作为创新。
-
-若开发集上可靠性门控不能稳定超过0.5简单平均，或只能靠高复杂度不可解释调参取得收益，则停止该方向，不消耗最终holdout。
-
-## 9. 资产保护
-
-保留原main未提交修改、所有worktree、raw/interim/processed、旧失败/诊断JSON、三套外置实验目录及 `local_runs/private`。旧PR #34 preparation code worktree和新的v2 code worktree都不自动删除。
-
-禁止 `reset --hard`、`clean`、盲目stash、force push和未经审查的重复运行。
-
-## 10. 下一步
-
-1. 用户执行v1.1 processed准备启动器；
-2. 仅回传脱敏status JSON；
-3. 主控审查四个月cleaning/coverage/leakage/snapshot SHA；
-4. 通过后进入开发集M2/M3与可靠性门控训练；
-5. 方法冻结后才允许最终holdout。
+保留原main未提交修改、所有worktree、raw/interim/processed、失败/诊断JSON、运行后的外置目录及 `local_runs/private`。禁止 `reset --hard`、`clean`、盲目stash和force push。

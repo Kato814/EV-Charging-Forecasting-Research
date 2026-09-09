@@ -1,0 +1,20 @@
+{
+  "schema_version": "evcf-development-expert-preflight-failure-evidence/v1",
+  "status": "INCOMPLETE",
+  "launcher_schema": "evcf-development-expert-launcher/v1.1",
+  "reason_code": "DEVELOPMENT_EXPERT_RUN_INCOMPLETE",
+  "expert_reason_code": "IMPLEMENTATION_DRIFT",
+  "expected_code_commit": "7dda9d38a091f731c6f5c4ea74e293936996884c",
+  "development_preflight": "PASS",
+  "environment": "PASS",
+  "development_processed_unchanged": true,
+  "expert_fit_attempted": true,
+  "expert_models_persisted": false,
+  "gate_trained": false,
+  "holdout_accessed": false,
+  "expert_retuning": false,
+  "prediction_clipping": false,
+  "prediction_calibration": false,
+  "kw_forecasting_authorized": false,
+  "network_requests": "GIT_FETCH_ONLY_NO_ACN_DATA_NETWORK"
+}

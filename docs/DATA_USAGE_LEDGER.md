@@ -1,6 +1,6 @@
 # 数据用途与独立验证台账
 
-更新：2026-09-08。来源为已审实验协议/结果、月份目录盘点、Issue #29、开发集raw获取及PR #34。此台账用于防止数据重复充当“新验证集”，不自动授权模型训练。
+更新：2026-09-09。此台账用于防止数据重复充当“新验证集”，不自动授权模型训练。
 
 ## 1. 已使用月份
 
@@ -11,11 +11,9 @@
 | 2019-08 | 季节主实验、日级/负值诊断、消融、组合 | 否 |
 | 2019-11 | 季节主实验、日级/负值诊断、消融、组合 | 否 |
 
-这些月份的旧结果继续有效；不能看过结果并选方法后，再把同一数据包装成新的独立验证。
+## 2. 方法开发集：raw与processed均已完成
 
-## 2. 方法开发集：raw已获取，processed准备已授权
-
-固定方法开发集：
+固定开发集：
 
 ```text
 2019-01
@@ -24,36 +22,25 @@
 2019-10
 ```
 
-用途：开发和选择Issue #29的可靠性门控器，包括低维门控变量、少量超参数、回退/收缩规则，以及与M2/M3/0.5简单平均的比较。开发集可反复用于方法开发，但不能再称最终独立holdout。
+用途：开发和选择Issue #29的M2/M3可靠性门控器、少量超参数、回退/收缩规则，并与M2、完整M3、0.5简单平均比较。开发集可以用于方法开发，但不能再称最终独立holdout。
 
-raw获取已验收：
-
-| 月份 | local | carry-in | combined | 有效日块 | QA |
-| --- | ---: | ---: | ---: | ---: | --- |
-| 2019-01 | 1372 | 0 | 1372 | 31/31 | PASS |
-| 2019-04 | 1524 | 0 | 1524 | 30/30 | PASS |
-| 2019-07 | 1489 | 0 | 1489 | 31/31 | PASS |
-| 2019-10 | 1672 | 1 | 1673 | 31/31 | PASS |
-
-四个月trajectory/full-session quarantine均为0，月级reason_codes为空。冻结metadata源SHA256：
+processed准备完成身份：
 
 ```text
-bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a
+source status SHA256 = 4573b5e43094ebb8a3c85c71358aac8d93dd3e3926fe9b04366e9fe2a42dd153
+code commit = c1ff4e675ae14e7667e0c6b7f887fb15319aff38
+protocol SHA256 = 4f2baf0439202bc1db9771a0db530ad9823d9d1261bbcea4c914925beeea5fe1
+metadata SHA256 = bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a
 ```
 
-脱敏摘要见 [development_acquisition_20260908.json](../evidence/development_acquisition_20260908.json)。raw获取没有创建processed数据或训练模型。
+| 月份 | valid90 / bins | formal / scheduled | snapshot SHA256 | 状态 |
+| --- | ---: | ---: | --- | --- |
+| 2019-01 | 2970 / 2976 | 2836 / 2865 | `e4f49d92c7c95e8b4bf8069f14729f5262ac58761bccff5fd2fabef8acabda12` | PASS |
+| 2019-04 | 2772 / 2880 | 2552 / 2769 | `f05e4892f4583c24ffe7d7da54c4cf929bd31714343c906c703b505043ccb299` | PASS |
+| 2019-07 | 2931 / 2976 | 2742 / 2865 | `9eea83e13ea6fbe5fef694c5de93b5bc4c4a82f7efe00e90e4fadd6d0b9e9ff2` | PASS |
+| 2019-10 | 2943 / 2976 | 2742 / 2865 | `e9d321a47a05baee829d2692f9ca491fd9e20563d477e6385fb2296834825296` | PASS |
 
-### 开发集processed协议
-
-PR #34已合并，新增 `code/configs/acn_jpl_development_prep_2019.yaml`。该协议在任何开发集processed结果产生前冻结：
-
-- 月份仅01/04/07/10；
-- 清洗、15 min聚合、coverage、24 h lookback、15/30/60/120/240 min horizon及M1–M3特征规则沿用已审单月数值合同；
-- 四个月trajectory/full-session quarantine期望均为0，出现新异常即fail-closed；
-- 只生成本地ignored interim/processed和脱敏状态，不创建旧02/08/11的37件季节发布；
-- 最终holdout 03/06/09/12明确 `access_allowed=false`。
-
-旧 `acn_jpl_seasonal_prep_2019.yaml` 不被改写，继续只代表02/08/11及11月历史特例。
+四个月raw unchanged、trajectory/full-session quarantine均0，未训练模型，holdout未访问。去标识化证据见 [development_preparation_20260909.json](../evidence/development_preparation_20260909.json)。
 
 ## 3. 最终独立保留集：继续封存
 
@@ -64,28 +51,27 @@ PR #34已合并，新增 `code/configs/acn_jpl_development_prep_2019.yaml`。该
 2019-12
 ```
 
-用途：**仅在方法、输入变量、门控公式/模型、超参数范围、阈值、非负处理、评价指标、统计与停止规则全部冻结后**用于最终独立验证。当前不下载、不准备、不运行模型。
+仅在方法、门控输入、模型结构、超参数范围、阈值、非负处理、评价指标、统计与停止规则全部冻结后用于最终独立验证。当前不下载、不准备、不运行模型。
 
-该分区依据月份序号而非预测表现；不因后续某月质量或模型成绩不好就事后换月。若发生数据完整性阻断，只能按预先定义的数据质量停止/缺失处理规则报告，不能结果导向替换。
+分区依据月份序号而非预测表现；不因开发结果或未来某月模型成绩不好而换月。
 
-## 4. metadata候选诊断的正确解释
+## 4. 当前授权顺序
 
-v1.1获取启动器报告4个结构候选，其中冻结验证通过1个；其余3个同时触发 `SOURCE_LAYOUT` 与 `SOURCE_MANIFEST`。这些是安全拒绝的其他目录，不是开发月份QA失败。最终raw获取状态为 `COMPLETE`，`holdout_accessed=false`。
+1. 开发集processed已完成，不再重复准备；
+2. 主控先冻结开发集M2/M3专家预测协议和内部开发切分；
+3. 用户随后只在明确授权下运行开发集专家预测；
+4. 主控先审M2/M3/0.5简单平均，再开发可靠性门控；
+5. 方法冻结后另建最终holdout授权；
+6. 03/06/09/12在此之前继续封存。
 
-## 5. 当前授权顺序
+## 5. 数据质量与独立性原则
 
-1. 现在只允许对01/04/07/10运行PR #34的开发集数据准备；
-2. 不重新获取已成功raw；
-3. 本地准备完成后先审查raw unchanged、coverage/leakage、M1–M3快照和processed SHA；
-4. 审查通过后才进入可靠性门控训练与选择；
-5. 03/06/09/12保持封存；方法冻结后单独建立最终holdout Issue再授权。
+开发阶段所有比较使用相同有效样本和issue-time可得信息。不能因为4月formal率较低或某些日期难预测而事后删月/删日；数据质量排除只能依据预先固定的质量规则，不能依据预测成绩。
 
-## 6. 数据质量与独立性原则
+四月power audit均为 `KW_RECONSTRUCTION_CANDIDATE`，但当前目标仍为 `station_current_mean_a`（A），不据此扩展到kW预测。
 
-目录存在、元数据存在或会话数量正常都不等于时序完整。processed阶段仍必须通过当地月/carry-in、raw保全、缺测结构、15 min coverage、issue-time leakage和快照SHA合同。
+`invalid_skipped_session_count=0` 不等价于“无无效容器”；只表示结构保留合同下没有跳过会话。
 
-开发集可用于门控器选择；最终保留集不得影响方法选择。最终holdout未来即使下载，也不能在方法冻结前查看模型结果或据此调整门控变量/阈值。
+## 6. 资产保护与维护
 
-## 7. 资产保护与维护
-
-保留用户原main未提交修改、所有登记worktree、raw/interim/processed及三套外置实验目录和private。development raw worktree继续保留；processed准备写入其ignored interim/processed目录，不清理raw。以后新增任何数据用途或查看新结果，主控必须同轮更新本台账、CURRENT_STATUS和HANDOFF。
+保留原main未提交修改、所有worktree、raw/interim/processed、失败/诊断JSON和外置实验目录。processed开发数据现在是后续模型开发资产，不清理、不重建。任何数据用途、方法冻结或新结果变化都需同轮更新本台账、CURRENT_STATUS和HANDOFF。

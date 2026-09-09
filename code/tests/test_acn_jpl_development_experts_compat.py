@@ -6,7 +6,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-
 from evcf.forecasting.acn_jpl_development_experts import DevelopmentExpertError
 from evcf.forecasting.acn_jpl_development_experts_compat import (
     HORIZONS_MINUTES,

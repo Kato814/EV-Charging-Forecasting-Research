@@ -4,7 +4,7 @@
 
 ## 当前进度
 
-更新：2026-09-09。**方法开发集2019-01/04/07/10的raw获取和processed准备均已完成，四个月全部PASS。当前正式进入模型开发：下一步先建立固定M2/M3专家预测和0.5简单平均基线，再开发“会话信息可靠性门控 + 向M2回退”机制。最终独立holdout 2019-03/06/09/12继续封存。**
+更新：2026-09-09。**方法开发集2019-01/04/07/10的raw与processed均已完成；固定M2/M3开发集OOS专家预测协议和代码也已合并。当前授权本地生成M2、M3和0.5简单平均开发基线及私有逐点预测缓存；可靠性门控尚未训练。最终独立holdout 2019-03/06/09/12继续封存。**
 
 当前状态只在 [CURRENT_STATUS.md](CURRENT_STATUS.md) 维护。已完成任务不因旧Issue正文、历史分支或旧文档仍存在而自动重跑。
 
@@ -15,40 +15,37 @@
 | [docs/EXPERIMENT_LEDGER.md](docs/EXPERIMENT_LEDGER.md) | 已执行实验、协议/代码版本与结果边界 |
 | [docs/DATA_USAGE_LEDGER.md](docs/DATA_USAGE_LEDGER.md) | 已用数据、方法开发集与最终holdout分区 |
 | [ROADMAP.md](ROADMAP.md) | 阶段依赖，不作为自动运行授权 |
-| [docs/REPOSITORY_INDEX.md](docs/REPOSITORY_INDEX.md) | 当前材料、冻结证据与历史设计索引 |
 
 ## 当前方法与数据分区
 
-M2使用历史/日历及当前站级聚合状态；完整M3在M2基础上增加当前连接会话的细粒度合法状态。现有结果表明二者信息互补，但M3的额外价值随时距和信息可靠程度变化。
+M2使用历史/日历及当前站级聚合状态；完整M3在M2基础上增加当前连接会话的细粒度合法状态。现有结果表明二者信息互补，但M3额外价值随时距和信息可靠程度变化。
 
-当前Issue #29开发标准Mixture-of-Experts/gating框架下的**会话信息可靠性门控与向M2回退机制**。普通动态加权、简单平均或MoE本身不作为论文创新。
+当前Issue #29开发标准MoE/gating框架下的**会话信息可靠性门控与向M2回退机制**。普通动态加权、简单平均或MoE本身不作为论文创新。
 
 数据用途：
 - 已使用/探索：2019-02、05、08、11；
-- 方法开发集：2019-01、04、07、10；**raw与processed均已完成**；
+- 方法开发集：2019-01、04、07、10；raw/processed已完成；
 - 最终独立保留集：2019-03、06、09、12；继续封存。
 
-开发集processed结果四月均PASS，总计10872个formal issue。当前预测目标仍为 `station_current_mean_a`（A）；即使四个月power audit为 `KW_RECONSTRUCTION_CANDIDATE`，也不自动授权kW预测。
+## 当前专家预测协议
 
-## 当前模型开发原则
+PR #41已合并，main `653cb447382044911ce655175239f52f83dc892a`，CI 1066 passed、2 skipped。
 
-下一阶段先冻结开发集M2/M3专家预测协议：固定HGB专家配置、时间切分、共同有效样本、滚动重训和预测缓存。之后先审M2、M3和0.5简单平均基线，再开发可靠性门控。
+M2/M3均沿用5月已选HGB参数，不在开发月重新调专家超参数；horizon为15/30/60/120/240 min；每月当地18日起OOS，每个当地午夜重训；训练仅用 `issue < cutoff` 且 `issue+h <= cutoff` 的同月formal行。M2/M3共享相同测试行和truth，0.5简单平均为强基线。无imputation/scaling/clipping/calibration。
 
-门控仅允许使用issue-time可得的低维可靠性变量和horizon；不得使用测试误差/标签、最终kWh、未来离开/轨迹、未来到达结果或离线异常原因。若门控不能稳定超过0.5简单平均，或必须依赖高复杂度不可解释调参，则停止该方向，不消耗最终holdout。
+完整逐点预测只写入仓库外部本地保留目录，不进Git。当前本地运行只训练专家，不训练可靠性门控。
+
+## 方法停止规则
+
+专家基线完成后再开发低维可靠性门控。门控只允许issue-time可得可靠性变量和horizon，不允许测试标签/误差、最终kWh、未来离开/轨迹、未来到达结果或离线异常原因。若门控不能稳定超过0.5简单平均，或需要复杂不可解释调参，则停止该方向，不消耗最终holdout。
 
 ## 已有结论边界
 
-5月pilot为 `PASS_ACTIVE_SESSION_DROP_M4`；2/8/11季节主实验为 `MIXED_SEASONAL_EVIDENCE`。分组消融未支持统一删除整组会话信息；0.5简单平均相对M2的15个“月份×时距”MAE均下降，但相对M3并非全面占优；校准加权未稳定胜过简单平均。
+5月pilot为 `PASS_ACTIVE_SESSION_DROP_M4`；2/8/11季节主实验为 `MIXED_SEASONAL_EVIDENCE`。分组消融未支持统一删除整组会话信息；0.5简单平均是当前强基线；校准加权未稳定胜过简单平均。预测负号不构成真实V2G证据。目标仍为 `station_current_mean_a`（A），kW未授权。
 
-旧季节数据准备仍为 `CONDITIONAL_PASS`，11月保持 `CURRENT_PROXY_ONLY`，kW列未授权。模型预测为负不构成真实V2G证据。
+## 资产与校验
 
-## 代码、计算与资产
-
-PR #21、#23、#30、#34、#37均已合并。开发集processed v1.1结果已登记于Issue #29及 `evidence/development_preparation_20260909.json`。当前尚未授权新的专家模型本地训练，需先完成模型协议/入口审查。
-
-raw/interim/processed、完整预测、模型、私有索引、凭据和本机绝对路径不得提交Git。原main工作区未提交修改、数据worktree、失败/诊断JSON和外置运行目录及 `local_runs/private` 必须保留。
-
-## 校验
+raw/interim/processed、完整预测、模型、私有索引和本机路径不提交Git。原main未提交修改、所有worktree、失败/诊断JSON及运行后的外置目录均保留。
 
 ```bash
 python scripts/validate_library.py

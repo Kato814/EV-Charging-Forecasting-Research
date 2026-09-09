@@ -4,71 +4,63 @@
 
 ## 1. 接管结论
 
-**当前处于模型开发阶段。开发集2019-01/04/07/10的raw获取与processed准备均已完成并通过；首次processed兼容性故障已由PR #37修复并在v1.1实机重试中关闭。下一步是建立开发集M2/M3专家预测、0.5简单平均强基线，并开发会话信息可靠性门控。最终holdout 2019-03/06/09/12继续封存。**
+**当前处于模型开发阶段。开发集2019-01/04/07/10的raw与processed均已完成并PASS；固定M2/M3 OOS专家预测协议与入口已由PR #41合并。当前授权用户本地运行一次开发集专家预测，形成M2、M3和0.5简单平均基线及私有逐点预测缓存；可靠性门控尚未训练。最终holdout 2019-03/06/09/12继续封存。**
 
 当前唯一研发Issue为 [#29](https://github.com/Kato814/EV-Charging-Forecasting-Research/issues/29)。主控负责协议、代码、审查和仓库维护；用户仅执行明确授权的本地Python命令。
 
-## 2. 研究与数据边界
+## 2. 数据与目标边界
 
-主目标固定为 `station_current_mean_a`，单位A。M2=24 h历史/日历+当前站级聚合状态；M3=M2+当前连接会话细粒度合法状态。M4历史负结果保留，不恢复主线。
+目标固定为 `station_current_mean_a`，单位A。M2=24 h历史/日历+当前站级聚合状态；M3=M2+当前连接会话细粒度合法状态。
 
 数据分区：
 - 已使用/探索：2019-02/05/08/11；
-- 方法开发集：2019-01/04/07/10；raw和processed均完成；
-- 最终独立保留集：2019-03/06/09/12；方法冻结前不得获取时序或运行模型。
+- 方法开发集：2019-01/04/07/10；raw与processed均完成；
+- 最终独立保留集：2019-03/06/09/12；方法冻结前不得访问。
 
-## 3. 开发集processed完成身份
-
-用户回传 `evcf_development_preparation_status_20260909T044544Z.json`：
+四个开发月processed snapshot SHA：
 
 ```text
-source status SHA256 4573b5e43094ebb8a3c85c71358aac8d93dd3e3926fe9b04366e9fe2a42dd153
-code commit c1ff4e675ae14e7667e0c6b7f887fb15319aff38
-protocol SHA256 4f2baf0439202bc1db9771a0db530ad9823d9d1261bbcea4c914925beeea5fe1
-metadata SHA256 bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a
+2019-01 e4f49d92c7c95e8b4bf8069f14729f5262ac58761bccff5fd2fabef8acabda12
+2019-04 f05e4892f4583c24ffe7d7da54c4cf929bd31714343c906c703b505043ccb299
+2019-07 9eea83e13ea6fbe5fef694c5de93b5bc4c4a82f7efe00e90e4fadd6d0b9e9ff2
+2019-10 e9d321a47a05baee829d2692f9ca491fd9e20563d477e6385fb2296834825296
 ```
 
-| 月份 | sessions | valid90 / bins | formal / scheduled | snapshot SHA256 | 状态 |
-| --- | ---: | ---: | ---: | --- | --- |
-| 2019-01 | 1372 | 2970 / 2976 | 2836 / 2865 | `e4f49d92c7c95e8b4bf8069f14729f5262ac58761bccff5fd2fabef8acabda12` | PASS |
-| 2019-04 | 1524 | 2772 / 2880 | 2552 / 2769 | `f05e4892f4583c24ffe7d7da54c4cf929bd31714343c906c703b505043ccb299` | PASS |
-| 2019-07 | 1489 | 2931 / 2976 | 2742 / 2865 | `9eea83e13ea6fbe5fef694c5de93b5bc4c4a82f7efe00e90e4fadd6d0b9e9ff2` | PASS |
-| 2019-10 | 1673 | 2943 / 2976 | 2742 / 2865 | `e9d321a47a05baee829d2692f9ca491fd9e20563d477e6385fb2296834825296` | PASS |
+## 3. PR #41专家预测协议
 
-总formal 10872 / scheduled 11364；valid90 11616 / 11808。四个月raw unchanged、trajectory/full-session quarantine均0、holdout未访问、模型未训练。
+PR #41最终HEAD `ac4e4b2b75aa46429256b6a535e1e88a8a7a61f8`，main合并 `653cb447382044911ce655175239f52f83dc892a`。最终CI：1066 passed、2 skipped，compileall和Ruff均PASS。
 
-四个月power audit均为 `KW_RECONSTRUCTION_CANDIDATE`，但这不等于授权kW建模；当前预测仍仅使用A口径。
+协议 `JPL_DEVELOPMENT_HGB_EXPERT_OOS_20260909_V1`：
+- HGB M2/M3继续使用5月已选的tier×horizon参数；开发月不重新调专家超参数；
+- 15/30/60/120/240 min；当地18日起OOS；每个当地午夜重训；
+- fit仅允许同月formal行，且 `issue < cutoff`、`issue+h <= cutoff`；
+- HGB原NaN+冻结nullable indicators，无imputation/scaling/clipping/calibration；
+- M2/M3完全共享测试行和truth，0.5平均同步计算；
+- 逐点预测只保留在仓库外部私有缓存；公共/回传只用聚合指标；
+- gate不在本轮训练。
 
-## 4. processed故障历史
+冻结May参数源manifest SHA继续为：
 
-v1首次准备失败并未生成四个月interim/processed残留。只读诊断定位为 `acn_jpl_gate1_prep` 旧02/08/11 `SEASONAL_MONTHS`按值绑定遗漏。PR #37只扩展并恢复这一临时开发月兼容绑定，未改变清洗、coverage、特征、quarantine或holdout规则；最终CI 1058 passed、2 skipped，compileall/Ruff PASS。v1.1随后完整PASS。
+```text
+a43ac609629d0dfa1568ce19d8e51666cbeb8392d96cbe976927f9397f19cb0d
+```
 
-## 5. 已审实验结论
+## 4. 当前方法假设
 
-- 5月pilot：`PASS_ACTIVE_SESSION_DROP_M4`；
-- 2/8/11季节复核：总体 `MIXED_SEASONAL_EVIDENCE`；
-- 负值诊断：单纯置零不足以解释主要退化，负预测不是V2G测量证据；
-- 会话分组消融：不支持统一删除整组；
-- 预测组合：0.5简单平均是强基线，校准加权未稳定超过它。
+已有5月、季节复核、消融和组合结果表明M2/M3互补，且M3额外价值随horizon/信息可靠性变化。候选创新只能落在**会话可观测性驱动的低维门控和信息不足时向M2回退**，不能把普通MoE/动态权重本身写成创新。
 
-因此当前方法假设是：**M2/M3信息互补，M3增量价值受horizon和会话可观测/可靠程度影响。**
+开发阶段至少比较M2、M3、0.5简单平均、可靠性门控。门控若不能稳定超过简单平均，或仅依赖复杂不可解释调参，则停止该方向，不消耗最终holdout。
 
-## 6. 当前模型开发方向
+## 5. 当前本地执行与保全
 
-候选方法采用标准MoE/gating结构，但普通动态加权不是创新点。门控只允许使用issue-time可得低维变量：connected数、current/pilot observed ratio、用户申报可用比例、M3 missingness摘要、M2/M3预测差及horizon等；不得使用测试误差、测试标签、最终kWh、未来离开/轨迹、未来到达结果或离线异常原因。
+当前只运行一次固定专家OOS预测。启动器将：
+1. 锁定PR #41 main merge代码；
+2. 复核四个月processed manifest/snapshot SHA；
+3. 不下载ACN数据、不改processed；
+4. 训练日级滚动M2/M3 HGB专家并生成20个私有预测缓存；
+5. 私有缓存保存于仓库外部本地目录；
+6. 只回传脱敏 `evcf_development_expert_status_*.json`。
 
-开发阶段至少比较：M2、完整M3、0.5简单平均、可靠性门控。若门控不能稳定超过简单平均，或必须靠高复杂度不可解释调参取得收益，则停止该方向，不消耗最终holdout。
-
-## 7. 下一步最小动作
-
-1. 主控冻结开发集M2/M3专家预测协议与内部开发切分；
-2. 开发本地预测/缓存入口，固定HGB专家配置和共同有效样本；
-3. 用户仅在明确授权后运行开发集专家预测；
-4. 主控先审M2/M3/简单平均基线，再实现可靠性门控；
-5. 门控方案冻结后才允许最终holdout。
+新私有缓存必须保留，后续门控开发会复用。不要删除任何既有worktree/raw/interim/processed/失败诊断JSON或外置运行目录。禁止 `reset --hard`、`clean`、盲目stash和force push。
 
 当前不恢复M4，不启动Gate2、概率、联邦或调度。
-
-## 8. 资产保护
-
-保留原main未提交修改、所有worktree、raw/interim/processed、失败/诊断JSON、运行后的外置目录及 `local_runs/private`。禁止 `reset --hard`、`clean`、盲目stash和force push。

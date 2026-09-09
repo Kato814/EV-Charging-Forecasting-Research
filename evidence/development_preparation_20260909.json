@@ -1,0 +1,81 @@
+{
+  "schema_version": "evcf-development-preparation-evidence/v1",
+  "status": "COMPLETE",
+  "source_status_sha256": "4573b5e43094ebb8a3c85c71358aac8d93dd3e3926fe9b04366e9fe2a42dd153",
+  "code_commit": "c1ff4e675ae14e7667e0c6b7f887fb15319aff38",
+  "protocol_sha256": "4f2baf0439202bc1db9771a0db530ad9823d9d1261bbcea4c914925beeea5fe1",
+  "metadata_source_inventory_sha256": "bd15344d22ccc7e6230750e6c0bbba5fa2448b88bf0ebce10eaac3fd63c5a23a",
+  "development_months": ["2019-01", "2019-04", "2019-07", "2019-10"],
+  "final_holdout_months": ["2019-03", "2019-06", "2019-09", "2019-12"],
+  "holdout_accessed": false,
+  "models_trained": false,
+  "public_seasonal_release_created": false,
+  "raw_unchanged_all_months": true,
+  "trajectory_quarantine_total": 0,
+  "full_session_quarantine_total": 0,
+  "scheduled_issue_times_total": 11364,
+  "formal_issue_times_total": 10872,
+  "formal_issue_rate": 0.9567053854276664,
+  "station_bins_total": 11808,
+  "valid_bin_90_total": 11616,
+  "valid_bin_90_rate": 0.983739837398374,
+  "months": [
+    {
+      "month": "2019-01",
+      "status": "PASS",
+      "sessions_processed": 1372,
+      "cleaned_session_count": 1372,
+      "invalid_skipped_session_count": 0,
+      "station_bins": 2976,
+      "valid_bin_90_count": 2970,
+      "scheduled_issue_times": 2865,
+      "formal_issue_times": 2836,
+      "power_semantics_status": "KW_RECONSTRUCTION_CANDIDATE",
+      "processed_snapshot_sha256": "e4f49d92c7c95e8b4bf8069f14729f5262ac58761bccff5fd2fabef8acabda12"
+    },
+    {
+      "month": "2019-04",
+      "status": "PASS",
+      "sessions_processed": 1524,
+      "cleaned_session_count": 1524,
+      "invalid_skipped_session_count": 0,
+      "station_bins": 2880,
+      "valid_bin_90_count": 2772,
+      "scheduled_issue_times": 2769,
+      "formal_issue_times": 2552,
+      "power_semantics_status": "KW_RECONSTRUCTION_CANDIDATE",
+      "processed_snapshot_sha256": "f05e4892f4583c24ffe7d7da54c4cf929bd31714343c906c703b505043ccb299"
+    },
+    {
+      "month": "2019-07",
+      "status": "PASS",
+      "sessions_processed": 1489,
+      "cleaned_session_count": 1489,
+      "invalid_skipped_session_count": 0,
+      "station_bins": 2976,
+      "valid_bin_90_count": 2931,
+      "scheduled_issue_times": 2865,
+      "formal_issue_times": 2742,
+      "power_semantics_status": "KW_RECONSTRUCTION_CANDIDATE",
+      "processed_snapshot_sha256": "9eea83e13ea6fbe5fef694c5de93b5bc4c4a82f7efe00e90e4fadd6d0b9e9ff2"
+    },
+    {
+      "month": "2019-10",
+      "status": "PASS",
+      "sessions_processed": 1673,
+      "cleaned_session_count": 1673,
+      "invalid_skipped_session_count": 0,
+      "station_bins": 2976,
+      "valid_bin_90_count": 2943,
+      "scheduled_issue_times": 2865,
+      "formal_issue_times": 2742,
+      "power_semantics_status": "KW_RECONSTRUCTION_CANDIDATE",
+      "processed_snapshot_sha256": "e9d321a47a05baee829d2692f9ca491fd9e20563d477e6385fb2296834825296"
+    }
+  ],
+  "notes": [
+    "This is aggregate-only evidence derived from the user-returned local status JSON.",
+    "KW_RECONSTRUCTION_CANDIDATE is an audit status only; the current forecasting target remains station_current_mean_a in A and seasonal kW forecasting is not authorized.",
+    "invalid_skipped_session_count=0 does not by itself prove that no invalid container existed; it only records that no session was skipped under the structural-retention contract."
+  ]
+}

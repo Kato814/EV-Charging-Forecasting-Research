@@ -1,0 +1,85 @@
+schema_version: acn-jpl-development-expert-protocol/v1
+protocol_id: JPL_DEVELOPMENT_HGB_EXPERT_OOS_20260909_V1
+target:
+  name: station_current_mean_a
+  unit: A
+development_months:
+  2019-01:
+    formal_issue_times: 2836
+    processed_snapshot_sha256: e4f49d92c7c95e8b4bf8069f14729f5262ac58761bccff5fd2fabef8acabda12
+  2019-04:
+    formal_issue_times: 2552
+    processed_snapshot_sha256: f05e4892f4583c24ffe7d7da54c4cf929bd31714343c906c703b505043ccb299
+  2019-07:
+    formal_issue_times: 2742
+    processed_snapshot_sha256: 9eea83e13ea6fbe5fef694c5de93b5bc4c4a82f7efe00e90e4fadd6d0b9e9ff2
+  2019-10:
+    formal_issue_times: 2742
+    processed_snapshot_sha256: e9d321a47a05baee829d2692f9ca491fd9e20563d477e6385fb2296834825296
+final_holdout:
+  months:
+    - 2019-03
+    - 2019-06
+    - 2019-09
+    - 2019-12
+  access_allowed: false
+experts:
+  learner: hgb
+  tiers:
+    - M2
+    - M3
+  horizons_minutes:
+    - 15
+    - 30
+    - 60
+    - 120
+    - 240
+  source_model_selection_manifest: outputs/gate1_pilot/jpl_2019-05/model_selection_manifest.json
+  source_model_selection_sha256: a43ac609629d0dfa1568ce19d8e51666cbeb8392d96cbe976927f9397f19cb0d
+  selected_parameter_sha256:
+    M2:
+      '15': 92b00c5e34dddd323774012fddbc1a63d1c953b9abd79fdf071f26aa92553fff
+      '30': a7405c4486297b12f246c39592d536818fda29d187c99a63876f97dd696ece1a
+      '60': 1e99af2c4d2ac923bcd6cb6f6e5991380aef1161b5f4295af23edc450feace48
+      '120': a7405c4486297b12f246c39592d536818fda29d187c99a63876f97dd696ece1a
+      '240': 9b92e929ae0566dd606ef7ae464df81be87712cff7ff31c89acf15b047ee58ac
+    M3:
+      '15': 9b92e929ae0566dd606ef7ae464df81be87712cff7ff31c89acf15b047ee58ac
+      '30': 9b92e929ae0566dd606ef7ae464df81be87712cff7ff31c89acf15b047ee58ac
+      '60': a7405c4486297b12f246c39592d536818fda29d187c99a63876f97dd696ece1a
+      '120': e1d6902b2d08d145a1008de53315c26df3e1c295643a289215d74b6950b6bb05
+      '240': 9b92e929ae0566dd606ef7ae464df81be87712cff7ff31c89acf15b047ee58ac
+rolling_origin:
+  timezone: America/Los_Angeles
+  test_start_local_day: 18
+  refit_frequency: local_midnight_daily
+  use_same_month_history_only: true
+  fit_issue_rule: issue_time_utc_s < refit_cutoff_utc_s
+  fit_label_rule: issue_time_utc_s + horizon_minutes * 60 <= refit_cutoff_utc_s
+  test_rule: all_formal_rows_on_local_test_day
+preprocessing:
+  raw_nan_preserved: true
+  append_nullable_missing_indicators: true
+  imputation: false
+  scaling: false
+prediction:
+  clipping: false
+  calibration: false
+  retuning: false
+  nonnegative_projection_primary: false
+  native_thread_limit: 1
+baselines:
+  equal_weight_m2_m3: 0.5
+evaluation:
+  primary_metric: MAE
+  secondary_metrics:
+    - RMSE
+    - WAPE
+  common_rows_required: true
+  local_day_aggregates: true
+  development_only: true
+publication:
+  public_aggregate_only: true
+  private_row_predictions_local_only: true
+  model_objects_public: false
+  absolute_paths_public: false

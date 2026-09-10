@@ -9,8 +9,8 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pytest
 from evcf.forecasting.acn_jpl_development_experts import (
-    DevelopmentExpertProtocol,
     HORIZONS_MINUTES,
+    DevelopmentExpertProtocol,
     MonthData,
 )
 from evcf.forecasting.acn_jpl_gate1_features import (

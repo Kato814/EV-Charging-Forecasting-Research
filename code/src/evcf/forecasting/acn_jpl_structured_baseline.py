@@ -36,7 +36,6 @@ from evcf.forecasting.acn_jpl_development_experts import (
     DevelopmentExpertProtocol,
     EstimatorFactory,
     MonthData,
-    TaskPrediction,
     load_selected_hgb_parameters,
     predict_task,
 )
@@ -893,7 +892,7 @@ def _metrics(truth: np.ndarray, predictions: np.ndarray) -> dict[str, Any]:
     absolute = np.abs(error)
     denominator = float(np.sum(np.abs(truth)))
     return {
-        "n": int(len(truth)),
+        "n": len(truth),
         "mae_a": float(np.mean(absolute)),
         "rmse_a": float(np.sqrt(np.mean(np.square(error)))),
         "wape_ratio": None

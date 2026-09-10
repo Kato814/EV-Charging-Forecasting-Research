@@ -1,0 +1,74 @@
+schema_version: acn-jpl-structured-baseline-protocol/v1
+protocol_id: JPL_DEVELOPMENT_STRUCTURED_S1_20260910_V1
+target:
+  name: station_current_mean_a
+  unit: A
+development_months:
+  "2019-01":
+    cleaned_session_count: 1372
+    processed_snapshot_sha256: e4f49d92c7c95e8b4bf8069f14729f5262ac58761bccff5fd2fabef8acabda12
+  "2019-04":
+    cleaned_session_count: 1524
+    processed_snapshot_sha256: f05e4892f4583c24ffe7d7da54c4cf929bd31714343c906c703b505043ccb299
+  "2019-07":
+    cleaned_session_count: 1489
+    processed_snapshot_sha256: 9eea83e13ea6fbe5fef694c5de93b5bc4c4a82f7efe00e90e4fadd6d0b9e9ff2
+  "2019-10":
+    cleaned_session_count: 1673
+    processed_snapshot_sha256: e9d321a47a05baee829d2692f9ca491fd9e20563d477e6385fb2296834825296
+final_holdout:
+  months: ["2019-03", "2019-06", "2019-09", "2019-12"]
+  access_allowed: false
+source_experts:
+  protocol_sha256: 02c7809f1113aeaf20723030c96006ee0831b20ff219106da7d6968df535d71a
+  model_selection_sha256: a43ac609629d0dfa1568ce19d8e51666cbeb8392d96cbe976927f9397f19cb0d
+  private_manifest_sha256: 2c2ff4f05081b5227f948165a1b7b78eee80430f2c9be590510d0acf8c34f8dd
+horizons_minutes: [15, 30, 60, 120, 240]
+component_labels:
+  existing_rule: connection_time_utc_s <= issue_time_utc_s
+  arrival_rule: connection_time_utc_s > issue_time_utc_s
+  target_window: "[issue+h-15min, issue+h)"
+  reconstruction_absolute_tolerance_a: 0.000001
+branches:
+  existing:
+    input_tier: M3
+    target: existing_session_current
+    learner: hgb
+    parameters: reuse_source_M3_same_horizon
+  arrival:
+    input_tier: M2
+    target: future_arrival_current
+    learner: hgb
+    parameters: reuse_source_M2_same_horizon
+rolling_origin:
+  inherit_source_expert_protocol: true
+prediction:
+  clipping: false
+  calibration: false
+  branch_specific_retuning: false
+  nonnegative_projection_primary: false
+evaluation:
+  primary_metric: MAE
+  secondary_metrics: [RMSE, WAPE]
+  common_rows_required: true
+  local_day_aggregates: true
+decision:
+  pass:
+    pooled_mae_better_than_M3: true
+    pooled_mae_better_than_equal: true
+    min_horizons_better_than_equal: 3
+    min_months_better_than_equal: 3
+    max_horizon_mae_degradation_vs_equal_fraction: 0.05
+  mixed:
+    require_overall_gain_vs_at_least_one_strong_baseline: true
+    minimum_horizon_wins: 2
+    minimum_month_wins: 2
+  stop:
+    stop_if_no_overall_gain_vs_M3_and_equal: true
+    stop_if_horizon_wins_at_most: 1
+    stop_if_month_wins_at_most: 1
+publication:
+  aggregate_only: true
+  private_row_predictions_local_only: true
+  model_objects_public: false
+  absolute_paths_public: false

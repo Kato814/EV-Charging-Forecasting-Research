@@ -56,11 +56,13 @@ Reference forecasts remain:
 
 S1 remains formally `MIXED_STRUCTURED_SIGNAL`; this protocol does not reinterpret it as PASS.
 
-## 4. Probe E: current-session continuation
+## 4. Probe E: current-session continuation × mark
 
 ### 4.1 Scientific question
 
-Can the future contribution of sessions already connected at issue time be represented more robustly as a continuation/termination process than as direct aggregate-current regression?
+Can the future contribution of sessions already connected at issue time be represented more robustly by separating “does this session still contribute at horizon h?” from “how much current does it contribute if positive?” rather than directly regressing the aggregate existing-session current?
+
+A strict terminal-event survival model is deliberately deferred because an EV session can temporarily pause charging and later resume before disconnect. Treating every zero-current interval as an irreversible terminal event would impose an unverified monotonicity assumption. P1-E therefore first tests horizon-specific continuation probability; a formal hazard/survival model is considered only if this simpler continuation structure shows stable signal.
 
 ### 4.2 Legal predictors
 
@@ -81,23 +83,31 @@ Only issue-time information may be used. Session-level predictors are restricted
 
 No disconnect time, future pilot/current, realized future composition, future-arrival identity, or other future-derived variable may enter predictors.
 
-### 4.3 Low-complexity model
+### 4.3 Offline target and fixed low-complexity models
 
-The primary continuation model is a discrete-time logistic hazard model implemented with scikit-learn only. No new dependency is authorized.
+For each issue-time session already connected at issue time and each frozen horizon `h`:
 
-Fixed settings:
-- 15-min person-period bins through 240 min;
-- standardization fitted on each rolling-origin training fold only;
-- L2 logistic regression;
-- `C=1.0`;
-- `solver=lbfgs`;
-- `max_iter=1000`;
+- `C_i,h = 1` iff that session's mean current contribution in the exact target window `[issue+h-15min, issue+h)` is greater than the existing frozen active-current threshold `0.1 A`; otherwise `C_i,h = 0`.
+- `J_i,h` is that positive session-level mean current when `C_i,h = 1`.
+
+These future quantities are supervised labels only and are never predictors.
+
+The primary P1-E model is horizon-specific continuation probability × positive mark, implemented with scikit-learn only. No new dependency is authorized.
+
+Fixed continuation model for each horizon:
+- `StandardScaler` fitted on each rolling-origin training fold only;
+- `LogisticRegression(penalty='l2', C=1.0, solver='lbfgs', max_iter=1000)`;
 - no class weighting;
 - no hyperparameter search.
 
-The hazard is converted to horizon survival/continuation probability by cumulative product. This probability is a mechanism variable, not a reliability gate.
+Fixed positive-mark model for each horizon:
+- `StandardScaler` fitted on positive training rows only inside the same rolling-origin fold;
+- `GammaRegressor(alpha=1.0, max_iter=1000)` on `C_i,h = 1` rows;
+- no hyperparameter search.
 
-For the first probe, aggregate existing-session reconstruction uses survival-weighted issue-time current as the fixed mark. A positive-current magnitude learner is not added in P1-E; this deliberately isolates whether continuation modeling itself carries stable value.
+Session expected contribution is `P(C_i,h=1 | x_i) * E(J_i,h | C_i,h=1, x_i)`. The existing-session branch forecast is the sum across sessions already connected at issue time.
+
+This is a continuation × mark probe, not a reliability/composition gate. A formal discrete hazard/survival model is deferred until this probe demonstrates stable signal.
 
 ### 4.4 Evaluation
 
@@ -105,6 +115,7 @@ Report by horizon, month and pooled:
 - continuation Brier score;
 - continuation log loss where defined;
 - calibration by probability decile;
+- positive-mark MAE;
 - reconstructed existing-component MAE/RMSE/WAPE;
 - comparison with the frozen S1 existing branch.
 
@@ -183,7 +194,7 @@ Otherwise that branch is `MIXED_COMPONENT_SIGNAL` if pooled MAE improves but sta
 
 `MIXED_MECHANISM_PROBE` applies if P1-EA improves pooled MAE versus S1 or Equal but misses one or more stability criteria, or if exactly one branch shows a stable component signal.
 
-`STOP_MECHANISM_ROUTE` applies if neither branch shows pooled component improvement and P1-EA beats neither S1 nor Equal pooled. In that case survival/event-process decomposition is not promoted as the core forecasting route.
+`STOP_MECHANISM_ROUTE` applies if neither branch shows pooled component improvement and P1-EA beats neither S1 nor Equal pooled. In that case continuation/event-process decomposition is not promoted as the core forecasting route.
 
 Thresholds must not be changed after observing P1 results.
 

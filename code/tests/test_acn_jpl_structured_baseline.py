@@ -424,4 +424,3 @@ def test_load_baseline_cache_accepts_reconstruction_roundoff(tmp_path):
             expected_issue_times=issue_times,
             expected_truth=expected_truth,
         )
-

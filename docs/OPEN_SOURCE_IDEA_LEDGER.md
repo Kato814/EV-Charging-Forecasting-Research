@@ -2,63 +2,91 @@
 
 Updated: 2026-09-11.
 
-This ledger tracks external open-source projects that may provide reusable components, benchmark implementations, diagnostic ideas, or scientific contrasts for the JPL/ACN charging-station forecasting research. Inclusion here does **not** authorize importing code into the main method, changing the frozen data split, or accessing the final holdout. Any adoption must first pass scientific relevance, causal-boundary, license, and protocol review.
+This ledger tracks external open-source projects that may provide reusable components, benchmark implementations, diagnostic ideas, or scientific contrasts for the JPL/ACN charging-station forecasting research. Inclusion does **not** authorize importing code, changing the frozen split, or accessing the final holdout. Adoption requires scientific-relevance, causal-observability and license review first.
 
 ## 1. Current scientific constraint
 
-The completed S1 v1.3 development run is `MIXED_STRUCTURED_SIGNAL`. S1 improves pooled MAE versus both M3 and Equal, but only 2/4 development months beat Equal. The main weak region is the 30-120 min session-turnover band, especially 60 min. Therefore external ideas are screened primarily for whether they can explain or model **horizon-dependent transition between current-session continuity, session turnover, and future-arrival dominance**.
+S1 remains `MIXED_STRUCTURED_SIGNAL`. Two completed read-only diagnostics show that the main weakness is not a generic binary-arrival problem or a monotone composition threshold. The strongest reproducible evidence is a **horizon-conditioned session-turnover regime**:
 
-Known novelty boundary remains unchanged: current/pilot phase identification, existing-session + future-arrival decomposition, generic Transformer/Mamba/state-space backbones, and ordinary gating are not sufficient novelty claims by themselves.
+- 30 min / realized arrival share 25–50% is worse than Equal in 4/4 development months;
+- 60 min / realized arrival share 50–75% is worse in 4/4 months;
+- 60 min / realized arrival share 0–25% is better in 4/4 months;
+- 30/60/120 min around local 07:00 are consistently weak, while the same horizons around 09:00 are consistently stronger.
+
+Realized future composition is diagnostic only and cannot be a prediction-time input.
+
+Known novelty boundary remains unchanged: current/pilot phase identification, existing+arrival decomposition, generic gating, generic Transformer/Mamba/state-space backbones, survival libraries, TPP libraries and stochastic session generation are not sufficient novelty claims by themselves.
 
 ## 2. Candidate projects
 
-| Project | Open-source role | Potential use here | Main limitation / novelty risk | Current disposition |
+| Project | Open-source role | Potential use here | Limitation / novelty risk | Current disposition |
 | --- | --- | --- | --- | --- |
-| `zach401/acnportal` | Caltech ACN-Data/ACN-Sim research toolkit | Data semantics, session replay, physical consistency checks, simulation-based stress tests, practical pilot/current behavior | Primarily infrastructure/simulation tooling rather than a forecasting method; cannot itself supply forecasting novelty | **High-value infrastructure reference** |
-| `caltech-netlab/acnportal-experiments` | Reproducible ACN research examples | Reuse experiment organization; inspect practical-model and JPL scenario evaluation patterns; potentially stress-test future forecasting methods under realistic charging behavior | Focus is charging control/infrastructure evaluation, not load forecasting | **High-value experimental reference** |
-| `havakv/pycox` | PyTorch survival / time-to-event toolkit | Model current-session continuation/termination through discrete or continuous hazard; directly relevant to remaining-duration uncertainty of issue-time active sessions | Medical/general survival toolkit, not EV-specific; using DeepSurv alone would not be novel | **Strong candidate component for an existing-session mechanism probe** |
-| `ant-research/EasyTemporalPointProcess` | ICLR 2024 temporal point-process benchmark/toolkit | Model future charging-session arrivals as event times/marks; provides RMTPP/NHP/THP/intensity-free references and reproducible benchmarks | Considerably more complex than current evidence warrants; a TPP backbone itself is not novelty; must avoid replacing mechanism analysis with generic deep event modeling | **Watchlist; later candidate for arrival-process benchmarking** |
-| `fffahim/Deep-learning-for-electric-vehicle-charging-load-forecasting` | EV load forecasting examples using LSTM/BiLSTM/Residual Seq2Seq/PCA | Useful as a conventional deep-learning comparison family if required later | Generic backbone replacement; does not address session-turnover mechanism | **Comparison-only, not core direction** |
-| `anujgs/Forecasting-EV-Charging-Station-Load` | CNN-LSTM / clustering EV station-load example | May provide conventional preprocessing/clustering comparison ideas | Small project; direct time-series forecasting without current-session/future-arrival mechanism | **Low-priority comparison reference** |
+| `zach401/acnportal` | ACN-Data/ACN-Sim research toolkit | Data semantics, causal session replay, physical consistency, simulation stress tests; its `StochasticEvents` also supplies a mature stochastic-session reference | Already supports joint stochastic arrival-time / duration / energy modeling; this family is therefore not novel by itself | **High-value infrastructure and simple stochastic reference** |
+| `caltech-netlab/acnportal-experiments` | Reproducible ACN research examples | Experiment organization, practical JPL scenario evaluation and stress testing | Charging-control/infrastructure focus, not the forecasting contribution | **High-value experimental reference** |
+| `havakv/pycox` | PyTorch survival/time-to-event toolkit | Later benchmark for current-session continuation/termination | Too complex for the first probe; DeepSurv/pycox use alone is not novelty | **Deferred benchmark; not authorized in P1** |
+| `ant-research/EasyTemporalPointProcess` | TPP benchmark/toolkit | Later RMTPP/NHP/THP/intensity-free arrival-process benchmark | Current evidence does not justify neural TPP complexity; backbone itself is not novelty | **Deferred watchlist; not authorized in P1** |
+| `fffahim/Deep-learning-for-electric-vehicle-charging-load-forecasting` | LSTM/BiLSTM/Residual Seq2Seq EV examples | Conventional deep-learning comparison family if later required | Does not address the turnover mechanism | **Comparison-only** |
+| `anujgs/Forecasting-EV-Charging-Station-Load` | CNN-LSTM/clustering example | Conventional preprocessing/comparison ideas | Small direct time-series project; no session mechanism | **Low-priority comparison** |
 
-## 3. Reuse and license notes
+## 3. Reuse / license notes
 
-- `acnportal`: BSD-style redistribution terms; preserve copyright/license notices if code is reused.
+- `acnportal`: BSD-style redistribution terms; preserve required notices if code is reused.
 - `pycox`: BSD 2-Clause.
-- `EasyTemporalPointProcess`: Apache License 2.0 according to the project documentation; it also contains third-party components listed in `NOTICE`, so any copied component requires per-file/license review.
-- For all other repositories, license must be checked before any code reuse. No code should be copied based only on repository visibility.
+- `EasyTemporalPointProcess`: Apache-2.0 according to project documentation; inspect `NOTICE` / third-party components before copying files.
+- Other repositories require explicit license review before reuse.
+- Public visibility is not permission to copy code without license review.
 
-## 4. Ideas suggested by the current S1 evidence
+## 4. What ACN Portal already solves
 
-### A. Current-session continuation as survival / hazard
+ACN Portal contains `StochasticEvents` infrastructure that can fit/sample stochastic session variables and includes a Gaussian-mixture implementation around arrival time, session duration and energy demand. This is useful as an engineering/reference baseline, but it narrows our novelty space:
 
-Instead of directly regressing future existing-session aggregate current at every horizon, represent each issue-time active session through a conditional survival probability over the future horizon. A low-complexity discrete hazard model is the first candidate; neural survival models are optional later. The scientific value would come from linking elapsed time, current/pilot state, and remaining charging probability to the observed horizon transition, not from the survival library itself.
+> “jointly modeling charging-session arrival time, duration and energy” is not a defensible novelty claim by itself.
 
-### B. Future arrivals as an event process
+If used later, ACN stochastic-event machinery should be a comparison/stress-test component rather than the claimed contribution.
 
-Treat future arrivals as a count/time/mark process rather than a single aggregate-current regression target. A simple Poisson/negative-binomial or discrete arrival-intensity baseline should precede neural TPPs. TPP libraries are useful mainly as benchmark implementations if the simple event-process probe shows signal.
+## 5. Evidence-driven method ranking
 
-### C. Horizon-dependent transition mechanism
+### Rank 1 — current-session continuation / hazard
 
-The final method, if this route survives, should not be “two branches + a generic gate.” A more defensible target is a mechanism in which the expected contribution of current sessions decays through survival/termination while the expected contribution of future sessions grows through an arrival process, with the relative importance changing explicitly with horizon. The transition must be validated across development months, especially the current failure region around 30-120 min.
+The existing-session contribution increasingly transitions toward zero with horizon, and the S1 direct existing branch shows increasing long-horizon zero/negative behavior. The first candidate is therefore a **simple discrete-time continuation/hazard probe** using already legal issue-time M3 session fields.
 
-## 5. Next low-complexity probe before any deep model
+P1 deliberately uses scikit-learn logistic hazard rather than pycox. The purpose is to test mechanism value before model capacity.
 
-1. **Existing-session probe:** evaluate simple discrete survival/hazard targets for active sessions using only issue-time legal features; report horizon-wise continuation calibration and aggregate-current reconstruction.
-2. **Arrival-process probe:** decompose the arrival branch into future session count and conditional current/mark magnitude; compare direct aggregate regression with simple count × mark expectation.
-3. **Transition robustness:** evaluate both probes by leave-one-development-month-out direction/stability, with special attention to Apr-60, Apr-120, Jul-120, and Oct-120.
-4. Do not access 2019-03/06/09/12 and do not introduce a large neural model unless these low-complexity mechanism probes demonstrate stable development signal.
+### Rank 2 — future-arrival count × mark
 
-## 6. Standing search policy
+Future-arrival contribution is highly zero-inflated at short horizons and becomes dominant at long horizons. A binary any-arrival hurdle is insufficient because the 60-min failure occurs on both zero-arrival and positive-arrival subsets.
 
-Future method-design cycles should search GitHub and the literature before implementing from scratch. For each promising external project, record:
+The next candidate is therefore **contributing-session count/intensity × positive current mark**, initially using fixed Poisson/Gamma GLMs. Neural TPP is deferred.
 
-- exact repository / paper identity;
-- what component is reusable;
-- what scientific assumption it makes;
-- whether the assumption matches ACN/JPL causal observability;
+### Rank 3 — neural survival / TPP benchmark
+
+Only if low-complexity P1 shows stable component/total signal may later work evaluate pycox or EasyTPP as benchmark implementations. A larger neural model must not be introduced merely to rescue a weak mechanism.
+
+## 6. Frozen next-step protocol
+
+See `docs/JPL_STRUCTURED_MECHANISM_PROBE_PROTOCOL_20260911.md`.
+
+Primary candidate:
+
+```text
+P1-EA = discrete continuation existing contribution
+      + Poisson count × Gamma mark future-arrival contribution
+```
+
+`P1-Eonly` and `P1-Aonly` are attribution diagnostics only. No post-hoc best-of-three headline is allowed.
+
+The P1 protocol freezes development months, rolling-origin/common-row rules, fixed model parameters and decision thresholds before any fit.
+
+## 7. Standing search policy
+
+Future method-design cycles should search GitHub and the literature before implementation. For every promising external project, record:
+
+- repository / paper identity;
+- reusable component;
+- scientific assumptions;
+- compatibility with ACN/JPL causal observability;
 - license / third-party restrictions;
-- what it already solves, so it is **not** incorrectly claimed as novelty;
-- what limitation or gap remains that may support a defensible contribution.
+- what is already solved and therefore cannot be claimed as novelty;
+- remaining limitation/gap that may support a defensible contribution.
 
-The objective is to reuse mature engineering and benchmark implementations where appropriate while concentrating original work on the empirically supported forecasting mechanism.
+The objective is to reuse mature engineering while concentrating original work on the empirically supported horizon-dependent charging-session turnover mechanism.

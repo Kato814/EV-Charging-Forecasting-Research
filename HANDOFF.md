@@ -1,223 +1,186 @@
 # 主控交付说明｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-11。先读 [CURRENT_STATUS](CURRENT_STATUS.md)，再读本文、[实验台账](docs/EXPERIMENT_LEDGER.md) 和 [数据用途台账](docs/DATA_USAGE_LEDGER.md)。
+更新：2026-09-11。先读 [CURRENT_STATUS](CURRENT_STATUS.md)，再读本文、[实验台账](docs/EXPERIMENT_LEDGER.md)、[数据用途台账](docs/DATA_USAGE_LEDGER.md)、[open-source idea ledger](docs/OPEN_SOURCE_IDEA_LEDGER.md) 和 [P1 mechanism probe protocol](docs/JPL_STRUCTURED_MECHANISM_PROBE_PROTOCOL_20260911.md)。
 
 ## 1. 接管结论
 
-**当前处于 S1 开发集 Go/No-Go 完成后的 MIXED 失败分解阶段。S1 launcher v1.3 已完整运行，`status=COMPLETE`，正式冻结判定为 `MIXED_STRUCTURED_SIGNAL`。整体 pooled MAE 同时优于 M3 与 Equal，5 个 horizon 中 4 个优于 Equal，但只有 2/4 个开发月优于 Equal，因此未达到 `PASS_STRUCTURED_SIGNAL`。最终 holdout 2019-03/06/09/12 继续封存。**
+S1 launcher v1.3 已完整运行，正式冻结判定保持 `MIXED_STRUCTURED_SIGNAL`：pooled MAE 同时优于 M3 与 Equal，5 个 horizon 中 4 个优于 Equal，但只有 2/4 个开发月优于 Equal，因此不得改判为 PASS。
 
-当前研发 Issue 为 [#29](https://github.com/Kato814/EV-Charging-Forecasting-Research/issues/29)。主控负责协议、代码、审查、结果裁决和仓库维护；用户仅执行明确授权的本地单行 PowerShell/Python 命令。
+两轮只读 MIXED 失败诊断已经完成。当前不再处于“继续找失败原因”的开放状态，而是进入**P1 低复杂度 mechanism probe 准备阶段**。结构化路线被保留的依据是可复现的 horizon × turnover × local-hour 结构，而不是 S1 本身通过。
+
+最终 holdout 2019-03/06/09/12 继续封存。
 
 ## 2. 当前科学问题
 
-候选主问题：
-
-> 充电站负荷是否存在可复现的、随预测时距变化的“当前会话连续性 → 会话周转 / 未来到达主导”的机制转变；显式利用这一时距依赖结构，能否稳定优于强 M2/M3/0.5 基线。
+> 充电站负荷是否存在可复现的、随预测时距变化的“当前会话连续性 → 会话周转 → 未来到达主导”机制转变；显式利用这一时距依赖机制，能否稳定优于 M2/M3/Equal/S1。
 
 边界：
-- reliability gate 已降级/终止，不再作为核心方法；
-- existing + arrival 双源分解本身不作为 novelty claim；
-- current/pilot stage 识别不作为 novelty claim；
-- 普通 Transformer/Mamba/diffusion/state-space 换骨干不作为当前主线；
-- 真正后续创新只有在开发证据支持后，才能围绕 horizon-dependent transition / session turnover mechanism 展开。
+- reliability gate 不是主线；
+- existing + arrival 双分支本身不是 novelty；
+- current/pilot stage identification 不是 novelty；
+- generic Transformer/Mamba/diffusion/state-space replacement 不是主线；
+- survival/TPP/GMM 等成熟方法本身也不是 novelty。
 
-## 3. 数据与目标边界
+真正候选贡献只允许围绕经开发集证据支持的 horizon-dependent session-turnover mechanism 展开。
 
-目标固定为 `station_current_mean_a`，单位 A。未经授权不得改为 kW。
+## 3. 冻结数据与目标
 
-数据分区：
-- 已使用/探索：2019-02/05/08/11；
-- 方法开发集：2019-01/04/07/10；
-- 最终独立 holdout：2019-03/06/09/12；继续禁止访问。
+目标：`station_current_mean_a`，单位 A。
 
-冻结开发 snapshot：
+开发集：2019-01 / 2019-04 / 2019-07 / 2019-10。
+
+final holdout：2019-03 / 2019-06 / 2019-09 / 2019-12，禁止访问。
+
+冻结 development snapshots：
 
 ```text
 2019-01 e4f49d92c7c95e8b4bf8069f14729f5262ac58761bccff5fd2fabef8acabda12
 2019-04 f05e4892f4583c24ffe7d7da54c4cf929bd31714343c906c703b505043ccb299
-2019-07 9eea83e13ea6fbe5fef694c5de93b5bc4c4a82f7efe00e90e4fadd6d0b9e9ff2
+2019-07 9eea83e13ea6fbe5fef694c5de93b5bc4a82f7efe00e90e4fadd6d0b9e9ff2
 2019-10 e9d321a47a05baee829d2692f9ca491fd9e20563d477e6385fb2296834825296
 ```
 
-source expert protocol SHA256：
-
 ```text
+source expert protocol SHA256
 02c7809f1113aeaf20723030c96006ee0831b20ff219106da7d6968df535d71a
-```
 
-baseline private manifest SHA256：
-
-```text
+baseline private manifest SHA256
 2c2ff4f05081b5227f948165a1b7b78eee80430f2c9be590510d0acf8c34f8dd
+
+S1 private manifest SHA256
+562035b678b75865a54c7f68794b5f4907ea9696100c531498720eb943e570f1
 ```
 
-## 4. 冻结强基线
-
-- M2：24 h history/calendar + 当前站级 aggregate state。
-- M3：M2 + 当前连接 session 的 legal fine-grained state pools。
-- Equal：`0.5*M2 + 0.5*M3`。
-
-正式开发集 pooled weighted MAE：
+## 4. 冻结强基线与 S1
 
 ```text
 M2    30.164406 A
 M3    29.190188 A
 Equal 28.917286 A
+S1    28.594882 A
 ```
 
-按 horizon：
+S1 vs Equal by horizon：
 
 ```text
-15:  M2 9.321587 / M3 8.540405 / Equal 8.703288
-30:  16.999966 / 15.916203 / 15.974630
-60:  27.534578 / 26.552741 / 26.141292
-120: 42.351233 / 40.920106 / 40.249069
-240: 54.614668 / 54.021484 / 53.518152
+15  +4.44%
+30  +0.50%
+60  -3.98%
+120 +0.64%
+240 +3.60%
 ```
 
-## 5. G0 结构发现
-
-existing-session 对总负荷 pooled 贡献：
+S1 vs Equal by month：
 
 ```text
-15 min  97.38%
-30 min  90.61%
-60 min  78.10%
-120 min 56.52%
-240 min 26.21%
+2019-01 -0.65%
+2019-04 -2.72%
+2019-07 +3.56%
+2019-10 +3.48%
 ```
 
-future-arrival 补集分别为 2.62%、9.39%、21.90%、43.48%、73.79%。
+冻结判定：`MIXED_STRUCTURED_SIGNAL`。
 
-这说明负荷组成随 horizon 出现明显结构转移，但该发现本身不等于最终预测方法通过。
+## 5. 失败分解的最终证据
 
-## 6. S1 冻结定义
+### 5.1 binary arrival hurdle 不足
 
-`yhat_S1 = yhat_existing + yhat_arrival`
+60 min 的 S1 弱势同时存在于 `arrival_truth=0` 和 `arrival_truth>0` 子集，因此不能用“未来有没有新到达”一个二分类 gate 解释或修复。
 
-Existing branch：
-- M3 legal features；
-- M3 已冻结 HGB 参数；
-- 目标为 issue time 已连接 sessions 的未来贡献。
+### 5.2 composition 不是单调 gate
 
-Arrival branch：
-- M2 legal features；
-- M2 已冻结 HGB 参数；
-- 目标为 future-arrival sessions 的未来贡献。
+realized future arrival share 只作为离线诊断标签，不可作为预测输入。
 
-禁止 branch-specific tuning、calibration、clipping、gate、HSMM/state-space、M2/M3 重调以及 holdout 访问。
+跨四开发月：
+- 30 min / arrival share 25–50%：4/4 月 S1 劣于 Equal；
+- 60 min / arrival share 50–75%：4/4 月 S1 劣于 Equal；
+- 60 min / arrival share 0–25%：4/4 月 S1 优于 Equal；
+- 120 min composition 方向重新混合；
+- 240 min pooled 各 composition bin 均优于 Equal。
 
-## 7. S1 运行链
+所以真正现象是 horizon-conditioned turnover instability，而不是单一 composition threshold。
 
-- PR #47：S1 structured baseline；merge `7e914c1fe73376c720c376f0c12fa226a1082314`。
-- launcher v1：`MERGE_COMMIT_NOT_FOUND`，未训练。
-- launcher v1.1：`MERGE_COMMIT_NOT_FOUND_AFTER_EXPLICIT_FETCH`，未训练。
-- launcher v1.2：首次真实进入 S1，`COMMON_ROW_IDENTITY_INVALID`。
-- 根因之一：baseline cache truth 使用 exact equality，与 G0 数值重构约 4e-9 A roundoff 不一致。
-- PR #48：改为 `np.allclose(..., rtol=0, atol=1e-6 A)`；reviewed head `8853d17c5a567a8458e0f638eec90cd31b0dab82`；merge `0f85508f04e8192ec8c7949a512c488255fa58ef`。
-- launcher v1.3 SHA256：`dc43e61f3dbb55c93c8bf070a0fd61170555f309c7c15fe8ee889773979fa9b8`。
-- v1.3：**COMPLETE / MIXED_STRUCTURED_SIGNAL**。
+### 5.3 local-hour regime 可复现
 
-## 8. S1 v1.3 结果
-
-Overall pooled MAE：
+典型跨月符号稳定：
 
 ```text
-M2    30.1644064624 A
-M3    29.1901878199 A
-Equal 28.9172859886 A
-S1    28.5948815297 A
+30 min @07:00 4/4 worse, median +16.59 A
+30 min @09:00 4/4 better, median  -2.30 A
+60 min @06:00 4/4 worse, median +17.67 A
+60 min @07:00 4/4 worse, median +24.23 A
+60 min @09:00 4/4 better, median -13.23 A
+60 min @10:00 4/4 better, median -11.69 A
+120 min @07:00 4/4 worse, median +15.15 A
+120 min @09:00 4/4 better, median -13.31 A
 ```
 
-S1 相对 M3 改善 2.0394%，相对 Equal 改善 1.1149%。
+这足以排除“单一月份偶然噪声”作为主要解释。
 
-By horizon：
+## 6. 诊断版本链
 
-```text
-15  S1 8.317093  vs Equal +4.44%
-30  S1 15.894373 vs Equal +0.50%
-60  S1 27.181805 vs Equal -3.98%
-120 S1 39.991241 vs Equal +0.64%
-240 S1 51.589895 vs Equal +3.60%
-```
+- PR #52：read-only MIXED diagnostic；CI-passed head `63ead204b99b131f2c5634f868582411aad8703b`；merge `6236d3fe451838ffb70ff0a1e3a4fcca9de60841`。
+- PR #53：read-only transition-map diagnostic；CI-passed head `cc5da1a3683452bea95ff62501dc27c9c2ab7619`；merge `6464cac561f5a1f0c4f7657a6613537c2c675f61`。
 
-By month：
-
-```text
-2019-01 S1 26.127334 vs Equal -0.65%
-2019-04 S1 29.505123 vs Equal -2.72%
-2019-07 S1 28.901955 vs Equal +3.56%
-2019-10 S1 29.944196 vs Equal +3.48%
-```
-
-## 9. 冻结判定
-
-PASS 条件逐项：
-
-```text
-1 pooled S1 < M3                  PASS
-2 pooled S1 < Equal               PASS
-3 >=3/5 horizons < Equal          PASS (4/5)
-4 >=3/4 months < Equal            FAIL (2/4)
-5 max horizon degradation <=5%    PASS (3.98%)
-```
-
-因此只能判定：
-
-```text
-MIXED_STRUCTURED_SIGNAL
-```
-
-不得事后改阈值。
-
-## 10. 当前允许的失败分解
-
-只允许：
-- month × horizon；
-- existing branch 误差；
-- arrival branch 误差；
-- 判断 long horizon 是否由 arrival branch 主导；
-- 判断短/中时距结构化分解是否破坏 M3/Equal 优势。
-
-初步定位：
-- 2019-04 最弱，只有 15 min 优于 Equal；
-- 60 min 是跨月最持续的弱点；
-- 2019-07/10 在 120/240 或 240 min 有明显收益；
-- 30–120 min turnover transition 区域表现最不稳定。
-
-不要立即启动深度模型或复杂机制。
-
-## 11. 协议安全状态
-
-v1.3：
+最后一次 diagnostic：
 
 ```text
 status = COMPLETE
 reason_code = null
+development_data_accessed = false
 holdout_accessed = false
-m2_m3_retrained = false
-gate_trained = false
-hsmm_trained = false
-state_space_model_trained = false
+model_fit_attempted = false
 baseline_private_cache_unchanged = true
-development_data_unchanged = true
-fit_count = 550
+structured_private_cache_unchanged = true
+existing_worktrees_preserved = true
 ```
 
-private structured output 继续仓库外本地保存；不提交逐点预测或 private cache。
+## 7. 当前唯一下一步：P1 low-complexity mechanism probe
 
-## 12. 当前禁止事项
+协议文件：`docs/JPL_STRUCTURED_MECHANISM_PROBE_PROTOCOL_20260911.md`。
 
-- 不访问 2019-03/06/09/12；
-- 不恢复 reliability gate；
-- 不开发 HSMM / neural state-space；
-- 不做 branch-specific tuning；
-- 不做 calibration/clipping；
-- 不重调 M2/M3；
-- 不根据结果换开发月；
+### Probe E — existing-session continuation
+
+只使用 issue-time legal M3 session fields + calendar，建立固定参数的 discrete logistic hazard，检验当前连接 session 的 continuation/termination 是否比 S1 existing direct regression 更稳定。
+
+首轮只用 survival-weighted issue-time current 重构 existing contribution，故意不增加第二个 magnitude learner，以隔离 continuation mechanism 的价值。
+
+### Probe A — future-arrival count × mark
+
+只使用 M2 legal features：
+- PoissonRegressor 预测 future-arrival contributing session count；
+- GammaRegressor 预测 positive mark；
+- 两者相乘得到 arrival contribution。
+
+不启用 neural TPP。
+
+### Primary candidate
+
+`P1-EA = Probe-E existing + Probe-A arrival` 是唯一主候选。
+
+`P1-Eonly` / `P1-Aonly` 仅用于归因，禁止事后挑最好结果作为 headline。
+
+PASS 除稳定性要求外必须同时满足：
+- pooled total MAE < Equal；
+- pooled total MAE < S1；
+- 60-min pooled MAE < Equal。
+
+## 8. 当前禁止事项
+
+- 不访问 final holdout；
+- 不把 realized future composition 当 predictor/gate；
+- 不使用 pycox/DeepSurv；
+- 不使用 EasyTPP/RMTPP/NHP/THP；
+- 不恢复 reliability/composition gate；
+- 不使用 HSMM/neural state-space；
+- 不做 branch-specific hyperparameter search；
+- 不根据测试结果 clipping/calibration；
+- 不重调 M2/M3，不更换开发月；
 - 不清理历史 worktree、失败 status、private cache；
-- 不使用 `reset --hard`、`clean`、盲目 stash 或 force push。
+- 不使用 `reset --hard`、`clean`、盲目 stash、force push。
 
-## 13. 当前下一步
+## 9. 执行与仓库管理
 
-当前不需要重新运行 S1。先完成 MIXED 的只读失败分解并把结论记录到 Issue #29 / 实验台账。只有该分解完成后，才讨论是否还值得保留 structured session route；在此之前不设计下一代复杂模型，也不访问 final holdout。
+主控负责：协议、代码实现、测试、PR/CI、结果裁决、GitHub 维护和外部开源检索。用户只执行明确授权的本地单行 PowerShell/Python 命令。
+
+所有重要 method/protocol/status/scientific conclusion 都要保持 commit/PR/Issue 可追溯；private row-level outputs 继续仓库外保存。

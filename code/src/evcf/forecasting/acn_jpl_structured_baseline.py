@@ -873,7 +873,12 @@ def _load_baseline_cache(
         raise StructuredBaselineError("BASELINE_CACHE_INVALID")
     if not (
         np.array_equal(arrays["issue_times"], expected_issue_times)
-        and np.array_equal(arrays["y_true"], expected_truth)
+        and np.allclose(
+            arrays["y_true"],
+            expected_truth,
+            rtol=0.0,
+            atol=_RECONSTRUCTION_TOLERANCE_A,
+        )
     ):
         raise StructuredBaselineError("COMMON_ROW_IDENTITY_INVALID")
     return MappingProxyType(arrays)

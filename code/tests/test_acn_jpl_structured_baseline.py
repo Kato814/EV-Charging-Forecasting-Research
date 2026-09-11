@@ -369,3 +369,59 @@ def test_decision_rules_are_frozen(
         pooled_by_month=tuple(months),
     )
     assert result["decision"] == expected
+
+def test_load_baseline_cache_accepts_reconstruction_roundoff(tmp_path):
+    from evcf.forecasting.acn_jpl_structured_baseline import (
+        StructuredBaselineError,
+        _load_baseline_cache,
+    )
+
+    issue_times = np.array([100, 200, 300], dtype=np.int64)
+    expected_truth = np.array([1.0, 2.0, 3.0], dtype=np.float64)
+    cached_truth = expected_truth + np.array([4e-9, -4e-9, 2e-9])
+
+    common = {
+        "issue_times": issue_times,
+        "day_start_utc_s": np.array([0, 0, 0], dtype=np.int64),
+        "m2_predictions": np.zeros(3, dtype=np.float64),
+        "m3_predictions": np.zeros(3, dtype=np.float64),
+        "equal_predictions": np.zeros(3, dtype=np.float64),
+    }
+    np.savez(
+        tmp_path / "2019-01_h015.npz",
+        y_true=cached_truth,
+        **common,
+    )
+
+    loaded = _load_baseline_cache(
+        tmp_path,
+        month="2019-01",
+        horizon=15,
+        expected_issue_times=issue_times,
+        expected_truth=expected_truth,
+    )
+    assert np.array_equal(loaded["issue_times"], issue_times)
+    assert np.allclose(
+        loaded["y_true"],
+        expected_truth,
+        rtol=0.0,
+        atol=1e-6,
+    )
+
+    np.savez(
+        tmp_path / "2019-01_h015.npz",
+        y_true=expected_truth + np.array([2e-6, 0.0, 0.0]),
+        **common,
+    )
+    with pytest.raises(
+        StructuredBaselineError,
+        match="COMMON_ROW_IDENTITY_INVALID",
+    ):
+        _load_baseline_cache(
+            tmp_path,
+            month="2019-01",
+            horizon=15,
+            expected_issue_times=issue_times,
+            expected_truth=expected_truth,
+        )
+

@@ -87,10 +87,13 @@ No disconnect time, future pilot/current, realized future composition, future-ar
 
 For each issue-time session already connected at issue time and each frozen horizon `h`:
 
-- `C_i,h = 1` iff that session's mean current contribution in the exact target window `[issue+h-15min, issue+h)` is greater than the existing frozen active-current threshold `0.1 A`; otherwise `C_i,h = 0`.
-- `J_i,h` is that positive session-level mean current when `C_i,h = 1`.
+- let `J_i,h` be that session's exact mean current contribution in target window `[issue+h-15min, issue+h)` using the accepted S1 integration/reconstruction logic;
+- `C_i,h = 1` iff `J_i,h > 0`, otherwise `C_i,h = 0`;
+- the positive-mark target is `J_i,h` on `C_i,h = 1` rows.
 
-These future quantities are supervised labels only and are never predictors.
+The `>0` definition is intentional: it preserves the exact S1 existing-component truth identity. The previously frozen `0.1 A` threshold remains an issue-time feature/state semantic for active-charging counts; it is **not** used to truncate the P1 future-contribution target.
+
+For every issue/horizon, the sum of session-level `J_i,h` over sessions connected at issue time must reconstruct the frozen S1 `existing_truth` within absolute tolerance `1e-6 A`. Failure is fatal before any model fit. These future quantities are supervised labels only and are never predictors.
 
 The primary P1-E model is horizon-specific continuation probability × positive mark, implemented with scikit-learn only. No new dependency is authorized.
 

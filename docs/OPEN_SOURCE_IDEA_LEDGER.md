@@ -23,7 +23,7 @@ Known novelty boundary remains unchanged: current/pilot phase identification, ex
 | --- | --- | --- | --- | --- |
 | `zach401/acnportal` | ACN-Data/ACN-Sim research toolkit | Data semantics, causal session replay, physical consistency, simulation stress tests; its `StochasticEvents` also supplies a mature stochastic-session reference | Already supports joint stochastic arrival-time / duration / energy modeling; this family is therefore not novel by itself | **High-value infrastructure and simple stochastic reference** |
 | `caltech-netlab/acnportal-experiments` | Reproducible ACN research examples | Experiment organization, practical JPL scenario evaluation and stress testing | Charging-control/infrastructure focus, not the forecasting contribution | **High-value experimental reference** |
-| `havakv/pycox` | PyTorch survival/time-to-event toolkit | Later benchmark for current-session continuation/termination | Too complex for the first probe; DeepSurv/pycox use alone is not novelty | **Deferred benchmark; not authorized in P1** |
+| `havakv/pycox` | PyTorch survival/time-to-event toolkit | Later benchmark if current-session continuation evidence supports formal survival/hazard | Too complex for the first probe; DeepSurv/pycox use alone is not novelty | **Deferred benchmark; not authorized in P1** |
 | `ant-research/EasyTemporalPointProcess` | TPP benchmark/toolkit | Later RMTPP/NHP/THP/intensity-free arrival-process benchmark | Current evidence does not justify neural TPP complexity; backbone itself is not novelty | **Deferred watchlist; not authorized in P1** |
 | `fffahim/Deep-learning-for-electric-vehicle-charging-load-forecasting` | LSTM/BiLSTM/Residual Seq2Seq EV examples | Conventional deep-learning comparison family if later required | Does not address the turnover mechanism | **Comparison-only** |
 | `anujgs/Forecasting-EV-Charging-Station-Load` | CNN-LSTM/clustering example | Conventional preprocessing/comparison ideas | Small direct time-series project; no session mechanism | **Low-priority comparison** |
@@ -46,11 +46,11 @@ If used later, ACN stochastic-event machinery should be a comparison/stress-test
 
 ## 5. Evidence-driven method ranking
 
-### Rank 1 — current-session continuation / hazard
+### Rank 1 — current-session continuation × positive-current mark
 
-The existing-session contribution increasingly transitions toward zero with horizon, and the S1 direct existing branch shows increasing long-horizon zero/negative behavior. The first candidate is therefore a **simple discrete-time continuation/hazard probe** using already legal issue-time M3 session fields.
+The existing-session contribution increasingly transitions toward zero with horizon, but an EV session may temporarily pause charging and later resume. A strict terminal survival process would therefore impose an unverified monotonicity assumption in the first probe.
 
-P1 deliberately uses scikit-learn logistic hazard rather than pycox. The purpose is to test mechanism value before model capacity.
+P1 first uses a simple horizon-specific logistic probability that a currently connected session still contributes positive current in the target window, multiplied by a Gamma positive-current mark. This tests the continuation mechanism without adding a large model or forcing irreversible termination. Formal hazard/survival becomes a later candidate only if continuation×mark demonstrates stable development signal.
 
 ### Rank 2 — future-arrival count × mark
 
@@ -58,9 +58,9 @@ Future-arrival contribution is highly zero-inflated at short horizons and become
 
 The next candidate is therefore **contributing-session count/intensity × positive current mark**, initially using fixed Poisson/Gamma GLMs. Neural TPP is deferred.
 
-### Rank 3 — neural survival / TPP benchmark
+### Rank 3 — formal survival / neural TPP benchmark
 
-Only if low-complexity P1 shows stable component/total signal may later work evaluate pycox or EasyTPP as benchmark implementations. A larger neural model must not be introduced merely to rescue a weak mechanism.
+Only if low-complexity P1 shows stable component/total signal may later work evaluate formal hazard/survival, pycox or EasyTPP as benchmark implementations. A larger neural model must not be introduced merely to rescue a weak mechanism.
 
 ## 6. Frozen next-step protocol
 
@@ -69,7 +69,7 @@ See `docs/JPL_STRUCTURED_MECHANISM_PROBE_PROTOCOL_20260911.md`.
 Primary candidate:
 
 ```text
-P1-EA = discrete continuation existing contribution
+P1-EA = logistic continuation × Gamma mark existing contribution
       + Poisson count × Gamma mark future-arrival contribution
 ```
 

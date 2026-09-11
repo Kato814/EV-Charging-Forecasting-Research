@@ -119,7 +119,7 @@ realized arrival-share bins 仅用于离线解释，禁止成为 predictor。
 关键 pooled 现象：
 - 30 min / 25–50% arrival share：S1 比 Equal 差约 17.15%；
 - 60 min / 50–75% arrival share：S1 比 Equal 差约 25.01%；
-- 60 min / 0–25% arrival share：S1 比 Equal好约 4.83%；
+- 60 min / 0–25% arrival share：S1 比 Equal 好约 4.83%；
 - 120 min 多数 mixed bins重新出现轻微正收益；
 - 240 min pooled 所有 composition bins 都优于 Equal。
 
@@ -177,7 +177,7 @@ reported_merge_commit = 6464cac561f5a1f0c4f7657a6613537c2c675f61
 
 下一步协议：`docs/JPL_STRUCTURED_MECHANISM_PROBE_PROTOCOL_20260911.md`。
 
-P1-E：discrete logistic hazard / continuation。
+P1-E：horizon-specific logistic continuation probability × Gamma positive-current mark；首轮不强制 survival monotonicity。
 
 P1-A：Poisson count × Gamma positive mark。
 

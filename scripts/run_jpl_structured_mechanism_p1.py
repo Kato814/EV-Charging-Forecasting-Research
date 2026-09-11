@@ -6,7 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
-from evcf.forecasting.acn_jpl_structured_mechanism_p1 import (
+from evcf.forecasting.acn_jpl_structured_mechanism_p1_runtime import (
     MechanismP1Error,
     run_mechanism_p1,
 )

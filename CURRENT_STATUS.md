@@ -2,7 +2,7 @@
 
 更新日期：2026-09-11。本文件是当前状态唯一入口；历史执行记录见 [实验台账](docs/EXPERIMENT_LEDGER.md)，数据用途见 [数据台账](docs/DATA_USAGE_LEDGER.md)，接管规则见 [HANDOFF](HANDOFF.md)，下一阶段冻结协议见 [P1 mechanism probe protocol](docs/JPL_STRUCTURED_MECHANISM_PROBE_PROTOCOL_20260911.md)。
 
-**通俗说明：S1 v1.3 的正式结论仍为 `MIXED_STRUCTURED_SIGNAL`，不会事后改成 PASS。两轮只读失败诊断现已完成并表明：S1 的问题不是随机月份噪声，也不是一个简单“未来有没有新到达”的 gate，而是可复现的 horizon × session-turnover × time-of-day 耦合。结构化路线因此保留，但下一步只允许低复杂度 survival/continuation + arrival count×mark 机制探针；final holdout 2019-03/06/09/12 继续封存，pycox/EasyTPP/复杂深度模型尚未授权。**
+**通俗说明：S1 v1.3 的正式结论仍为 `MIXED_STRUCTURED_SIGNAL`，不会事后改成 PASS。两轮只读失败诊断现已完成并表明：S1 的问题不是随机月份噪声，也不是一个简单“未来有没有新到达”的 gate，而是可复现的 horizon × session-turnover × time-of-day 耦合。结构化路线因此保留，但下一步只允许低复杂度 existing-session continuation×mark + arrival count×mark 机制探针；final holdout 2019-03/06/09/12 继续封存，pycox/EasyTPP/复杂深度模型尚未授权。**
 
 ## 1. 当前研发任务
 
@@ -15,7 +15,7 @@
 | 预测目标 | `station_current_mean_a`，单位 A；kW 未授权 |
 | 强基线 | M2、M3、`0.5*M2+0.5*M3` |
 | S1 冻结决策 | **`MIXED_STRUCTURED_SIGNAL`** |
-| P1 主候选 | `P1-EA = continuation existing + count×mark arrival` |
+| P1 主候选 | `P1-EA = continuation×mark existing + count×mark arrival` |
 | P1 协议 | `docs/JPL_STRUCTURED_MECHANISM_PROBE_PROTOCOL_20260911.md` |
 
 ## 2. 当前科学问题
@@ -97,7 +97,7 @@ S1 仅 2/4 开发月优于 Equal，因此正式决策保持 `MIXED_STRUCTURED_SI
 - 2019-04 是最弱月份；
 - 60 min 是最持续的弱 horizon；
 - future-arrival target 高度零膨胀，但 60 min 在 `arrival_truth=0` 与 `arrival_truth>0` 两侧均可退化，因此简单 binary hurdle 不能解释问题；
-- existing branch 随 horizon 增长出现更高的退出/零贡献与负预测比例，支持继续检验 continuation/hazard 结构；
+- existing branch 随 horizon 增长出现更高的退出/零贡献与负预测比例，支持继续检验 session continuation 结构；
 - branch residual 并无强同向叠加，不能把 S1 失败简单归因于两个分支误差相加。
 
 ### 第二层：transition map
@@ -152,9 +152,11 @@ existing_worktrees_preserved = true
 冻结协议：`docs/JPL_STRUCTURED_MECHANISM_PROBE_PROTOCOL_20260911.md`。
 
 P1 分为：
-- **Probe E**：当前连接 session 的低复杂度 discrete logistic hazard / continuation；
+- **Probe E**：当前连接 session 的 horizon-specific logistic continuation probability × Gamma positive-current mark；
 - **Probe A**：future-arrival 的 Poisson count × Gamma positive mark；
 - **P1-EA**：两机制合成后的唯一主候选；Eonly/Aonly 仅做归因。
+
+Probe E 首轮不强制严格 survival monotonicity，因为会话可能临时停充后恢复；只有 continuation×mark 显示稳定信号后才允许评估 formal hazard/survival。
 
 所有模型固定参数、无 hyperparameter search，并继承既有 rolling-origin / common-row / development-only 约束。
 

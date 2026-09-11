@@ -139,11 +139,11 @@ existing_worktrees_preserved = true
 
 协议文件：`docs/JPL_STRUCTURED_MECHANISM_PROBE_PROTOCOL_20260911.md`。
 
-### Probe E — existing-session continuation
+### Probe E — existing-session continuation × mark
 
-只使用 issue-time legal M3 session fields + calendar，建立固定参数的 discrete logistic hazard，检验当前连接 session 的 continuation/termination 是否比 S1 existing direct regression 更稳定。
+只使用 issue-time legal M3 session fields + calendar。对每个 horizon，固定 logistic model 预测该当前连接 session 在目标窗口仍有正电流贡献的概率，并用固定 GammaRegressor 预测正电流 mark；两者乘积后对当前连接 sessions 求和得到 existing contribution。
 
-首轮只用 survival-weighted issue-time current 重构 existing contribution，故意不增加第二个 magnitude learner，以隔离 continuation mechanism 的价值。
+首轮故意不强制 formal survival/hazard monotonicity，因为同一 EV session 可能临时停充后恢复。只有 continuation×mark 显示稳定开发信号后，才允许评估真正的 hazard/survival 模型。
 
 ### Probe A — future-arrival count × mark
 

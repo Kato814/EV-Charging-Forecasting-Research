@@ -6,7 +6,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-
 from evcf.forecasting.acn_jpl_structured_mixed_diagnostic import (
     DEVELOPMENT_MONTHS,
     HORIZONS_MINUTES,

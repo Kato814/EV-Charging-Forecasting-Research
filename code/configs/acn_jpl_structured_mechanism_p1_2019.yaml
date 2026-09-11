@@ -15,7 +15,7 @@ development_months:
   "2019-07":
     formal_issue_times: 2742
     cleaned_session_count: 1489
-    processed_snapshot_sha256: 9eea83e13ea6fbe5fef694c5de93b5bc4a82f7efe00e90e4fadd6d0b9e9ff2
+    processed_snapshot_sha256: 9eea83e13ea6fbe5fef694c5de93b5bc4c4a82f7efe00e90e4fadd6d0b9e9ff2
   "2019-10":
     formal_issue_times: 2742
     cleaned_session_count: 1673

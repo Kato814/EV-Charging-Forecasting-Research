@@ -30,10 +30,10 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path, DiagnosticIdentity]:
     issue_times = np.asarray([1, 2, 3, 4], dtype=np.int64)
     day_starts = np.asarray([0, 0, 0, 0], dtype=np.int64)
     existing_truth = np.asarray([10.0, 10.0, 10.0, 10.0], dtype=np.float64)
-    arrival_truth = np.asarray([0.0, 2.0, 5.0, 10.0], dtype=np.float64)
+    arrival_truth = np.asarray([0.0, 2.0, 5.0, 20.0], dtype=np.float64)
     y_true = existing_truth + arrival_truth
     existing_predictions = np.asarray([9.0, 11.0, 8.0, 12.0], dtype=np.float64)
-    arrival_predictions = np.asarray([1.0, 1.0, 7.0, 8.0], dtype=np.float64)
+    arrival_predictions = np.asarray([1.0, 1.0, 7.0, 18.0], dtype=np.float64)
     structured_predictions = existing_predictions + arrival_predictions
     m3_predictions = y_true + 1.0
     equal_predictions = y_true + 0.5
@@ -138,7 +138,7 @@ def test_mixed_diagnostic_is_read_only_and_aggregates_residual_interaction(
         1.0
     )
     assert first["S1_vs_equal"]["improvement_fraction"] == pytest.approx(1.0)
-    assert first["truth_composition"]["arrival_fraction"] == pytest.approx(17.0 / 57.0)
+    assert first["truth_composition"]["arrival_fraction"] == pytest.approx(27.0 / 67.0)
     bins = {item["state_bin"] for item in first["realized_arrival_state_bins"]}
     assert "arrival_lt_10pct" in bins
     assert "arrival_ge_60pct" in bins

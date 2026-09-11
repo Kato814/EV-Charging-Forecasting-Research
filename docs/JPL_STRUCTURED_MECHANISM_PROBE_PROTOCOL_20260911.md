@@ -98,13 +98,11 @@ For every issue/horizon, the sum of session-level `J_i,h` over sessions connecte
 The primary P1-E model is horizon-specific continuation probability × positive mark, implemented with scikit-learn only. No new dependency is authorized.
 
 Fixed continuation model for each horizon:
-- `StandardScaler` fitted on each rolling-origin training fold only;
 - `LogisticRegression(penalty='l2', C=1.0, solver='lbfgs', max_iter=1000)`;
 - no class weighting;
 - no hyperparameter search.
 
 Fixed positive-mark model for each horizon:
-- `StandardScaler` fitted on positive training rows only inside the same rolling-origin fold;
 - `GammaRegressor(alpha=1.0, max_iter=1000)` on `C_i,h = 1` rows;
 - no hyperparameter search.
 
@@ -148,7 +146,6 @@ No neural TPP is authorized in P1-A.
 Fixed models:
 - count/intensity: `PoissonRegressor(alpha=1.0, max_iter=1000)`;
 - positive mark: `GammaRegressor(alpha=1.0, max_iter=1000)` on `N_h > 0` training rows only;
-- standardization fitted inside each rolling-origin training fold;
 - no hyperparameter search;
 - arrival forecast = predicted count × predicted positive mark.
 
@@ -161,6 +158,32 @@ Report by horizon, month and pooled:
 - positive-mark MAE;
 - reconstructed arrival-component MAE/RMSE/WAPE;
 - comparison with the frozen S1 arrival branch.
+
+### 5.6 Frozen preprocessing and degenerate-fold handling
+
+All preprocessing is fitted **inside each rolling-origin training fold only**. No statistic from the test day may enter imputation or scaling.
+
+Probe E predictor encoding:
+- 11 legal M3 session fields plus 3 calendar fields (quarter-hour index, day of week, weekend);
+- keep the 14 raw numeric columns in fixed order;
+- append one fixed missing-indicator column for each of the 11 M3 session fields (11 indicators regardless of whether that field happens to be missing in a particular fold);
+- fit `SimpleImputer(strategy='median', keep_empty_features=True)` on the raw numeric columns using training rows only;
+- concatenate the fixed indicators and apply `StandardScaler()` fitted on the training fold only.
+
+Probe A predictor encoding:
+- start from the frozen M2 raw feature block;
+- append the canonical fixed nullable indicators defined by the M2 feature schema, preserving the accepted encoded M2 feature semantics;
+- fit `SimpleImputer(strategy='median', keep_empty_features=True)` on training rows only;
+- apply `StandardScaler()` on the imputed encoded matrix using training rows only.
+
+Predeclared degenerate-fold rules:
+- continuation training labels contain one class only: use that exact constant probability (0 or 1) for the corresponding test fold; no logistic fit is attempted;
+- future-arrival count training target is all zero: predict count 0 for that test fold; no Poisson fit is attempted;
+- a positive-mark training subset has zero rows: use mark 0 for that test fold;
+- a positive-mark training subset has exactly one row: use that single positive training mark as a constant for that test fold;
+- otherwise fit the frozen Gamma model normally.
+
+These are fail-safe deterministic rules, not calibration, clipping, model selection or tuning. Logistic/Gamma/Poisson distribution constraints provide nonnegative/probabilistic outputs intrinsically; no post-hoc clipping is authorized.
 
 ## 6. Total forecast variants
 

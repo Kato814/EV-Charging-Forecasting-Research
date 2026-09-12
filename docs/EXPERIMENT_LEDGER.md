@@ -2,6 +2,8 @@
 
 更新：2026-09-12。当前任务见 [CURRENT_STATUS](../CURRENT_STATUS.md)。本台账记录已执行/已审查事实及版本身份；接受交付不等于科学假设通过。
 
+**最新记录见第 9 节：R1 COMPLETE，正式 `MIXED_JOINT_STATE_SIGNAL`。第 7–8 节保留 P1 收口时的历史阶段说明，不代表当前执行授权。**
+
 ## 1. 版本与发布状态
 
 - 5月预测实验：PR #21，merge `c2af2cdf4ecf5dad059d2ac92e929df8df35d42b`。
@@ -38,8 +40,11 @@
 | transition-map diagnostic | COMPLETE；read-only | horizon-conditioned turnover + local-hour regime 可复现 |
 | P1 mechanism probe | COMPLETE，fit_count=1090 | **`STOP_MECHANISM_ROUTE`** |
 | P1-A post-mortem | COMPLETE；read-only | extreme OOS tail localized；STOP unchanged |
+| R1 joint-state probe | COMPLETE，fit_count=550 | **`MIXED_JOINT_STATE_SIGNAL`** |
 
 ## 3. 冻结开发数据身份
+
+以下保留原转录；7 月正文 SHA 的两位遗漏勘误见第 9.4 节，运行配置未变。
 
 ```text
 2019-01 e4f49d92c7c95e8b4bf8069f14729f5262ac58761bccff5fd2fabef8acabda12
@@ -186,7 +191,7 @@ Interpretation boundary：
 - private cache lacks predicted counts / Poisson linear predictors, therefore no coefficient-level causal claim；
 - this cannot rescue P1 because Probe E independently fails and P1-Eonly is worse than S1/Equal。
 
-## 7. 当前阶段裁决
+## 7. P1 收口时的阶段裁决（历史保留）
 
 - S1 remains `MIXED_STRUCTURED_SIGNAL`。
 - P1 remains **`STOP_MECHANISM_ROUTE`**。
@@ -194,7 +199,7 @@ Interpretation boundary：
 - descriptive horizon-conditioned turnover evidence remains available for new-method design。
 - final holdout remains sealed。
 
-## 8. 下一阶段
+## 8. P1 收口时的下一阶段（历史保留）
 
 进入 **new-method selection**。下一候选需优先处理：
 1. horizon-dependent regime specialization；
@@ -205,3 +210,49 @@ Interpretation boundary：
 6. novelty must come from the charging-station forecasting mechanism/problem, not generic backbone substitution。
 
 No new local model run is authorized until a new scientific question, protocol and preregistered decision rule are frozen.
+
+## 9. R1 正式运行及聚合审计
+
+### 9.1 版本链
+
+- PR #59：P1 归档，merge `0dbae8be2fa71d870ff89138280e1df583ab7e60`。
+- PR #60：post-P1 方法筛选，merge `5c964601e2374d16a341e2c55ec73ec0116731f6`。
+- PR #61：R1 protocol，merge `5c56ac71d6e94e6c566e88a855b4f9646eb170ea`。
+- PR #62：R1 implementation，reviewed head `e01607078431141a1fccdd6a9db5f75ae561bfda`，merge `0a2f1fc29af3fc6232534c8f6073c276dbe9122f`，全量 CI 通过。
+- PR #63：运行前状态同步，merge `436b1da28bb583e0f155deae38ee0bbc4358acf5`。
+- 本次 R1：COMPLETE，550 fits，20 private cache files，正式 `MIXED_JOINT_STATE_SIGNAL`。
+
+详细结论见 [R1 outcome](JPL_R1_JOINT_STATE_OUTCOME_20260912.md)。
+
+### 9.2 判据与结果
+
+```text
+R1-Control MAE 29.192881902331596 A
+R1-Joint MAE   29.039977599163333 A
+Equal MAE      28.917285988574830 A
+S1 MAE         28.594881529744885 A
+```
+
+Joint vs Control：pooled 改善 0.523773%，4/5 horizon wins、3/4 month wins。
+
+Joint vs Equal：pooled 退化 0.424285%，3/5 horizon wins、2/4 month wins。
+
+60 min：Joint 26.086069 A < Equal 26.141292 A；优势仅 0.211249%。最大 horizon 退化为 1.110700%。八项 PASS 条件六项通过；失败的是 pooled 优于 Equal、至少 3/4 月优于 Equal。MIXED 条件成立，STOP 未触发。
+
+### 9.3 已完成的失败来源分析与边界
+
+7 月五个时距 Joint 均差于 Control。10 月 Joint pooled 优于 Control，但未追平 Equal。60 min 仅 1、4 月胜 Equal；120/240 min pooled 差于 Equal。
+
+已按样本数重算 20 个 month-horizon cell 的总体、时距和月度汇总，含 MAE、平方加权 RMSE、WAPE、负预测数，均与 status 一致；decision_support 独立复算一致。状态报告数据/cache 未改，历史 worktree 保留，无 holdout 访问。远程审计未独立访问本机 private cache。
+
+25,375 是合并五时距的 origin-horizon 记录数，不是独立样本量。当前未做显著性检验。小时/日级误差和特征支持度未包含在该 JSON 中，不能从现有聚合表推断。
+
+当前仅允许失败来源分析，不重跑训练、不更换 Pearson、不筛 pair、不做预测后处理或集合网络升级。
+
+### 9.4 7 月 SHA 正文勘误
+
+第 3 节及 R1 protocol 旧正文中的 July SHA 为 62 位，缺少 `c4`。执行前已存在的机器配置、原 launcher 和本次 status 一致使用：
+
+`9eea83e13ea6fbe5fef694c5de93b5bc4c4a82f7efe00e90e4fadd6d0b9e9ff2`
+
+此处追加勘误，保留原文以供追溯，不修改冻结协议、机器配置、数据身份或判据。

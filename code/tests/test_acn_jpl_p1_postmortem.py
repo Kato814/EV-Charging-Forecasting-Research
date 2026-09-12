@@ -4,9 +4,8 @@ import hashlib
 import json
 from pathlib import Path
 
-import numpy as np
-
 import evcf.forecasting.acn_jpl_p1_postmortem as postmortem
+import numpy as np
 
 
 def _sha256(path: Path) -> str:

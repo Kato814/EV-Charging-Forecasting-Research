@@ -62,8 +62,7 @@ def test_single_and_empty_sets_are_retained_without_fabricated_rows():
 
 def test_m2_fold_preprocessing_is_train_only_and_has_fixed_width():
     raw = np.zeros((4, r2.M2_RAW_WIDTH), dtype=np.float64)
-    nullable = np.zeros(r2.M2_RAW_WIDTH, dtype=np.bool_)
-    nullable[-3:] = True
+    _names, nullable = r2.canonical_feature_schema("M2")
     raw[0, 0] = 1.0
     raw[1, 0] = 3.0
     raw[2, 0] = 100.0

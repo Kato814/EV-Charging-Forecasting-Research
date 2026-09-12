@@ -3,9 +3,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import numpy as np
-
 import evcf.forecasting.acn_jpl_r2_session_set_probe as r2
+import numpy as np
 from evcf.forecasting.acn_jpl_gate1_features import canonical_feature_schema
 
 
@@ -56,7 +55,7 @@ def test_permuted_control_preserves_every_field_marginal_and_is_reproducible():
 def test_single_and_empty_sets_are_retained_without_fabricated_rows():
     issue_times = np.asarray([1, 2], dtype=np.int64)
     single = _row(3)
-    joint, permuted = r2.build_joint_and_permuted((tuple(), (single,)), issue_times)
+    joint, permuted = r2.build_joint_and_permuted(((), (single,)), issue_times)
     assert joint[0].shape == (0, 11) and permuted[0].shape == (0, 11)
     assert np.allclose(joint[1], permuted[1], equal_nan=True)
 

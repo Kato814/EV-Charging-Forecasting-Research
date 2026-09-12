@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import evcf.forecasting.acn_jpl_joint_state_probe as r1
 import numpy as np
 import pytest
-
-import evcf.forecasting.acn_jpl_joint_state_probe as r1
 
 
 def _rows() -> list[dict[str, float]]:

@@ -1,8 +1,8 @@
 # 当前状态｜JPL/ACN 充电站结构化负荷预测研究
 
-更新日期：2026-09-12。本文件是当前状态唯一入口。历史证据见 [实验台账](docs/EXPERIMENT_LEDGER.md)，P1 正式结果见 [P1 outcome](docs/JPL_P1_MECHANISM_PROBE_OUTCOME_20260912.md)，P1-A 最终只读审计见 [P1-A post-mortem outcome](docs/JPL_P1_A_POSTMORTEM_OUTCOME_20260912.md)，接管规则见 [HANDOFF](HANDOFF.md)。
+更新日期：2026-09-12。本文件是当前状态唯一入口。历史证据见 [实验台账](docs/EXPERIMENT_LEDGER.md)，P1 正式结果见 [P1 outcome](docs/JPL_P1_MECHANISM_PROBE_OUTCOME_20260912.md)，P1-A 最终只读审计见 [P1-A post-mortem outcome](docs/JPL_P1_A_POSTMORTEM_OUTCOME_20260912.md)，post-P1 方法筛选见 [method screening](docs/JPL_POST_P1_METHOD_SCREENING_20260912.md)，R1 冻结协议见 [R1 protocol](docs/JPL_JOINT_SESSION_STATE_PROBE_PROTOCOL_20260912.md)，接管规则见 [HANDOFF](HANDOFF.md)。
 
-**当前结论：S1 保持 `MIXED_STRUCTURED_SIGNAL`；P1 已正式 `STOP_MECHANISM_ROUTE`；P1-A 唯一授权的只读 post-mortem 已 COMPLETE。结构化 `continuation×mark + Poisson count×mark` 路线至此关闭，不再 rescue。G0/S1 已验证的 horizon-dependent composition shift 与 turnover/local-hour 结构保留为机制证据。final holdout 2019-03/06/09/12 继续封存。**
+**当前结论：S1 保持 `MIXED_STRUCTURED_SIGNAL`；P1 已正式 `STOP_MECHANISM_ROUTE` 且 post-mortem 已关闭。下一阶段已冻结为 R1 joint-session-state representation probe：先用 matched `R1-Control` / `R1-Joint` 检验当前连接会话的 within-session 联合状态是否提供稳定增量信息。R1 尚未拟合，final holdout 2019-03/06/09/12 继续封存。**
 
 ## 1. 当前阶段
 
@@ -13,13 +13,14 @@
 | final holdout | **2019-03 / 06 / 09 / 12，禁止访问** |
 | 预测目标 | `station_current_mean_a`，单位 A |
 | S1 冻结决策 | `MIXED_STRUCTURED_SIGNAL` |
-| P1 冻结决策 | **`STOP_MECHANISM_ROUTE`** |
-| Probe E | `NO_COMPONENT_SIGNAL` |
-| Probe A | `NO_COMPONENT_SIGNAL` |
-| P1-A post-mortem | **COMPLETE，scientific decision unchanged** |
-| 当前允许动作 | **重新进入新方法创新筛选；不得继续修补 P1** |
+| P1 冻结决策 | `STOP_MECHANISM_ROUTE` |
+| P1-A post-mortem | COMPLETE，scientific decision unchanged |
+| post-P1 method screening | COMPLETE |
+| R1 protocol | **FROZEN BEFORE FIT** |
+| R1 fit | **NOT STARTED** |
+| 当前允许动作 | **实现 R1-Control / R1-Joint，先经 PR/CI；CI 通过后才能本机运行** |
 
-## 2. 已冻结的机制证据
+## 2. 已冻结机制证据
 
 G0 pooled 真实负荷组成：
 
@@ -41,98 +42,59 @@ Equal 28.917286 A
 S1    28.594882 A
 ```
 
-S1 仅 2/4 开发月优于 Equal，因此正式保持 `MIXED_STRUCTURED_SIGNAL`。只读诊断还确认：
-- 30 min / realized arrival share 25–50% 为稳定弱区；
-- 60 min / 50–75% 为稳定弱区，而 0–25% 为稳定强区；
-- 30/60/120 min 在约 07:00 跨月稳定偏弱，09:00 附近可反转。
+S1 仅 2/4 开发月优于 Equal，因此正式保持 `MIXED_STRUCTURED_SIGNAL`。只读诊断还确认：30 min / realized arrival share 25–50% 与 60 min / 50–75% 是跨月稳定弱区；30/60/120 min 在约 07:00 跨月稳定偏弱，09:00 附近可反转。
 
-这说明 horizon-conditioned turnover phenomenon 可复现，但不等于已有 P1 参数化有效。
+这些现象只证明存在 horizon-conditioned turnover structure，不证明 P1、survival、TPP、MoE 或 set network 有效。
 
-## 3. P1 冻结结果
-
-Pooled MAE：
-
-| model | MAE (A) |
-| --- | ---: |
-| Equal | 28.917286 |
-| S1 | 28.594882 |
-| P1-Eonly | 30.065656 |
-| P1-Aonly | 172.758507 |
-| P1-EA | 172.966423 |
-
-Component MAE：
-
-| component | MAE (A) |
-| --- | ---: |
-| S1 existing | 12.791178 |
-| P1-E | 14.495331 |
-| S1 arrival | 23.105152 |
-| P1-A | 167.857291 |
-
-P1-EA 对 Equal 为 0/5 horizon wins、0/4 month wins；60-min P1-EA MAE = 109.278945 A vs Equal = 26.141292 A。正式决策只能是 `STOP_MECHANISM_ROUTE`。
-
-## 4. P1-A 最终 post-mortem
-
-执行身份：
-- PR #58 CI-passed head `9bc752f1b416e0dce4cb59942d3ecb07315b9273`；
-- merge `6df5cc836635fedb2034f27cdb34e7dda6e8a885`；
-- P1 private manifest `df222c4731f3c3192735a6df2ccd2f692f1ea6d640a7954706e7bca17f51580f`；
-- `status = COMPLETE`；
-- no model fit / no raw or processed access / no holdout access / private cache unchanged。
-
-P1-A 25,375 个 OOS rows 的 pooled 结果：
+## 3. P1 已关闭
 
 ```text
-MAE            167.857291 A
-prediction q50  10.396828 A
-prediction q99 518.312153 A
-prediction max 2,526,912.316702 A
-truth max      742.980111 A
+Equal       28.917286 A
+S1          28.594882 A
+P1-Eonly    30.065656 A
+P1-Aonly   172.758507 A
+P1-EA      172.966423 A
 ```
 
-误差高度集中：
-- worst 1 row = 59.33% total absolute error；
-- worst 5 rows = 81.99%；
-- worst 10 rows = 82.09%；
-- worst 1% rows = 84.67%。
+Probe E / A 均为 `NO_COMPONENT_SIGNAL`，P1-EA 为 `STOP_MECHANISM_ROUTE`。P1-A post-mortem 进一步确认严重 extreme-tail OOS extrapolation，但 Probe E 也独立失败，因此 P1 不再 rescue。
 
-最强病理点集中在 **2019-10-29 12:00 local**：
+## 4. post-P1 方法筛选结论
+
+2025–2026 相关工作已经覆盖 generic EV multi-horizon Transformer、MoE、horizon-conditioned routing、probabilistic residual forecasting 与 session-generative forecasting。因此 generic backbone / generic MoE / existing+arrival decomposition 本身不能构成核心创新。
+
+仓库代码核对确认 M3 对 11 个合法 session 字段分别做 10 个独立边际统计，共 110 个 session-pool 特征；这保留边际分布，却不保留哪些字段值属于同一个 session。P1-E 虽保留 session tuple，但独立预测每个 session 的未来贡献并失败。
+
+因此当前新问题被缩窄为：
+
+> 当前已连接 session population 的 within-session joint state 是否包含被 M3 独立边际池化丢失、且对多时距 aggregate current 预测稳定有用的信息？
+
+## 5. R1 冻结协议
+
+R1 不直接训练 Deep Sets / Set Transformer。两条 matched arm 都以 frozen M3 311 维 raw context 为基础，并追加相同 55 个 session-field-pair 位置：
 
 ```text
-15 min    1,379.274 A
-30 min  2,526,912.317 A
-60 min    390,526.985 A
-120 min   572,604.896 A
+R1 raw width = 311 + C(11,2) = 366
 ```
 
-其中 30/60/120 min 的极端输出均出现在同一 issue state。结合 P1 代码已通过 target identity、row identity、rolling-origin 约束，最稳妥解释是：固定 standardized-feature + log-link Poisson count 路线在少量 development OOS state 上发生严重外推失稳。private cache 未保存 predicted count / linear predictor，因此不做系数级因果断言。
+- `R1-Control`：pair feature 可定义时填 0，不可定义时 NaN；
+- `R1-Joint`：在完全相同 availability mask 下填 pairwise-complete Pearson correlation；
+- 两者使用完全相同的 frozen M3 horizon-specific HGB 参数、preprocessing、rolling-origin 与 OOS rows。
 
-该结果**不能用来 rescue P1**。即使忽略 Probe A，P1-Eonly = 30.065656 A，仍差于 S1 与 Equal；Probe E 本身也只有 1/5 horizon win、0/4 month win。
+主比较只允许：`R1-Joint vs R1-Control`。外部参照：M2 / M3 / Equal / S1。
 
-## 5. 当前下一步：新方法创新筛选
-
-P1 已关闭。新候选必须重新定义，不允许从“修 Poisson / 换 survival / 上 TPP”直接延伸。
-
-优先筛选能显式表达以下已验证难点的方法：
-1. horizon-dependent regime specialization；
-2. time-of-day-dependent state transition / local-hour reversal；
-3. 在相同 causal feature boundary 下对不同预测时距采用不同专家或机制；
-4. 不使用 realized future composition oracle；
-5. 必须与 M2/M3/Equal/S1 在统一 OOS 协议下比较。
-
-当前开放方向包括但不限于 mixture-of-experts / regime-specialized forecasting / horizon-conditioned routing，但 generic Transformer/Mamba backbone replacement 不自动构成创新。
+冻结决策为：`PASS_JOINT_STATE_SIGNAL / MIXED_JOINT_STATE_SIGNAL / STOP_JOINT_STATE_ROUTE`。判据已在 protocol 中提前锁定，不得看结果后修改。
 
 ## 6. 当前禁止事项
 
 - 不访问 final holdout；
 - 不恢复 reliability/composition gate；
 - 不把 realized future composition 当 predictor；
-- 不对 P1 做 post-hoc retuning / clipping / calibration；
-- 不删除 2019-10 或极端 timestamp 后重新报结果；
-- 不直接把 P1-E 升级为 neural survival、P1-A 升级为 neural TPP 来 rescue；
-- 不清理历史 worktree、failed status、private cache；
-- 禁止 `reset --hard`、`clean`、盲目 stash、force push。
+- 不继续 P1 rescue；
+- R1 不做 pair selection、相关系数类型切换、clipping/calibration 或 hyperparameter search；
+- R1 结果出来前不训练 Deep Sets / Set Transformer / MoE；
+- 不删除极端 P1 rows、历史 worktree、failed status 或 private cache；
+- 禁止 `reset --hard`、`clean`、blind stash、force push。
 
 ## 7. 仓库维护
 
-P1 正式 outcome、P1-A post-mortem、Issue #29、CURRENT_STATUS、HANDOFF 与实验台账保持一致。private row-level predictions/cache 继续仓库外保存。后续新方法必须先冻结科学问题、开发判据和代码身份，再实现/CI/本机运行。
+R1 必须形成独立 protocol → implementation PR/CI → local status → outcome 链路。private row-level outputs/cache 继续仓库外保存。若 R1 PASS，也不能直接访问 final holdout；只能进入单独预注册的 learned session-set 阶段。

@@ -1,28 +1,35 @@
 # 当前状态｜JPL/ACN 充电站结构化负荷预测研究
 
-更新日期：2026-09-12。当前状态以本文件为入口。科学依据见 [R1 冻结协议](docs/JPL_JOINT_SESSION_STATE_PROBE_PROTOCOL_20260912.md)、[R1 outcome](docs/JPL_R1_JOINT_STATE_OUTCOME_20260912.md)、[实验台账](docs/EXPERIMENT_LEDGER.md)、[HANDOFF](HANDOFF.md)。诊断范围见 [R1 MIXED 只读诊断方案](docs/JPL_R1_MIXED_DIAGNOSTIC_PLAN_20260912.md)，本次工程失败及下一步见 [身份校验失败台账](docs/JPL_R1_DIAGNOSTIC_IDENTITY_FAILURE_20260912.md)。
+更新：2026-09-12。当前状态以本文件和 [HANDOFF](HANDOFF.md) 为入口。科学依据见 [R1 协议](docs/JPL_JOINT_SESSION_STATE_PROBE_PROTOCOL_20260912.md)、[R1 outcome](docs/JPL_R1_JOINT_STATE_OUTCOME_20260912.md)、[实验台账](docs/EXPERIMENT_LEDGER.md)。工程记录见 [原启动失败](docs/JPL_R1_DIAGNOSTIC_IDENTITY_FAILURE_20260912.md) 和 [身份预检结果及 v1.1 修复](docs/JPL_R1_DIAGNOSTIC_BINARY_IDENTITY_REPAIR_20260912.md)。
 
-**S1 保持 MIXED_STRUCTURED_SIGNAL；P1 保持 STOP_MECHANISM_ROUTE 且已关闭；R1 正式运行 COMPLETE、550 fits、MIXED_JOINT_STATE_SIGNAL。随后 R1 只读诊断 v1 在代码身份校验阶段 INCOMPLETE / IMPLEMENTATION_DRIFT，尚未产生日级/小时级结果。final holdout 2019-03/06/09/12 继续封存。**
+**S1 保持 MIXED_STRUCTURED_SIGNAL；P1 保持 STOP_MECHANISM_ROUTE 且已关闭；R1 正式训练 COMPLETE、550 fits、MIXED_JOINT_STATE_SIGNAL。身份预检现已 COMPLETE：本地文件、固定 Git 对象和 HEAD 一致；诊断模块的文本及二进制 git show 均返回 128。已定位启动失败环节，但底层 Git 命令失败原因仍未知。真实日级/小时级诊断仍未完成。**
 
 ## 1. 当前唯一下一步
 
-不直接重跑原诊断，不修改 SHA 来放行。独立身份预检代码通过 PR/CI 并发布后，运行 `evcf_r1_identity_preflight_v1.py --authorize-r1-identity-check`，只上传 `evcf_r1_identity_preflight_status_*.json`。预检仅检查已创建的 v1 代码工作树及两个固定代码/参考文件，不打开 R1 private cache，不创建 worktree，不联网，不导入诊断/训练模块。
+完成独立 v1.1 launcher 修复的审查、全量 CI 和合并，再发布 `evcf_r1_mixed_diagnostic_launcher_v1_1.py`。发布后只运行一次原范围的 prediction-cache-only 诊断，参数 `--authorize-r1-diagnostic`；只上传最新 `evcf_r1_mixed_diagnostic_status_*.json`。
 
-原失败只记录通用 IMPLEMENTATION_DRIFT。仓库原始代码和 reference 的 SHA 已与发布 pin 核对一致，但本机具体哪项不一致仍未知；不能把原因直接说成 CRLF 或缓存损坏。预检 COMPLETE 只表示身份信息采集完成，不表示原统计诊断完成。
+不再重复身份预检或运行旧诊断 v1。新版本不改固定 SHA 来放行：仍核验原 PR #65 HEAD、本地 LF 规范化字节与原始 Git blob SHA256，仅将对象读取改为二进制 `git cat-file blob`。修复 PR 未通过 CI/合并/发布时，不运行模板。
 
-| 项目 | 状态 |
+| 项目 | 当前状态 |
 | --- | --- |
-| 当前 Issue | #29 |
+| Issue | #29 |
 | 目标 | station_current_mean_a，单位 A |
-| 开发月 | 2019-01 / 04 / 07 / 10 |
+| 开发集 | 2019-01 / 04 / 07 / 10 |
 | final holdout | 2019-03 / 06 / 09 / 12，禁止访问 |
-| R1 原始训练 | COMPLETE，550 fits，不重复 |
-| R1 科学结论 | MIXED_JOINT_STATE_SIGNAL，不改变 |
-| 只读诊断 v1 | INCOMPLETE，代码身份检查未通过；耗时约 3.45 s |
-| 日级/小时级诊断结果 | 尚未产生 |
-| 下一步拟合/缓存访问 | 0 / 禁止；仅代码身份采集 |
+| R1 原训练 | COMPLETE，550 fits，不重复 |
+| R1 科学结论 | MIXED_JOINT_STATE_SIGNAL，不变 |
+| 诊断 v1 | INCOMPLETE / IMPLEMENTATION_DRIFT，保留 |
+| 身份预检 v1 | COMPLETE，耗时约 0.411 s；未读预测缓存 |
+| 日级/小时级结论 | 尚未产生，不能提前宣称完成 |
+| 下一步模型拟合 | 0，仅恢复原只读统计 |
 
-## 2. 已接受 R1 结果
+## 2. 本机身份预检的有效信息
+
+诊断模块：本地与 Git blob 均为 18029 字节、SHA 匹配；git diff=0；git show 文本和二进制模式均返回 128、输出零字节。参考文件：本地与 Git blob 均为 7821 字节，所有指纹和 git show 检查通过。两文件均无 CRLF、无 BOM。
+
+不能把 `LEGACY_GIT_SHOW_TEXT_MISMATCH` 标签直接解释为文本编码问题。没有 stderr，不能归因为 Windows 换行、杀毒软件、长路径或某个 Git 配置。新校验仍拒绝错误 HEAD、错误/缺失对象及本地文件改动，不降低实验身份要求。
+
+## 3. 科学结果保持不变
 
 | 模型 | Pooled MAE (A) |
 | --- | ---: |
@@ -33,30 +40,18 @@
 | R1-Control | 29.192882 |
 | R1-Joint | 29.039978 |
 
-Joint 对 Control 改善 0.523773%，对 Equal 退化 0.424285%。对 Control 为 4/5 时距、3/4 月改善；对 Equal 为 3/5、2/4。60 min 优势仅 0.055223 A。八项 PASS 条件通过六项，失败的是总体优于 Equal 和至少 3/4 月优于 Equal，因此保持 MIXED。
+Joint 对 Control 改善 0.523773%，对 Equal 退化 0.424285%；对 Control 为 4/5 时距、3/4 月改善，对 Equal 为 3/5、2/4。60 min 仅优于 Equal 0.055223 A。八项 PASS 要求中六项通过，因此保持 MIXED。
 
-已完成聚合分解：7 月 Joint 所有时距差于 Control；10 月虽改善 Control，仍落后 Equal；60 min 仅 1、4 月胜 Equal；120/240 min 总体落后 Equal。不支持直接升级集合网络，也不证明所有集合表示无效。
+7 月 Joint 所有时距劣于 Control；10 月改善 Control 但未追平 Equal。日级/小时级细分、显著性及具体特征原因尚无证据；25,375 条记录重复包含 5,075 个 issue times，不视为独立样本。
 
-## 3. 保留的只读分析范围（身份故障关闭后）
+## 4. 执行与输入边界
 
-R1 cache manifest：`56178b6eac582a7ed844d6f94324a6947580e0f9a42e95cb9307fd78adecfd0f`。
+统计代码继续绑定 PR #65 reviewed head `dd05258bf44d0a71773b6522ef6fb039831c77f1`。模块、reference 和 R1 cache manifest 的固定 SHA 见修复记录，均不更改。v1.1 launcher 的 reviewed head/PR 是另一个独立身份，不替代统计代码身份。
 
-原计划完整报告四月×五时距的 Joint-Control、Joint-Equal 日级/小时级配对绝对误差；正值表示 Joint 更差。空格保留 null，按日与按小时汇总必须还原原指标。25,375 条记录包含同一 issue time 的五个时距，不视为独立样本；不计算显著性，不自动判定物理原因，不检查缺失的原特征支持度。该计划本轮没有运行。
+只复用已存在的 `-jpl-r1-mixed-diagnostic-code-v1` 工作树，不联网、不创建或切换工作树、不修改既有文件。只读已有 R1 cache，完整报告四月×五时距的 Joint-Control/Joint-Equal 日级与小时级误差；不读取 raw/interim/processed、其他模型缓存或 final holdout。统计核心、样本、分组、判据及原结果均不变。
 
-## 4. 执行身份与历史证据
+## 5. 保护、进度与交付
 
-R1 protocol：PR #61，merge `5c56ac71d6e94e6c566e88a855b4f9646eb170ea`。
+保留旧 launcher、失败 JSON、身份预检 JSON、所有历史工作树及私有缓存。禁止 reset/clean/stash/force push、P1 rescue、R1 重训调参、筛 pair、更换相关估计器、clipping/calibration、删日期、事后拼接或未经授权的 Deep Sets/Set Transformer/MoE。
 
-R1 model：PR #62，reviewed head `e01607078431141a1fccdd6a9db5f75ae561bfda`；merge `0a2f1fc29af3fc6232534c8f6073c276dbe9122f`。
-
-R1 outcome：PR #64，merge `a1c97ce425d4d2fb84c4582fb6a0d9eb2588878b`。这是聚合 status 审计，不是本机缓存独立复放。
-
-只读诊断：PR #65，reviewed head `dd05258bf44d0a71773b6522ef6fb039831c77f1`；merge `f8d23749ec792d8cf35199e3a32436d22c17f003`。v1 launcher SHA：`784752eb1db8bfd22c77c954224f4c489faa717e0db0c61e880028dcb60273bc`。上述源代码 pin 不改。
-
-历史保留：[P1 outcome](docs/JPL_P1_MECHANISM_PROBE_OUTCOME_20260912.md)、[P1-A post-mortem](docs/JPL_P1_A_POSTMORTEM_OUTCOME_20260912.md)、[方法筛选](docs/JPL_POST_P1_METHOD_SCREENING_20260912.md)。旧筛选建议不授权启动新模型。
-
-## 5. 保护与运行体验
-
-保留失败 JSON、刚创建的代码 worktree、所有历史 worktree 及 private cache。null 完整性字段表示尚未复核，不解释为已损坏。禁止清理、reset/clean/stash/force push。禁止 R1 调参、筛 pair、更换相关估计器、clipping/calibration、事后拼接模型、P1 rescue、未经授权的 Deep Sets/Set Transformer/MoE。
-
-PowerShell 命令单行；进度实时 flush，最终 JSON 分流，记录实际耗时。身份预检只用标准库/Git，不调用 GPU。后续只在批准模型与后端支持时使用 RTX 5080，不为使用 GPU 更换冻结模型。
+PowerShell 命令单行；实时阶段/单元进度、心跳和实际耗时继续输出，最终 JSON 分流。本次 CPU 数组统计、GPU_USED=false、FIT_COUNT=0；以后仅在已批准后端适用时使用 RTX 5080，不为用 GPU 更换冻结模型。INCOMPLETE 后先审计具体原因，不自动重跑。

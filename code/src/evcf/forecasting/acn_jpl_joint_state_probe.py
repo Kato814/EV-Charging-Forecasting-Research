@@ -49,6 +49,13 @@ R1_RAW_WIDTH = M3_RAW_WIDTH + len(PAIR_INDEX)
 R1_INPUT_WIDTH = R1_RAW_WIDTH + (M3_INPUT_WIDTH - M3_RAW_WIDTH) + len(PAIR_INDEX)
 IMPLEMENTATION_PATHS = (
     "docs/JPL_JOINT_SESSION_STATE_PROBE_PROTOCOL_20260912.md",
+    "code/configs/acn_jpl_development_experts_2019.yaml",
+    "code/src/evcf/forecasting/acn_jpl_development_experts.py",
+    "code/src/evcf/forecasting/acn_jpl_development_experts_compat.py",
+    "code/src/evcf/forecasting/acn_jpl_gate1_data.py",
+    "code/src/evcf/forecasting/acn_jpl_gate1_features.py",
+    "code/src/evcf/forecasting/acn_jpl_gate1_models.py",
+    "code/src/evcf/forecasting/acn_jpl_structured_mechanism_probe.py",
     "code/src/evcf/forecasting/acn_jpl_joint_state_probe.py",
     "scripts/run_jpl_joint_state_probe.py",
 )
@@ -145,6 +152,23 @@ def _verify_git(code_commit: str, repo_root: Path) -> None:
         )
         if chk.returncode:
             raise JointStateProbeError("IMPLEMENTATION_DRIFT")
+    diff = subprocess.run(
+        [
+            "git",
+            "diff",
+            "--quiet",
+            "--no-ext-diff",
+            code_commit,
+            "--",
+            *IMPLEMENTATION_PATHS,
+        ],
+        cwd=repo_root,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if diff.returncode != 0:
+        raise JointStateProbeError("IMPLEMENTATION_DRIFT")
 
 
 def _session_matrix(rows: Sequence[Mapping[str, Any]]) -> np.ndarray:

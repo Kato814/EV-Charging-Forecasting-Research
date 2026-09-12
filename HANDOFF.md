@@ -1,67 +1,64 @@
 # 主控交付说明｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-12。先读 [CURRENT_STATUS](CURRENT_STATUS.md)、[本次代码身份故障台账](docs/JPL_R1_DIAGNOSTIC_IDENTITY_FAILURE_20260912.md)，再读 [R1 outcome](docs/JPL_R1_JOINT_STATE_OUTCOME_20260912.md)、[R1 protocol](docs/JPL_JOINT_SESSION_STATE_PROBE_PROTOCOL_20260912.md)、[只读诊断方案](docs/JPL_R1_MIXED_DIAGNOSTIC_PLAN_20260912.md)、[实验台账](docs/EXPERIMENT_LEDGER.md)。历史方法筛选、开源台账和旧入口不是新训练授权。
+更新：2026-09-12。先读 [CURRENT_STATUS](CURRENT_STATUS.md)、[身份预检结果及 v1.1 修复](docs/JPL_R1_DIAGNOSTIC_BINARY_IDENTITY_REPAIR_20260912.md)、[原启动失败](docs/JPL_R1_DIAGNOSTIC_IDENTITY_FAILURE_20260912.md)，再读 [R1 outcome](docs/JPL_R1_JOINT_STATE_OUTCOME_20260912.md)、[R1 协议](docs/JPL_JOINT_SESSION_STATE_PROBE_PROTOCOL_20260912.md)、[只读诊断方案](docs/JPL_R1_MIXED_DIAGNOSTIC_PLAN_20260912.md) 和 [实验台账](docs/EXPERIMENT_LEDGER.md)。旧开源候选与历史入口不是新训练授权。
 
-## 1. 当前结论与故障
+## 1. 当前结论
 
-S1=MIXED_STRUCTURED_SIGNAL；P1=STOP_MECHANISM_ROUTE 且 post-mortem 关闭；R1 正式训练 COMPLETE、550 fits、MIXED_JOINT_STATE_SIGNAL。
+S1=MIXED_STRUCTURED_SIGNAL；P1=STOP_MECHANISM_ROUTE 且已关闭；R1 正式训练 COMPLETE、550 fits、MIXED_JOINT_STATE_SIGNAL。不要重训 R1 或将本次启动故障解释成新科学结果。
 
-后续只读诊断 v1 的用户回传 status 为 INCOMPLETE / IMPLEMENTATION_DRIFT，耗时 3.452330800006166 秒，在 RESOLVE_REVIEWED_CODE 阶段停止。诊断代码 worktree 已创建，应保留。model_fit_attempted=false、fit_count=0；raw/interim/processed 和 holdout 未访问。没有缓存定位、READ_VERIFY 或 ANALYZE 阶段，也没有日级/小时级结果。
+只读诊断 v1 在 RESOLVE_REVIEWED_CODE 阶段以 IMPLEMENTATION_DRIFT 停止，原失败 status 和代码 worktree 保留。其 null 后检查字段不是缓存损坏证据。
 
-完整性字段 null 表示后检查未执行，不是缓存或 worktree 损坏的证据。不得把本次启动故障当成 R1 科学失败，不修改已有 MIXED。
+现已收到并审计身份预检 `evcf_r1_identity_preflight_status_20260912T133808491942Z.json`，SHA256=`ae2d6e5d7e5e689028f2d99177b7bdd79bc6d9f265645cdb4924c551e092c2f2`。结果 COMPLETE、约 0.411 s，无拟合、缓存/holdout访问或联网，检查的工作树状态未变。
 
-## 2. 下一步（替代原直接运行诊断指令）
+诊断模块本地字节与固定 Git blob 都为 18029 字节且 SHA 正确；HEAD 正确、diff=0；但文本和二进制 git show 都返回 128、stdout为空。参考文件 7821 字节，全部检查通过。两个文件均无CRLF及BOM。标签 LEGACY_GIT_SHOW_TEXT_MISMATCH 太宽，不能据此声称编码出错；底层命令失败原因尚无 stderr 证据。
 
-只运行经过独立 PR/CI 后发布的 `evcf_r1_identity_preflight_v1.py`，参数 `--authorize-r1-identity-check`。只上传 `evcf_r1_identity_preflight_status_*.json`。
+## 2. 当前下一步
 
-它检查现存 `-jpl-r1-mixed-diagnostic-code-v1` 代码 worktree 的 HEAD、两个固定文件的本地字节与 SHA、换行/BOM计数、原始 Git blob、二进制和原版文本模式 git show 输出指纹。公共输出无绝对路径、文件内容或私有预测。
+独立修复 PR 审查、全量 CI、合并后，发布 `evcf_r1_mixed_diagnostic_launcher_v1_1.py`。发布后只执行一次原范围的 R1 prediction-cache-only 诊断，参数 `--authorize-r1-diagnostic`；只上传最新 `evcf_r1_mixed_diagnostic_status_*.json`。
 
-预检不创建或修改 worktree、不联网、不打开 R1/baseline/S1/P1 缓存、不导入诊断/模型、不执行训练或日级/小时级分析。COMPLETE 只表示采集完成；即便身份不匹配，也仅报告差异，不跳过检查继续执行。
+v1.1 仍绑定原 PR #65 的 source HEAD、模块 SHA、reference SHA 和 cache manifest。只把 Git 对象读取替换为二进制 `git cat-file blob`；保留本地 LF 规范化 SHA 检查和精确 HEAD 检查。新增的 launcher reviewed head/PR 仅用于修复版本身份，不替代原统计代码身份。新模板只有这两个赋值占位符可在发布时替换。
 
-审计预检结果前不重跑原诊断，也不发布猜测性修复。若当前身份全部一致，应明确此前原因尚未复现，而不是臆断问题已修好。
+仅复用已创建、已注册、HEAD 正确且 tracked-clean 的 `-jpl-r1-mixed-diagnostic-code-v1` 工作树。缺失或不一致就停止，不 fetch、不创建、切换、修复或清理工作树。无需手工 git pull 或改本机文件。
 
-## 3. 已核实的发布身份
+不要再重复身份预检、运行旧诊断 v1，或手改 SHA。新校验失败时报告 CORE/REFERENCE_LOCAL_SHA256_MISMATCH、BLOB_READ_FAILED、BLOB_SHA256_MISMATCH 等具体静态原因，先审计再决定。
 
-原诊断 PR #65 reviewed head：`dd05258bf44d0a71773b6522ef6fb039831c77f1`；merge：`f8d23749ec792d8cf35199e3a32436d22c17f003`。
+## 3. 不变的发布与科学身份
 
-原诊断 launcher SHA：`784752eb1db8bfd22c77c954224f4c489faa717e0db0c61e880028dcb60273bc`，与失败 status 一致。
+统计源码：PR #65 head `dd05258bf44d0a71773b6522ef6fb039831c77f1`；merge `f8d23749ec792d8cf35199e3a32436d22c17f003`。
 
-诊断模块 SHA256：`f552ce48f5a831064cff77e88ddccc26f76466697a0697860d5692bc1a1bbfc9`；Git blob：`ce4030e37cc1fb261847e0e18636ce7582c9129c`。
+模块 SHA256：`f552ce48f5a831064cff77e88ddccc26f76466697a0697860d5692bc1a1bbfc9`；Git blob `ce4030e37cc1fb261847e0e18636ce7582c9129c`。
 
-Aggregate reference SHA256：`0c8075eb05c2405769862db72012076fc2f5a019c85a260d5b0315809520c703`；Git blob：`34bea59010a808719e84d72dc21950c51eec751d`。
-
-主控经 GitHub 读取并核对两个文件的内容与 Git blob SHA/SHA256；两项 pin 均正确。原校验已对本地 CRLF 做 LF 规范化。仅凭通用 IMPLEMENTATION_DRIFT 不能确定哪项检查失败，不可直接归因为 CRLF、Git 输出或本地文件损坏。
-
-## 4. 冻结数据与历史身份
-
-目标 station_current_mean_a，单位 A。Development=2019-01/04/07/10；final holdout=2019-03/06/09/12，继续禁止访问。
+Reference SHA256：`0c8075eb05c2405769862db72012076fc2f5a019c85a260d5b0315809520c703`；Git blob `34bea59010a808719e84d72dc21950c51eec751d`。
 
 R1 cache manifest：`56178b6eac582a7ed844d6f94324a6947580e0f9a42e95cb9307fd78adecfd0f`。
 Baseline manifest：`2c2ff4f05081b5227f948165a1b7b78eee80430f2c9be590510d0acf8c34f8dd`。
 S1 manifest：`562035b678b75865a54c7f68794b5f4907ea9696100c531498720eb943e570f1`。
-P1 manifest：`df222c4731f3c3192735a6df2ccd2f692f1ea6d640a7954706e7bca17f51580f`。
-
-本次身份预检不读取这些缓存。
+P1 manifest：`df222c4731f3c3192735a6df2ccd2f692f1ea6d640a7954706e7bca17f51580f`，仅历史证据。
 
 R1 protocol：PR #61，merge `5c56ac71d6e94e6c566e88a855b4f9646eb170ea`。
-R1 model：PR #62，head `e01607078431141a1fccdd6a9db5f75ae561bfda`，merge `0a2f1fc29af3fc6232534c8f6073c276dbe9122f`。
+R1 model：PR #62，head `e01607078431141a1fccdd6a9db5f75ae561bfda`；merge `0a2f1fc29af3fc6232534c8f6073c276dbe9122f`。
 R1 outcome：PR #64，merge `a1c97ce425d4d2fb84c4582fb6a0d9eb2588878b`。
 原训练 status SHA：`7e37ca253452ac246445aea7fcd2d30179c3648168c911c28062ac54df417ec2`。
+身份预检：PR #67 head `4ba2b5599e180d01bb4e537e519dbdbfbf9112d8`；merge `52130c40b26fa955de3095d1056906222255087f`。
+旧诊断 launcher v1 SHA：`784752eb1db8bfd22c77c954224f4c489faa717e0db0c61e880028dcb60273bc`。
+预检 launcher v1 SHA：`88070416879a751e71dfcb7be4ff4424daab7d380615e26954296649bf55d29d`。
 
-## 5. 科学结果与解释边界
+修复 launcher 的最终 reviewed/merge 身份和 SHA 记录在修复 PR 与 Issue #29；不能把“代码提交”“CI通过”“本机故障已消失”“真实统计完成”混为一谈。
 
-Pooled MAE：M2=30.164406、M3=29.190188、Equal=28.917286、S1=28.594882、R1-Control=29.192882、R1-Joint=29.039978 A。
+## 4. 只读统计与结论边界
 
-Joint 对 Control 改善 0.523773%，对 Equal 退化 0.424285%；分别为 4/5、3/4 和 3/5、2/4 的时距/月胜数。60 min 只优于 Equal 0.055223 A。八项 PASS 通过六项，总体优于 Equal 与至少 3/4 月优于 Equal 两项失败。
+目标 station_current_mean_a（A）；development=2019-01/04/07/10；final holdout=2019-03/06/09/12，始终禁止访问。
 
-7 月所有时距 Joint 劣于 Control；10 月改善 Control 但未追平 Equal。当前没有日级/小时级细分结果、显著性或特征归因证据。25,375 条记录重复包含 5,075 个 issue times，不视为独立样本。
+仅读取已有 R1 二十个 month-horizon NPZ 与 manifest，不读取 raw/interim/processed 或 baseline/S1/P1 缓存目录。原 PR #65 核验和统计不改：固定hash、行/日期身份、Equal重建、已接受指标还原、四月×五时距全部日级与24小时配对损失、末次完整性复核。所有输入只读，无 fit/refit。
 
-原 matched design、Pearson特征、HGB参数、rolling-origin、阈值均不改。身份故障关闭后才恢复原 prediction-cache-only 诊断计划，完整报告四月×五时距的 Joint-Control / Joint-Equal 配对损失，不挑日期、不拼接模型。
+科学结果仍是 Joint MAE 29.039978 A、Control 29.192882 A、Equal 28.917286 A、S1 28.594882 A。Joint 对 Control 改善0.523773%，对 Equal 退化0.424285%；60min优势仅0.055223 A，八项PASS通过六项，仍为MIXED。
 
-## 6. 保护与交付要求
+7月全部时距Joint劣于Control，10月改善Control但未追平Equal。真实日级/小时级细分仍未产生。25,375条预测重复包含5,075个issue times，不是独立样本；本轮不计算p值、不作因果归因、不读特征、不自动授权新模型。
 
-保留所有历史 worktree、失败 JSON 和 private cache；禁止 reset/clean/stash/force push、R1 调参筛 pair、更换相关估计器、clipping/calibration、P1 rescue、未来组成输入、未经授权的 Deep Sets/Set Transformer/MoE。
+## 5. 长期保护与交付
 
-旧 7 月正文 SHA 的 62 位转录勘误继续保留，正确机器值为 `9eea83e13ea6fbe5fef694c5de93b5bc4c4a82f7efe00e90e4fadd6d0b9e9ff2`，不修改冻结协议或数据。
+保留旧launcher、失败JSON、身份预检和全部历史worktree/cache。禁止reset/clean/stash/force push、删日期、筛pair、换相关估计器、clipping/calibration、P1 rescue、未来组成输入、事后拼接或未经授权的Deep Sets/Set Transformer/MoE。
 
-命令保持 PowerShell 单行。实时进度和实际耗时明确输出。本次标准库/Git身份检查不调用GPU；后续仅在批准模型和后端适用时使用RTX 5080。原失败及新增预检分别记录，科学结果与工程启动问题不得混同。
+旧7月正文SHA转录勘误继续保留，正确机器值 `9eea83e13ea6fbe5fef694c5de93b5bc4c4a82f7efe00e90e4fadd6d0b9e9ff2`，不修改冻结协议或数据。
+
+PowerShell命令单行。阶段、文件/单元完成数、心跳及实际耗时实时flush；最终JSON分流。当前CPU数组统计、GPU_USED=false、FIT_COUNT=0；后续仅在批准后端适用时使用RTX5080，不为使用显卡替换冻结模型或升级用户环境。CURRENT_STATUS、HANDOFF和本步修复台账同轮更新，原失败记录与科学台账继续保留。

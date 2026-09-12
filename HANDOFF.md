@@ -1,14 +1,14 @@
 # 主控交付说明｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-12。先读 [CURRENT_STATUS](CURRENT_STATUS.md)，再读 [P1 outcome](docs/JPL_P1_MECHANISM_PROBE_OUTCOME_20260912.md)、[P1-A post-mortem outcome](docs/JPL_P1_A_POSTMORTEM_OUTCOME_20260912.md)、[实验台账](docs/EXPERIMENT_LEDGER.md) 与 [open-source idea ledger](docs/OPEN_SOURCE_IDEA_LEDGER.md)。
+更新：2026-09-12。先读 [CURRENT_STATUS](CURRENT_STATUS.md)，再读 [P1 outcome](docs/JPL_P1_MECHANISM_PROBE_OUTCOME_20260912.md)、[P1-A post-mortem outcome](docs/JPL_P1_A_POSTMORTEM_OUTCOME_20260912.md)、[post-P1 method screening](docs/JPL_POST_P1_METHOD_SCREENING_20260912.md)、[R1 protocol](docs/JPL_JOINT_SESSION_STATE_PROBE_PROTOCOL_20260912.md)、[实验台账](docs/EXPERIMENT_LEDGER.md) 与 [open-source idea ledger](docs/OPEN_SOURCE_IDEA_LEDGER.md)。
 
 ## 1. 接管结论
 
-S1 正式结论保持 `MIXED_STRUCTURED_SIGNAL`。P1 已按预注册协议正式 `STOP_MECHANISM_ROUTE`：Probe E / A 均为 `NO_COMPONENT_SIGNAL`，P1-EA 不再作为核心预测路线。
+S1 正式结论保持 `MIXED_STRUCTURED_SIGNAL`。P1 已按预注册协议正式 `STOP_MECHANISM_ROUTE`，P1-A 唯一授权的 read-only post-mortem 也已 COMPLETE；P1 不再 rescue。
 
-P1-A 唯一授权的 read-only post-mortem 已 COMPLETE。它确认 P1-A 的 pooled 数值崩坏高度由极少数 extreme OOS outputs 驱动，最强病理 issue state 为 `2019-10-29 12:00 local`；但 P1-E 也独立失败，因此不能通过修 Poisson、clipping、删除异常 timestamp 或替换单一 branch 来改写 STOP。
+post-P1 method screening 已完成。当前新主线不是 generic MoE / Transformer / survival / TPP，而是一个更窄的表示问题：**M3 的独立边际池化是否丢失了当前连接 session population 的 within-session joint state，而这些 joint state 是否对不同预测时距的 aggregate current 有稳定增量信息。**
 
-G0/S1 已确认的 horizon-dependent composition shift 与 turnover/local-hour 结构继续保留为科学证据。final holdout 2019-03/06/09/12 继续封存。
+R1 joint-session-state representation probe 已在结果产生前冻结；R1 尚未拟合。final holdout 2019-03/06/09/12 继续封存。
 
 ## 2. 冻结身份
 
@@ -28,6 +28,10 @@ P1 implementation：PR #56；CI-passed head `dac9d18596d8e3ba766e02f83b21d60e650
 
 P1-A post-mortem：PR #58；CI-passed head `9bc752f1b416e0dce4cb59942d3ecb07315b9273`；merge `6df5cc836635fedb2034f27cdb34e7dda6e8a885`。
 
+P1 closeout docs：PR #59；merge `0dbae8be2fa71d870ff89138280e1df583ab7e60`。
+
+Post-P1 method screening：PR #60；merge `5c964601e2374d16a341e2c55ec73ec0116731f6`。
+
 ## 3. 冻结基线 / S1 / P1
 
 ```text
@@ -40,15 +44,6 @@ P1-Aonly   172.758507 A
 P1-EA      172.966423 A
 ```
 
-Component MAE：
-
-```text
-S1 existing 12.791178 A
-P1-E       14.495331 A
-S1 arrival 23.105152 A
-P1-A      167.857291 A
-```
-
 Frozen P1 decisions：
 
 ```text
@@ -59,94 +54,100 @@ P1-EA = STOP_MECHANISM_ROUTE
 
 P1-EA：0/5 horizons better than Equal；0/4 months better；60-min MAE 109.278945 A vs Equal 26.141292 A。
 
-## 4. P1-A post-mortem 最终证据
+## 4. post-P1 方法筛选边界
 
-安全审计：
+2025–2026 adjacent work already covers generic EV multi-horizon TFT/Transformer, sparse MoE / horizon-conditioned regime routing, lightweight residual probabilistic models and session-generative forecasting. Set Transformer / Deep Sets are also mature general architectures.
 
-```text
-status = COMPLETE
-analysis_only = true
-model_fit_attempted = false
-raw_or_processed_data_accessed = false
-holdout_accessed = false
-p1_private_cache_unchanged = true
-scientific_decision_unchanged = STOP_MECHANISM_ROUTE
-```
+Therefore none of the following is a defensible novelty claim by itself:
+- generic MoE for EV load;
+- horizon-specific gating;
+- generic Set Transformer / Deep Sets;
+- existing + future-session decomposition;
+- survival / TPP usage;
+- Transformer/Mamba backbone replacement.
 
-Across 25,375 development OOS rows：
+The internal representation gap is concrete: M3 uses 11 legal connected-session fields and independently pools each field into 10 marginal statistics, losing which values co-occur within the same session. This motivates R1.
 
-```text
-P1-A MAE       167.857291 A
-prediction q50  10.396828 A
-prediction q99 518.312153 A
-prediction max 2,526,912.316702 A
-truth max      742.980111 A
-```
+## 5. R1 frozen scientific question
 
-Error concentration：
+> Does preserving within-session joint alignment of the legal issue-time connected-session state provide stable predictive information for direct aggregate current forecasting beyond the same M3 marginal pools and the same pair-feature availability pattern?
 
-```text
-worst 1 row   59.33%
-worst 5 rows  81.99%
-worst 10 rows 82.09%
-worst 1%      84.67%
-```
+R1 is deliberately low complexity and matched-capacity. It does not train a learned set encoder.
 
-Pathological local issue time `2019-10-29 12:00`：
+## 6. R1 matched representations
+
+Both arms begin with the frozen M3 311 raw features and append 55 pair positions for `C(11,2)` legal session-field pairs.
+
+For each pair, availability is defined identically from pairwise-complete current sessions: at least two co-observed sessions and positive finite variance in both fields.
 
 ```text
-15 min     1,379.274154 A prediction
-30 min 2,526,912.316702 A prediction
-60 min   390,526.984821 A prediction
-120 min  572,604.896131 A prediction
+R1-Control:
+  defined pair -> 0.0
+  undefined pair -> NaN
+
+R1-Joint:
+  defined pair -> pairwise-complete Pearson correlation
+  undefined pair -> NaN
 ```
 
-30/60/120 min catastrophic outputs occur at the same issue state. Combined with already passed target reconstruction, row identity and rolling-origin checks, this supports severe OOS extrapolation fragility of the fixed standardized-feature + log-link Poisson count formulation. The private cache lacks predicted counts / linear predictors, so coefficient-level causality is not claimed.
+Thus both arms have:
+- identical raw width = 366;
+- identical nullable mask;
+- identical missingness/availability indicators;
+- identical frozen M3 horizon-specific HGB parameters;
+- identical preprocessing / rolling-origin / OOS rows / target.
 
-Critically, this does not rescue P1 because Probe E independently worsens pooled component MAE and P1-Eonly is worse than S1/Equal.
+The only experimental difference is the within-session cross-field alignment value.
 
-## 5. Frozen descriptive mechanism evidence
+## 7. R1 frozen decisions
 
-- existing share falls from 97.38% at 15 min to 26.21% at 240 min；
-- future-arrival share rises to 73.79%；
-- 30/60 min mixed turnover bins show reproducible weak regions；
-- 30/60/120 min near 07:00 are reproducibly weak across months, while 09:00 can reverse direction。
+Primary matched comparison: `R1-Joint vs R1-Control`.
 
-These are mechanism observations, not evidence for continuation×mark, Poisson count×mark, survival, TPP or any specific backbone.
+External references: M2 / M3 / Equal / S1 on identical OOS rows.
 
-## 6. 当前唯一主线：new-method selection
+Possible decisions:
 
-P1 is closed. Do not continue P1 diagnostics or rescue experiments.
+```text
+PASS_JOINT_STATE_SIGNAL
+MIXED_JOINT_STATE_SIGNAL
+STOP_JOINT_STATE_ROUTE
+```
 
-New-method screening must ask:
-1. Can the method represent horizon-dependent regime specialization rather than one global rule?
-2. Can it capture time-of-day/local-hour state reversal under issue-time legal inputs?
-3. Can different horizons use different experts/mechanisms while sharing useful information?
-4. Can it avoid unbounded pathological extrapolation without post-hoc test-selected clipping?
-5. Can it be evaluated under the same development OOS protocol against M2/M3/Equal/S1?
-6. Does the scientific novelty lie in the charging-station forecasting mechanism/problem, rather than merely importing an existing MoE/Transformer/Mamba architecture?
+PASS requires, among other preregistered conditions, pooled improvement vs both Control and Equal, at least 3/5 horizon wins vs both, at least 3/4 month wins vs both, 60-min improvement vs Equal, and no horizon degradation >5% vs Equal.
 
-Candidate families may include mixture-of-experts, regime-specialized forecasting and horizon-conditioned routing. Generic backbone replacement alone is insufficient.
+MIXED requires pooled Joint < Control with at least 2/5 horizon and 2/4 month wins but failure of one or more PASS conditions.
 
-Before any new local experiment:
-- freeze one precise scientific question;
-- identify adjacent/open-source prior art;
-- define legal predictors and OOS protocol;
-- preregister PASS/MIXED/STOP criteria;
-- implement through PR/CI;
-- keep final holdout sealed.
+STOP is triggered if pooled Joint >= Control, or Joint wins at most 1 horizon, or at most 1 month.
 
-## 7. 禁止事项
+Thresholds cannot change after results.
 
-- no final holdout access；
-- no P1 rescue retuning/clipping/calibration；
-- no removal of 2019-10 or pathological rows to recalculate P1；
-- no automatic pycox/EasyTPP upgrade from failed branches；
-- no reliability/composition oracle gate；
-- no M2/M3 retuning or development-month reselection；
-- no deletion of historical worktrees, failed statuses or private caches；
-- no `reset --hard`, `clean`, blind stash or force push。
+## 8. 当前唯一下一步
 
-## 8. 仓库维护
+Implement R1-Control / R1-Joint under the frozen protocol in a dedicated code PR.
 
-Issue #29、CURRENT_STATUS、HANDOFF、P1 outcome、P1-A post-mortem outcome 与实验台账必须保持一致。新方法建立后应开启新的冻结 protocol/outcome 链路，而不是继续覆盖 P1。
+Before any local fit:
+- unit tests for permutation invariance;
+- unit tests for identical Control/Joint availability masks;
+- test that per-field session permutations preserve M3 marginal pools but can alter Joint correlations;
+- final-holdout fail-closed tests;
+- full repository pytest / compileall / Ruff green;
+- local launcher bound to the CI-passed reviewed head.
+
+Only then may one development-only R1 run be authorized.
+
+## 9. 当前禁止事项
+
+- no final holdout access;
+- no P1 rescue;
+- no R1 pair selection / correlation-estimator switching / retuning;
+- no clipping/calibration;
+- no removal of pathological P1 rows;
+- no realized future composition predictor/gate;
+- no Deep Sets / Set Transformer / MoE fit before R1 outcome;
+- no M2/M3 retuning or development-month reselection;
+- no deletion of historical worktrees, failed statuses or private caches;
+- no `reset --hard`, `clean`, blind stash or force push.
+
+## 10. GitHub maintenance
+
+R1 must use a separate protocol → implementation PR/CI → local status → outcome chain. Issue #29, CURRENT_STATUS, HANDOFF, experiment ledger and open-source idea ledger must remain synchronized. Private row-level outputs/cache stay outside the repository.

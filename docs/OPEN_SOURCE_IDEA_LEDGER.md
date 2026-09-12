@@ -1,92 +1,124 @@
 # Open-source idea ledger
 
-Updated: 2026-09-11.
+Updated: 2026-09-12.
 
-This ledger tracks external open-source projects that may provide reusable components, benchmark implementations, diagnostic ideas, or scientific contrasts for the JPL/ACN charging-station forecasting research. Inclusion does **not** authorize importing code, changing the frozen split, or accessing the final holdout. Adoption requires scientific-relevance, causal-observability and license review first.
+This ledger tracks external open-source projects and adjacent literature relevant to the JPL/ACN charging-station forecasting research. Inclusion does **not** authorize code import, model fitting, split changes, or final-holdout access. Adoption requires scientific relevance, causal observability and license review.
 
 ## 1. Current scientific constraint
 
-S1 remains `MIXED_STRUCTURED_SIGNAL`. Two completed read-only diagnostics show that the main weakness is not a generic binary-arrival problem or a monotone composition threshold. The strongest reproducible evidence is a **horizon-conditioned session-turnover regime**:
+S1 remains `MIXED_STRUCTURED_SIGNAL`. P1 is frozen `STOP_MECHANISM_ROUTE`, and its single authorized read-only post-mortem is COMPLETE.
 
-- 30 min / realized arrival share 25–50% is worse than Equal in 4/4 development months;
-- 60 min / realized arrival share 50–75% is worse in 4/4 months;
-- 60 min / realized arrival share 0–25% is better in 4/4 months;
-- 30/60/120 min around local 07:00 are consistently weak, while the same horizons around 09:00 are consistently stronger.
+Accepted descriptive evidence remains:
+- existing-session share falls from 97.38% at 15 min to 26.21% at 240 min;
+- future-arrival share rises from 2.62% to 73.79%;
+- 30/60 min mixed-turnover regions show cross-month weak regimes;
+- 30/60/120 min near 07:00 are repeatedly weak while 09:00 can reverse direction.
 
-Realized future composition is diagnostic only and cannot be a prediction-time input.
+P1-specific conclusion:
+- logistic continuation × Gamma mark = no stable existing-component signal;
+- Poisson count × Gamma mark = no arrival-component signal and severe OOS extreme-tail fragility;
+- the P1 parameterization is closed and must not be rescued.
 
-Known novelty boundary remains unchanged: current/pilot phase identification, existing+arrival decomposition, generic gating, generic Transformer/Mamba/state-space backbones, survival libraries, TPP libraries and stochastic session generation are not sufficient novelty claims by themselves.
+Realized future composition remains diagnostic only and cannot be a prediction-time input.
 
-## 2. Candidate projects
+## 2. 2026 novelty boundaries added after P1
+
+| Work | What it already covers | Consequence here |
+| --- | --- | --- |
+| TimeMoE-LoRA EV charging, IEEE Access 2026, DOI `10.1109/ACCESS.2026.3697488` | sparse Time-MoE foundation model + LoRA + direct multi-horizon EV charging load forecasting | generic MoE / foundation-model / direct multi-horizon EV claims are unavailable |
+| RCHA-MOE, IEEE Access 2026, DOI `10.1109/ACCESS.2026.3695762` | regime-conditioned horizon-specific expert weights at inference | horizon-aware gate / step-specific MoE routing is not novelty by itself |
+| CUP-EV, Information Sciences 2026, DOI `10.1016/j.ins.2026.123681` | lightweight DLinear + nonlinear residual, probabilistic multi-horizon EV forecasting | generic residual hybridization and probabilistic multi-horizon output are crowded |
+| TriCast, Pattern Recognition Letters 2026, DOI `10.1016/j.patrec.2026.04.028` | causal spatial/temporal/economic multimodal EV demand forecasting | causal Transformer/multimodal fusion alone is not a new gap |
+| SessionFlow, SSRN 20 Aug 2026 | partially observed origin-active session continuation + future served-session generation + station aggregation | existing/future session decomposition or session generation is not novelty |
+| FAME, arXiv:2606.08896 | forecastability fingerprints and sparse expert-suitability routing | forecastability-aware expert selection is not novelty |
+| MoHETS, arXiv:2601.21866 | heterogeneous forecasting experts | heterogeneous-expert design is not novelty |
+| Set Transformer / Deep Sets | permutation-invariant set representation | set architecture itself is not novelty |
+
+Generic Transformer/Mamba/diffusion/state-space replacement remains low value for the core contribution.
+
+## 3. Current high-value external projects
 
 | Project | Open-source role | Potential use here | Limitation / novelty risk | Current disposition |
 | --- | --- | --- | --- | --- |
-| `zach401/acnportal` | ACN-Data/ACN-Sim research toolkit | Data semantics, causal session replay, physical consistency, simulation stress tests; its `StochasticEvents` also supplies a mature stochastic-session reference | Already supports joint stochastic arrival-time / duration / energy modeling; this family is therefore not novel by itself | **High-value infrastructure and simple stochastic reference** |
-| `caltech-netlab/acnportal-experiments` | Reproducible ACN research examples | Experiment organization, practical JPL scenario evaluation and stress testing | Charging-control/infrastructure focus, not the forecasting contribution | **High-value experimental reference** |
-| `havakv/pycox` | PyTorch survival/time-to-event toolkit | Later benchmark if current-session continuation evidence supports formal survival/hazard | Too complex for the first probe; DeepSurv/pycox use alone is not novelty | **Deferred benchmark; not authorized in P1** |
-| `ant-research/EasyTemporalPointProcess` | TPP benchmark/toolkit | Later RMTPP/NHP/THP/intensity-free arrival-process benchmark | Current evidence does not justify neural TPP complexity; backbone itself is not novelty | **Deferred watchlist; not authorized in P1** |
-| `fffahim/Deep-learning-for-electric-vehicle-charging-load-forecasting` | LSTM/BiLSTM/Residual Seq2Seq EV examples | Conventional deep-learning comparison family if later required | Does not address the turnover mechanism | **Comparison-only** |
-| `anujgs/Forecasting-EV-Charging-Station-Load` | CNN-LSTM/clustering example | Conventional preprocessing/comparison ideas | Small direct time-series project; no session mechanism | **Low-priority comparison** |
+| `zach401/acnportal` | ACN-Data/ACN-Sim toolkit | data semantics, physical consistency, session simulation/stress tests | stochastic session generation already mature | **high-value infrastructure** |
+| `caltech-netlab/acnportal-experiments` | ACN reproducible examples | scenario/evaluation organization | not forecasting novelty | **experimental reference** |
+| `juho-lee/set_transformer` | official Set Transformer PyTorch | permutation-invariant session-set interactions | architecture is 2019 prior art | **candidate engineering reference** |
+| `manzilzaheer/DeepSets` | original Deep Sets code | minimal permutation-invariant representation baseline | architecture itself is old prior art | **candidate low-capacity reference** |
+| `Time-MoE/Time-MoE` | official Time-MoE | strong generic time-series MoE reference | direct EV adaptation already published in 2026 | **novelty boundary / possible baseline** |
+| `hit636/FAME` | sparse forecastability-aware expert routing | later routing/control reference | routing concept already claimed | **later reference only** |
+| `Waqar2193/CUP-EV-Cost-and-Uncertainty-aware-Probabilistic-EV-Energy-Forecasting` | public CUP-EV source | lightweight residual/probabilistic benchmark ideas | not session-population representation | **benchmark/reference** |
+| `havakv/pycox` | survival toolkit | formal survival benchmark | P1 continuation route failed; not a rescue path | **deprioritized** |
+| `ant-research/EasyTemporalPointProcess` | TPP toolkit | event-process benchmark | P1 arrival route failed; TPP upgrade would be rescue | **deprioritized** |
 
-## 3. Reuse / license notes
+## 4. Internal representation gap discovered after screening
 
-- `acnportal`: BSD-style redistribution terms; preserve required notices if code is reused.
-- `pycox`: BSD 2-Clause.
-- `EasyTemporalPointProcess`: Apache-2.0 according to project documentation; inspect `NOTICE` / third-party components before copying files.
-- Other repositories require explicit license review before reuse.
-- Public visibility is not permission to copy code without license review.
-
-## 4. What ACN Portal already solves
-
-ACN Portal contains `StochasticEvents` infrastructure that can fit/sample stochastic session variables and includes a Gaussian-mixture implementation around arrival time, session duration and energy demand. This is useful as an engineering/reference baseline, but it narrows our novelty space:
-
-> “jointly modeling charging-session arrival time, duration and energy” is not a defensible novelty claim by itself.
-
-If used later, ACN stochastic-event machinery should be a comparison/stress-test component rather than the claimed contribution.
-
-## 5. Evidence-driven method ranking
-
-### Rank 1 — current-session continuation × positive-current mark
-
-The existing-session contribution increasingly transitions toward zero with horizon, but an EV session may temporarily pause charging and later resume. A strict terminal survival process would therefore impose an unverified monotonicity assumption in the first probe.
-
-P1 first uses a simple horizon-specific logistic probability that a currently connected session still contributes positive current in the target window, multiplied by a Gamma positive-current mark. This tests the continuation mechanism without adding a large model or forcing irreversible termination. Formal hazard/survival becomes a later candidate only if continuation×mark demonstrates stable development signal.
-
-### Rank 2 — future-arrival count × mark
-
-Future-arrival contribution is highly zero-inflated at short horizons and becomes dominant at long horizons. A binary any-arrival hurdle is insufficient because the 60-min failure occurs on both zero-arrival and positive-arrival subsets.
-
-The next candidate is therefore **contributing-session count/intensity × positive current mark**, initially using fixed Poisson/Gamma GLMs. Neural TPP is deferred.
-
-### Rank 3 — formal survival / neural TPP benchmark
-
-Only if low-complexity P1 shows stable component/total signal may later work evaluate formal hazard/survival, pycox or EasyTPP as benchmark implementations. A larger neural model must not be introduced merely to rescue a weak mechanism.
-
-## 6. Frozen next-step protocol
-
-See `docs/JPL_STRUCTURED_MECHANISM_PROBE_PROTOCOL_20260911.md`.
-
-Primary candidate:
+Frozen M3 has 11 legal connected-session fields and reduces **each field independently** to:
 
 ```text
-P1-EA = logistic continuation × Gamma mark existing contribution
-      + Poisson count × Gamma mark future-arrival contribution
+count, sum, mean, std, min, max, p25, p50, p75, missing_count
 ```
 
-`P1-Eonly` and `P1-Aonly` are attribution diagnostics only. No post-hoc best-of-three headline is allowed.
+Thus M3 has 110 session-pool features but preserves only marginal summaries. It does not retain which elapsed time, current, pilot, cumulative charge and requested-departure values belong to the same session.
 
-The P1 protocol freezes development months, rolling-origin/common-row rules, fixed model parameters and decision thresholds before any fit.
+This matters because turnover is a joint-state question. For example, two issue times can have similar marginal current and elapsed-time distributions but differ in whether the high-current sessions are old/young or near/far from their requested departure.
 
-## 7. Standing search policy
+P1-E preserves each session tuple but learns sessions independently and sums future contribution estimates. It therefore does not model the simultaneously connected session population as an interacting set, and its decomposed target failed empirically.
 
-Future method-design cycles should search GitHub and the literature before implementation. For every promising external project, record:
+This creates a narrower and better motivated gap than generic MoE:
 
-- repository / paper identity;
+> represent the currently connected session population as an unordered set of **joint issue-time session states**, and use it directly to forecast aggregate station current.
+
+## 5. Post-P1 candidate ranking
+
+### Rank 1 — connected-session set representation for aggregate multi-horizon forecasting
+
+Recommended scientific question:
+
+> Does preserving the joint issue-time state of the currently connected session population as a permutation-invariant set reveal horizon-dependent predictive information that fixed marginal pooling discards, and can that information stably improve aggregate charging-current forecasts without explicitly predicting future session identities or decomposed future contributions?
+
+Key distinctions:
+- not M3 marginal pooling;
+- not P1 per-session future-contribution prediction;
+- not S1 existing/arrival target decomposition;
+- not SessionFlow generative replay;
+- not generic MoE routing.
+
+Current targeted searches found no directly matching EV charging-load paper using the connected session population as a permutation-invariant issue-time set to directly predict aggregate multi-horizon load. This is a screening result, not proof of absence.
+
+### Rank 2 — horizon-conditioned expert routing
+
+May become useful after a stronger session representation exists, but RCHA-MOE/FAME/MoHETS make it a poor immediate novelty core.
+
+### Rank 3 — probabilistic/session-generative extension
+
+Useful later for uncertainty or operational extensions, but TimeMoE-LoRA, CUP-EV, SessionFlow and existing arrival/survival work make it crowded and it would risk becoming a post-hoc P1 rescue.
+
+## 6. Recommended next experiment class
+
+Do not jump directly to a large Set Transformer.
+
+First run a **matched-capacity representation probe** after a new protocol is frozen:
+
+- `Pool-control`: legal M2 context + existing M3 marginal pools + small fixed-capacity nonlinear head;
+- `Set-probe`: same M2 context + minimal permutation-invariant encoder over raw legal connected-session tuples + comparable-capacity head;
+- target remains aggregate `station_current_mean_a`;
+- no existing/arrival component targets;
+- identical OOS rows and 15/30/60/120/240 min horizons;
+- compare additionally to frozen M2/M3/Equal/S1.
+
+A minimal Deep-Sets-style encoder is preferable for the first signal test. Full Set Transformer/horizon-query attention should be authorized only if the set representation itself demonstrates stable development signal.
+
+See `docs/JPL_POST_P1_METHOD_SCREENING_20260912.md` for the complete collision analysis.
+
+## 7. Standing search / reuse policy
+
+For every future candidate record:
+- paper/repository identity;
 - reusable component;
 - scientific assumptions;
-- compatibility with ACN/JPL causal observability;
-- license / third-party restrictions;
-- what is already solved and therefore cannot be claimed as novelty;
-- remaining limitation/gap that may support a defensible contribution.
+- causal-observability compatibility;
+- license/third-party restrictions;
+- what is already solved and cannot be novelty;
+- remaining gap tied to our own development evidence.
 
-The objective is to reuse mature engineering while concentrating original work on the empirically supported horizon-dependent charging-session turnover mechanism.
+Before any new local fit, freeze a separate protocol with exact legal predictors, matched controls, OOS rules and PASS/MIXED/STOP criteria. Final holdout remains sealed.

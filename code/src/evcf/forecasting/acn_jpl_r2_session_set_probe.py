@@ -335,7 +335,8 @@ def validate_formal_device() -> Mapping[str, Any]:
         version = importlib.metadata.version("torch")
     except importlib.metadata.PackageNotFoundError as exc:
         raise R2ProbeError("PYTORCH_NOT_AVAILABLE") from exc
-    if version != "2.14.0":
+    base_version = version.split("+", 1)[0]
+    if base_version != "2.14.0":
         raise R2ProbeError("PYTORCH_VERSION_MISMATCH")
     torch = _import_torch()
     if not bool(torch.cuda.is_available()):

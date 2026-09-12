@@ -57,7 +57,7 @@ def main() -> int:
     except JointStateProbeError as exc:
         print(json.dumps(_failure(exc.reason_code), sort_keys=True))
         return 2
-    except Exception as exc:  # fail closed without path/private-data publication
+    except (OSError, TypeError, ValueError, RuntimeError, FloatingPointError) as exc:
         reason = getattr(exc, "reason_code", "UNEXPECTED_ERROR")
         if not isinstance(reason, str) or not reason.replace("_", "").isalnum():
             reason = "UNEXPECTED_ERROR"

@@ -1,65 +1,80 @@
 # 当前状态｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-13。当前入口为本文件与 [HANDOFF](HANDOFF.md)。R2 正式结果见 [R2 outcome](docs/JPL_R2_HIGHER_ORDER_SESSION_SET_OUTCOME_20260913.md)；post-R2 选择依据见 [screening](docs/JPL_POST_R2_METHOD_SCREENING_20260913.md)；当前新协议见 [R3-C0 protocol](docs/JPL_R3_C0_CONTROL_ENDOGENEITY_GATE_PROTOCOL_20260913.md)。
+更新：2026-09-13。当前入口为本文件与 [HANDOFF](HANDOFF.md)。R2 正式结果见 [R2 outcome](docs/JPL_R2_HIGHER_ORDER_SESSION_SET_OUTCOME_20260913.md)；R3-C0 正式结果见 [R3-C0 outcome](docs/JPL_R3_C0_CONTROL_ENDOGENEITY_OUTCOME_20260913.md)；post-R3 方向筛选见 [post-R3 screening](docs/JPL_POST_R3_METHOD_SCREENING_20260913.md)。
 
-**S1=`MIXED_STRUCTURED_SIGNAL`；P1=`STOP_MECHANISM_ROUTE` 且关闭；R1=`MIXED_JOINT_STATE_SIGNAL` 且诊断关闭；R2=`STOP_HIGHER_ORDER_SET_ROUTE` 且关闭。当前下一阶段为 R3-C0：0-fit control-endogeneity gate。final holdout 2019-03/06/09/12 继续封存。**
+**S1=`MIXED_STRUCTURED_SIGNAL`；P1=`STOP_MECHANISM_ROUTE` 且关闭；R1=`MIXED_JOINT_STATE_SIGNAL` 且诊断关闭；R2=`STOP_HIGHER_ORDER_SET_ROUTE` 且关闭；R3-C0=`STOP_CONTROL_ENDOGENEITY_ROUTE` 且关闭。下一阶段为 R4-I0：issue-time information-sufficiency / state-aliasing protocol design。final holdout 2019-03/06/09/12 继续封存。**
 
-## 1. 已关闭的 R2
+## 1. 已关闭的 R3-C0
 
-R2 已完成唯一授权的 development-only 正式运行：
-
-```text
-fit_count        = 550
-runtime          = 448.055812 s
-formal device    = NVIDIA GeForce RTX 5080 / cuda:0
-PyTorch          = 2.14.0+cu132
-CUDA             = 13.2
-R2-Joint MAE     = 33.5660251919 A
-R2-Permuted MAE  = 33.3294171470 A
-Equal MAE        = 28.9172859886 A
-S1 MAE           = 28.5948815297 A
-R1-Joint MAE     = 29.0399775992 A
-```
-
-R2-Joint 仅 2/5 horizons、1/4 development months 优于 Permuted，且 pooled Joint > Permuted，因此直接触发预注册 STOP。R2 不做 Set Transformer、attention、MoE、更大 Deep Sets、session-feature 筛选或其他 post-hoc rescue。
-
-正式运行后 development 数据未改变，R1 private cache 未改变，历史 worktree 全部保留，final holdout 未访问。R2 outcome：PR #74，merge `154ff4c10d725f24e84955c5895ad74668029c9c`。
-
-## 2. 当前唯一问题：R3-C0 control endogeneity
-
-S1/P1/R1/R2 连续尝试了未来组成、显式会话机制、低阶 joint state 与高阶 nonlinear session set，但均未形成稳定优于强基线的路线。下一步不再换 backbone，而先检验被预测量本身是否混合了用户需求与充电控制作用。
-
-ACN/JPL 同时记录 measured charging current 与 EVSE pilot/current limit。R3-C0 的问题是：
-
-> 当未来控制路径没有作为预测时输入时，issue-time pilot-versus-actual operating state 是否能在匹配当前 station-current level 后，稳定区分未来 realized-current 的预测难度？
-
-这是 forecastability / target-generating-process gate，不是因果证明，也不声称首次使用 pilot 信息。
-
-## 3. R3-C0 冻结设计
-
-R3-C0 为 **0-fit、development-only、read-only** 诊断。
-
-合法输入：
+R3-C0 已完成唯一授权的 development-only 0-fit gate：
 
 ```text
-M3 current_current_a
-M3 current_pilot_a
-M2 station_current_a   # 仅用于当前负荷水平匹配
+status                         = COMPLETE
+runtime                        = 10.9733355 s
+fit_count                      = 0
+model_fit_attempted            = false
+reference_models_retrained     = false
+overall_valid_issue_fraction   = 0.3625615764
+decision                       = STOP_CONTROL_ENDOGENEITY_ROUTE
+stop_reason                    = INSUFFICIENT_CONTROL_STATE_SUPPORT
 ```
 
-控制利用率：
+冻结 support 要求为 overall valid >=0.70，且每月 valid >=0.50、matched pairs >=100。实际仅 2019-01 的月度 valid fraction 超过0.50：
 
 ```text
-U = sum(current_current_a) / sum(current_pilot_a)
+2019-01  0.530268  pairs=345
+2019-04  0.248305  pairs=145
+2019-07  0.277434  pairs=179
+2019-10  0.382716  pairs=246
 ```
 
-只保留 paired-valid coverage>=0.80、pilot sum>=6A、当前 station current 有效的 issue times；不 clip U。
+因此 route 在 effect-size 解释前即触发 STOP。禁止降低 coverage/pilot floor、改5个 current-level bins、重做 matching 或训练 future-control predictor rescue。
 
-每月先按当前 station current 分成5个等计数 bin，再在每个 bin 内按 U 分 lower/upper halves，并按 station current rank 配对。匹配完全不读取 truth/error，同一对 issue times 复用于五个 horizons 和所有 frozen references。
+在有效子集上存在描述性差异，但不能升级为机制证据：
 
-Primary references：Equal、S1。R1-Joint 仅 secondary。
+```text
+Equal pooled delta_fraction     -0.071229
+S1 pooled delta_fraction        -0.073845
+R1-Joint pooled delta_fraction  -0.086692
+```
 
-Primary contrast：matched lower-U 与 upper-U 的 absolute-error 差，报告 `delta_fraction`。完整支持阈值及 PASS/MIXED/STOP 已在 R3-C0 protocol 结果前冻结。
+定义为 low-U error minus high-U error，因此负值表示有效子集中 lower-U issue 的 matched error 平均更低。但 support 稀疏，Equal 的 horizon sign 仅3/5与 pooled 一致，60-min 两个 primary references 仅2/4月份同时保持 pooled 方向；不能据此建立稳定 control-endogeneity route。
+
+正式运行后 development 数据未改变，R2 private cache 未改变，历史 worktree 保留，final holdout 未访问。
+
+## 2. 当前下一问题：R4-I0 information sufficiency / state aliasing
+
+S1/P1/R1/R2/R3 已连续检验 future composition、显式 session mechanism、低阶 joint state、高阶 nonlinear session set、pilot-vs-actual control state。继续增加 session/control representation 的科学收益已不足。
+
+post-R3 选择将下列路线排除为当前核心：
+
+- larger Deep Sets / Set Transformer / attention / trajectory encoder；
+- generic ramp/residual correction；
+- peak-profile/peak-magnitude forecasting；
+- latent/censored demand；
+- generic probabilistic multi-horizon model；
+- generic horizon routing/MoE/similar-day selection。
+
+下一步先回答：
+
+> **在冻结的合法 issue-time 信息集合下，是否存在“当前状态非常相似，但未来 station current 显著分叉”的 state aliasing；并且这种分叉是否随 horizon 稳定增大？**
+
+这不是新预测模型，而是 information-sufficiency / identifiability gate。其作用是决定是否还有理由继续寻找 deterministic point-forecast model，还是应承认当前信息边界的预测上限并另行设计 uncertainty / external-information 路线。
+
+## 3. R4-I0 当前边界
+
+R4-I0 尚未冻结完整 protocol，当前**禁止本机运行**。protocol 设计必须先明确：
+
+1. exact legal state vector；
+2. causal historical-only scaling；
+3. historical-neighbor / matched-control rule；
+4. support floor；
+5. label-dispersion metric；
+6. 15/30/60/120/240 min 独立判据；
+7. PASS/MIXED/STOP thresholds；
+8. future label 只用于结果诊断，不能进入 state matching；
+9. positive gate 不等于 probabilistic forecasting novelty；
+10. PASS 也不自动开放 final holdout。
 
 ## 4. 当前执行状态
 
@@ -69,38 +84,30 @@ Primary contrast：matched lower-U 与 upper-U 的 absolute-error 差，报告 `
 | Target | `station_current_mean_a`，A |
 | Development | 2019-01/04/07/10 |
 | Final holdout | 2019-03/06/09/12，封存 |
-| S1 | MIXED，历史保留 |
+| S1 | MIXED |
 | P1 | STOP/CLOSED |
-| R1 | MIXED，diagnostic CLOSED |
-| R2 | STOP/CLOSED，550 fits complete |
-| R2 GPU env | `evcf-r2-set`，RTX5080/CUDA13.2 PASS，保留 |
-| post-R2 screening | COMPLETE |
-| R3-C0 protocol | FROZEN in current docs PR；**尚未运行** |
-| R3-C0 model fit | 禁止；必须始终为0 |
+| R1 | MIXED/CLOSED |
+| R2 | STOP/CLOSED |
+| R3-C0 | STOP/CLOSED，0 fits |
+| R3-C0 data/cache integrity | PASS |
+| post-R3 screening | COMPLETE |
+| R4-I0 | protocol design only；no run |
 | 当前用户本机命令 | **无** |
-
-当前下一动作仅在 GitHub：完成 R3-C0 protocol PR 的 CI/审查/合并；随后新建独立只读 implementation PR。实现与 CI 均通过前，不发布本机 launcher。
 
 ## 5. Novelty / scope boundary
 
-当前不把以下内容作为新核心：
+当前不得把以下内容写成创新：generic Deep Sets/Set Transformer、active-session forecasting、variable-size EV population、generic ramp residual、peak forecasting、latent-demand censoring、probabilistic EV forecasting、similar-day selection、generic predictability analysis。
 
-- 更大 Deep Sets / Set Transformer / attention；
-- Transformer/LSTM 充电轨迹编码；
-- horizon/time-of-day MoE/gating；
-- generic residual/ramp correction；
-- arrival/departure climatology或 queueing 本身；
-- P1/R1/R2 rescue。
-
-R3-C0 只检验：**future control path 缺失条件下，当前 pilot-versus-actual operating state 是否稳定关联 forecastability。** targeted search 未发现完全相同的 station-load forecasting gate；这是定向检索证据，不是“首次”证明。
+R4-I0 若继续，窄问题只能是：**冻结 JPL issue-time state 的 empirical aliasing / information sufficiency 是否足以解释 richer deterministic representation 的连续失效。** Existing user-level predictability and generic uncertainty literature构成 novelty boundary，不是本项目可重复声称的贡献。
 
 ## 6. 执行与资产保护
 
-- final holdout 继续封存；
-- 保留所有历史 worktree、失败/成功 status、private cache 和 R2 private output；
+- final holdout继续封存；
+- 保留所有历史 worktree、失败/成功 status、private cache 和 R2/R3 outputs；
 - 不 reset/clean/stash/force push；
 - 不修改冻结 reference predictions；
-- 不为 R3-C0 训练模型、调阈值、删日期、筛小时/时距或做 clipping/calibration；
+- 不降低 R3-C0 support thresholds 做 rescue；
+- R4-I0 protocol 未合并前不写实现、不运行本机数据；
 - 代码/PR通过、本机运行完成、科学假设通过分别报告。
 
-后续长任务 PowerShell 输出按用户要求仅保留**阶段 / 月份 / 时距 / 粗粒度完成数 / 完成状态**，不再输出每5个 epoch 等高频日志。
+后续长任务 PowerShell 输出继续按用户要求只保留**阶段 / 月份 / 时距 / 粗粒度完成数 / 完成状态**。

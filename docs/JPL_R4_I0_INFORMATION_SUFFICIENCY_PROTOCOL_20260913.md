@@ -4,7 +4,7 @@
 
 R4-I0 is a development-only, zero-model-fit diagnostic. It asks:
 
-> When two issue-time states are close under the frozen legal JPL feature representation, do their future aggregate station-current outcomes remain materially different, and does richer M3 state information reduce that future-outcome divergence beyond a simple current-load analog?
+> When two issue-time states are close under the frozen legal JPL feature representation, do their future aggregate station-current outcomes remain materially different, and can either the complete M2 or M3 issue-time state reduce that future-outcome divergence beyond a simple current-load analog?
 
 This is an empirical state-aliasing / information-sufficiency gate. It is **not** an information-theoretic impossibility proof, not a nearest-neighbor forecasting contribution, and not a generic probabilistic-forecasting novelty claim.
 
@@ -68,7 +68,7 @@ encoded Ridge width = 391
 
 No issue timestamp, row identity, anonymous session identity, future current, future arrival, realized departure, future control path, future composition, future delivered energy or forecast error is added to the state.
 
-M3 is the primary rich-state arm. M2 is a secondary representation control. Level-Control is the primary matched baseline.
+M2 and M3 are both legal-state arms for the information-sufficiency question. M3 remains the richest frozen representation; M2 is a necessary lower-dimensional control against a false “information insufficiency” conclusion caused only by high-dimensional M3 distance behavior. Level-Control is the primary simple baseline.
 
 ## 4. Rolling causal eligibility
 
@@ -87,7 +87,7 @@ This is the same label-availability causality used by the frozen development exp
 
 For each month × local test day × horizon, separately fit the existing repository `RidgePreprocessor` on the horizon-eligible historical rows for M2 and M3.
 
-The preprocessing contract is therefore frozen to the existing implementation:
+The preprocessing contract is frozen to the existing implementation:
 
 - training-only median imputation;
 - canonical nullable indicators;
@@ -195,17 +195,12 @@ G_M3    = mean(D_M3)
 Y_scale = mean(abs(y))
 ```
 
-Primary rich-state skill:
+Skills:
 
 ```text
-skill_M3_vs_Level = 1 - G_M3 / G_level
-```
-
-Secondary incremental skill:
-
-```text
-skill_M3_vs_M2 = 1 - G_M3 / G_M2
 skill_M2_vs_Level = 1 - G_M2 / G_level
+skill_M3_vs_Level = 1 - G_M3 / G_level
+skill_M3_vs_M2    = 1 - G_M3 / G_M2
 ```
 
 Positive skill means the richer state selects historical analogs with more similar future outcomes.
@@ -246,14 +241,18 @@ All conditions must hold:
 1. support gate passes;
 2. pooled `normalized_M3_divergence >= 0.10`;
 3. at least 3/5 horizons have `normalized_M3_divergence >= 0.08`;
-4. pooled `skill_M3_vs_Level <= 0.05`;
-5. pooled `skill_M3_vs_M2 <= 0.02`;
-6. at most 1/5 horizons have `skill_M3_vs_Level >= 0.10`;
-7. at most 1/4 months have `skill_M3_vs_Level >= 0.10`;
-8. 60-min `skill_M3_vs_Level <= 0.05`;
-9. 60-min `normalized_M3_divergence >= 0.10`.
+4. pooled `skill_M2_vs_Level <= 0.05`;
+5. pooled `skill_M3_vs_Level <= 0.05`;
+6. pooled `skill_M3_vs_M2 <= 0.02`;
+7. at most 1/5 horizons have `skill_M2_vs_Level >= 0.10`;
+8. at most 1/5 horizons have `skill_M3_vs_Level >= 0.10`;
+9. at most 1/4 months have `skill_M2_vs_Level >= 0.10`;
+10. at most 1/4 months have `skill_M3_vs_Level >= 0.10`;
+11. 60-min `skill_M2_vs_Level <= 0.05`;
+12. 60-min `skill_M3_vs_Level <= 0.05`;
+13. 60-min `normalized_M3_divergence >= 0.10`.
 
-Interpretation: even among historically supported, same-clock close states, the complete frozen M3 representation does not materially reduce future-outcome divergence beyond current-load analogs, while remaining future divergence is operationally nontrivial. This is evidence of empirical state aliasing under the frozen metric.
+Interpretation: even among historically supported, same-clock close states, neither complete M2 nor complete M3 materially reduces future-outcome divergence beyond the current-load analog, while remaining M3 future divergence is operationally nontrivial. This is evidence of empirical state aliasing under the frozen metric.
 
 PASS does **not** prove irreducible uncertainty and does not authorize final holdout. It only permits a separately frozen uncertainty/external-information/target-design stage.
 
@@ -261,14 +260,14 @@ PASS does **not** prove irreducible uncertainty and does not authorize final hol
 
 After support passes, STOP is triggered if either route below holds.
 
-#### A. Rich state materially resolves divergence
+#### A. At least one legal state tier materially resolves divergence
 
-All must hold:
+For either `arm = M2-State` or `arm = M3-State`, all must hold for that same arm:
 
-1. pooled `skill_M3_vs_Level >= 0.10`;
-2. at least 3/5 horizons have `skill_M3_vs_Level >= 0.05`;
-3. at least 3/4 months have `skill_M3_vs_Level >= 0.05`;
-4. 60-min `skill_M3_vs_Level >= 0.05`.
+1. pooled `skill_arm_vs_Level >= 0.10`;
+2. at least 3/5 horizons have `skill_arm_vs_Level >= 0.05`;
+3. at least 3/4 months have `skill_arm_vs_Level >= 0.05`;
+4. 60-min `skill_arm_vs_Level >= 0.05`.
 
 Interpretation: the legal issue-time state contains material deterministic information that the simple level analog misses. An information-limit explanation is not supported; any next stage must focus on extracting existing information more effectively rather than claiming state insufficiency.
 
@@ -301,7 +300,7 @@ Public aggregate output must contain:
 - final holdout accessed = false;
 - support counts/fractions overall and for all 20 month-horizon cells;
 - `G_level`, `G_M2`, `G_M3`, `Y_scale`;
-- the three skill metrics;
+- all three skill metrics;
 - normalized M3 divergence;
 - by-horizon and by-month summaries;
 - formal PASS/MIXED/STOP decision and reason;

@@ -3,9 +3,9 @@ from __future__ import annotations
 import copy
 
 import evcf.forecasting.acn_jpl_r4_d1_state_geometry_diagnostic as d1
-from evcf.forecasting.acn_jpl_gate1_features import canonical_feature_schema
 import numpy as np
 import pytest
+from evcf.forecasting.acn_jpl_gate1_features import canonical_feature_schema
 
 
 def test_m3_extension_indices_are_schema_derived_and_exclude_shared_m2():
@@ -22,7 +22,7 @@ def test_m3_extension_indices_are_schema_derived_and_exclude_shared_m2():
     assert np.array_equal(indices[:110], np.arange(201, 311))
     assert indices[110] == 314
     assert indices[-1] == 390
-    assert not set(range(0, 201)).intersection(indices.tolist())
+    assert not set(range(201)).intersection(indices.tolist())
     assert not {311, 312, 313}.intersection(indices.tolist())
 
 

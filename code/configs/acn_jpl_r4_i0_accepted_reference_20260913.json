@@ -1,0 +1,541 @@
+{
+  "code_commit": "d3f00320e90aeb213d97d63d3460f58d495dd34a",
+  "decision": "MIXED_STATE_ALIASING_SIGNAL",
+  "month_horizon_cells": [
+    {
+      "horizon_minutes": 15,
+      "metrics": {
+        "G_M2_a": 30.149227489638516,
+        "G_M3_a": 29.42518235384889,
+        "G_level_a": 20.863043390882964,
+        "Y_scale_a": 122.20242261725333,
+        "normalized_M3_divergence": 0.2407904992686655,
+        "skill_M2_vs_Level": -0.4451020843303026,
+        "skill_M3_vs_Level": -0.41039740955087756,
+        "skill_M3_vs_M2": 0.02401537936713183,
+        "supported_records": 1125
+      },
+      "month": "2019-01",
+      "oos_records": 1305,
+      "supported_fraction": 0.8620689655172413,
+      "supported_records": 1125,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 180
+    },
+    {
+      "horizon_minutes": 30,
+      "metrics": {
+        "G_M2_a": 32.36447019919479,
+        "G_M3_a": 31.22727547524571,
+        "G_level_a": 24.859674462122555,
+        "Y_scale_a": 123.13839678307284,
+        "normalized_M3_divergence": 0.25359494918759856,
+        "skill_M2_vs_Level": -0.30188632391413317,
+        "skill_M3_vs_Level": -0.25614176978967085,
+        "skill_M3_vs_M2": 0.03513713392958229,
+        "supported_records": 1126
+      },
+      "month": "2019-01",
+      "oos_records": 1305,
+      "supported_fraction": 0.8628352490421456,
+      "supported_records": 1126,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 179
+    },
+    {
+      "horizon_minutes": 60,
+      "metrics": {
+        "G_M2_a": 36.84826044325636,
+        "G_M3_a": 34.40654680604203,
+        "G_level_a": 31.256713110837776,
+        "Y_scale_a": 124.53084596402307,
+        "normalized_M3_divergence": 0.27628935256717096,
+        "skill_M2_vs_Level": -0.1788910853355148,
+        "skill_M3_vs_Level": -0.10077303022985151,
+        "skill_M3_vs_M2": 0.06626401376462232,
+        "supported_records": 1126
+      },
+      "month": "2019-01",
+      "oos_records": 1305,
+      "supported_fraction": 0.8628352490421456,
+      "supported_records": 1126,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 179
+    },
+    {
+      "horizon_minutes": 120,
+      "metrics": {
+        "G_M2_a": 42.479121074973456,
+        "G_M3_a": 39.1063995409823,
+        "G_level_a": 41.371949917967555,
+        "Y_scale_a": 127.11546538834513,
+        "normalized_M3_divergence": 0.30764470256636345,
+        "skill_M2_vs_Level": -0.026761396530770254,
+        "skill_M3_vs_Level": 0.05476054141700826,
+        "skill_M3_vs_M2": 0.0793971590899556,
+        "supported_records": 1130
+      },
+      "month": "2019-01",
+      "oos_records": 1305,
+      "supported_fraction": 0.8659003831417624,
+      "supported_records": 1130,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 175
+    },
+    {
+      "horizon_minutes": 240,
+      "metrics": {
+        "G_M2_a": 52.653710717710915,
+        "G_M3_a": 49.58203998678171,
+        "G_level_a": 63.8082990822006,
+        "Y_scale_a": 128.6421411995575,
+        "normalized_M3_divergence": 0.38542610939495353,
+        "skill_M2_vs_Level": 0.17481406846654635,
+        "skill_M3_vs_Level": 0.22295311581792843,
+        "skill_M3_vs_M2": 0.05833721287749627,
+        "supported_records": 1130
+      },
+      "month": "2019-01",
+      "oos_records": 1305,
+      "supported_fraction": 0.8659003831417624,
+      "supported_records": 1130,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 175
+    },
+    {
+      "horizon_minutes": 15,
+      "metrics": {
+        "G_M2_a": 41.890405397449584,
+        "G_M3_a": 33.75967618966489,
+        "G_level_a": 37.91166347038553,
+        "Y_scale_a": 140.6488861210854,
+        "normalized_M3_divergence": 0.24002803805073147,
+        "skill_M2_vs_Level": -0.10494770112559237,
+        "skill_M3_vs_Level": 0.10951741233839396,
+        "skill_M3_vs_M2": 0.19409526192553206,
+        "supported_records": 1124
+      },
+      "month": "2019-04",
+      "oos_records": 1180,
+      "supported_fraction": 0.9525423728813559,
+      "supported_records": 1124,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 56
+    },
+    {
+      "horizon_minutes": 30,
+      "metrics": {
+        "G_M2_a": 44.243419764178526,
+        "G_M3_a": 35.00695798742586,
+        "G_level_a": 42.53939742330071,
+        "Y_scale_a": 140.1242188612989,
+        "normalized_M3_divergence": 0.24982803309738538,
+        "skill_M2_vs_Level": -0.040057510075223624,
+        "skill_M3_vs_Level": 0.1770697257631817,
+        "skill_M3_vs_M2": 0.20876464400771588,
+        "supported_records": 1124
+      },
+      "month": "2019-04",
+      "oos_records": 1180,
+      "supported_fraction": 0.9525423728813559,
+      "supported_records": 1124,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 56
+    },
+    {
+      "horizon_minutes": 60,
+      "metrics": {
+        "G_M2_a": 49.11850560179419,
+        "G_M3_a": 37.34921984983096,
+        "G_level_a": 48.0014222024822,
+        "Y_scale_a": 139.3890026691192,
+        "normalized_M3_divergence": 0.26794954504761265,
+        "skill_M2_vs_Level": -0.02327188129134683,
+        "skill_M3_vs_Level": 0.2219143071994314,
+        "skill_M3_vs_M2": 0.23961001271857352,
+        "supported_records": 1124
+      },
+      "month": "2019-04",
+      "oos_records": 1180,
+      "supported_fraction": 0.9525423728813559,
+      "supported_records": 1124,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 56
+    },
+    {
+      "horizon_minutes": 120,
+      "metrics": {
+        "G_M2_a": 57.559778469842826,
+        "G_M3_a": 42.57758494800415,
+        "G_level_a": 56.60986483473013,
+        "Y_scale_a": 138.9967416964146,
+        "normalized_M3_divergence": 0.306320741251609,
+        "skill_M2_vs_Level": -0.016780001822755075,
+        "skill_M3_vs_Level": 0.24787693677935052,
+        "skill_M3_vs_M2": 0.2602892839430969,
+        "supported_records": 1124
+      },
+      "month": "2019-04",
+      "oos_records": 1180,
+      "supported_fraction": 0.9525423728813559,
+      "supported_records": 1124,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 56
+    },
+    {
+      "horizon_minutes": 240,
+      "metrics": {
+        "G_M2_a": 70.04493650333335,
+        "G_M3_a": 58.860286147399165,
+        "G_level_a": 74.56268399906287,
+        "Y_scale_a": 138.79049505743774,
+        "normalized_M3_divergence": 0.42409450389985376,
+        "skill_M2_vs_Level": 0.06058992586407297,
+        "skill_M3_vs_Level": 0.21059324865318763,
+        "skill_M3_vs_M2": 0.15967821393344994,
+        "supported_records": 1124
+      },
+      "month": "2019-04",
+      "oos_records": 1180,
+      "supported_fraction": 0.9525423728813559,
+      "supported_records": 1124,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 56
+    },
+    {
+      "horizon_minutes": 15,
+      "metrics": {
+        "G_M2_a": 40.44884299452776,
+        "G_M3_a": 37.64790648659826,
+        "G_level_a": 33.820145634285716,
+        "Y_scale_a": 152.21645961589581,
+        "normalized_M3_divergence": 0.24733137652524093,
+        "skill_M2_vs_Level": -0.19599848658020247,
+        "skill_M3_vs_Level": -0.1131799044777646,
+        "skill_M3_vs_M2": 0.06924639373018493,
+        "supported_records": 1267
+      },
+      "month": "2019-07",
+      "oos_records": 1294,
+      "supported_fraction": 0.9791344667697064,
+      "supported_records": 1267,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 27
+    },
+    {
+      "horizon_minutes": 30,
+      "metrics": {
+        "G_M2_a": 42.25869082249737,
+        "G_M3_a": 39.57225110993165,
+        "G_level_a": 37.71009624379863,
+        "Y_scale_a": 152.28935208552838,
+        "normalized_M3_divergence": 0.2598491002030607,
+        "skill_M2_vs_Level": -0.12062007344907655,
+        "skill_M3_vs_Level": -0.049380803859370825,
+        "skill_M3_vs_M2": 0.06357129528337246,
+        "supported_records": 1268
+      },
+      "month": "2019-07",
+      "oos_records": 1294,
+      "supported_fraction": 0.9799072642967542,
+      "supported_records": 1268,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 26
+    },
+    {
+      "horizon_minutes": 60,
+      "metrics": {
+        "G_M2_a": 45.977227063278214,
+        "G_M3_a": 43.67284144061155,
+        "G_level_a": 43.578476407204725,
+        "Y_scale_a": 152.33058066492126,
+        "normalized_M3_divergence": 0.28669779403439605,
+        "skill_M2_vs_Level": -0.0550443901172486,
+        "skill_M3_vs_Level": -0.0021654046030674667,
+        "skill_M3_vs_M2": 0.05012015229833566,
+        "supported_records": 1270
+      },
+      "month": "2019-07",
+      "oos_records": 1294,
+      "supported_fraction": 0.98145285935085,
+      "supported_records": 1270,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 24
+    },
+    {
+      "horizon_minutes": 120,
+      "metrics": {
+        "G_M2_a": 51.763553665923595,
+        "G_M3_a": 50.36957439386708,
+        "G_level_a": 52.98947459158817,
+        "Y_scale_a": 152.08307674864207,
+        "normalized_M3_divergence": 0.3311977602683319,
+        "skill_M2_vs_Level": 0.023135177978518495,
+        "skill_M3_vs_Level": 0.04944189799792775,
+        "skill_M3_vs_M2": 0.02692974445018026,
+        "supported_records": 1274
+      },
+      "month": "2019-07",
+      "oos_records": 1294,
+      "supported_fraction": 0.9845440494590417,
+      "supported_records": 1274,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 20
+    },
+    {
+      "horizon_minutes": 240,
+      "metrics": {
+        "G_M2_a": 61.480226198780045,
+        "G_M3_a": 64.0487258504441,
+        "G_level_a": 79.25399312089864,
+        "Y_scale_a": 149.56568408219437,
+        "normalized_M3_divergence": 0.42823142382878343,
+        "skill_M2_vs_Level": 0.22426336165807392,
+        "skill_M3_vs_Level": 0.19185490436121677,
+        "skill_M3_vs_M2": -0.041777654547975995,
+        "supported_records": 1276
+      },
+      "month": "2019-07",
+      "oos_records": 1294,
+      "supported_fraction": 0.9860896445131375,
+      "supported_records": 1276,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 18
+    },
+    {
+      "horizon_minutes": 15,
+      "metrics": {
+        "G_M2_a": 42.94434735540469,
+        "G_M3_a": 40.44716574973109,
+        "G_level_a": 17.37463220349308,
+        "Y_scale_a": 171.13630768543928,
+        "normalized_M3_divergence": 0.23634473769339387,
+        "skill_M2_vs_Level": -1.4716694346353387,
+        "skill_M3_vs_Level": -1.3279437098875335,
+        "skill_M3_vs_M2": 0.058149250354350035,
+        "supported_records": 1252
+      },
+      "month": "2019-10",
+      "oos_records": 1296,
+      "supported_fraction": 0.9660493827160493,
+      "supported_records": 1252,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 44
+    },
+    {
+      "horizon_minutes": 30,
+      "metrics": {
+        "G_M2_a": 45.19463829038575,
+        "G_M3_a": 43.136715320332534,
+        "G_level_a": 24.070841447392926,
+        "Y_scale_a": 170.63182371193935,
+        "normalized_M3_divergence": 0.2528058036416228,
+        "skill_M2_vs_Level": -0.8775678610637314,
+        "skill_M3_vs_Level": -0.792073426872437,
+        "skill_M3_vs_M2": 0.04553467065784644,
+        "supported_records": 1253
+      },
+      "month": "2019-10",
+      "oos_records": 1296,
+      "supported_fraction": 0.966820987654321,
+      "supported_records": 1253,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 43
+    },
+    {
+      "horizon_minutes": 60,
+      "metrics": {
+        "G_M2_a": 49.15350823208299,
+        "G_M3_a": 47.237101031617456,
+        "G_level_a": 31.72312470820431,
+        "Y_scale_a": 169.9762667375339,
+        "normalized_M3_divergence": 0.2779040976618098,
+        "skill_M2_vs_Level": -0.5494535511305036,
+        "skill_M3_vs_Level": -0.48904313386886766,
+        "skill_M3_vs_M2": 0.03898820795083502,
+        "supported_records": 1253
+      },
+      "month": "2019-10",
+      "oos_records": 1296,
+      "supported_fraction": 0.966820987654321,
+      "supported_records": 1253,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 43
+    },
+    {
+      "horizon_minutes": 120,
+      "metrics": {
+        "G_M2_a": 54.72773086820431,
+        "G_M3_a": 52.83118997371908,
+        "G_level_a": 41.31794824281458,
+        "Y_scale_a": 168.56322630127693,
+        "normalized_M3_divergence": 0.31342061452533354,
+        "skill_M2_vs_Level": -0.3245510291697935,
+        "skill_M3_vs_Level": -0.2786498899520431,
+        "skill_M3_vs_M2": 0.03465411162491816,
+        "supported_records": 1253
+      },
+      "month": "2019-10",
+      "oos_records": 1296,
+      "supported_fraction": 0.966820987654321,
+      "supported_records": 1253,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 43
+    },
+    {
+      "horizon_minutes": 240,
+      "metrics": {
+        "G_M2_a": 61.84577089066774,
+        "G_M3_a": 61.616883952638986,
+        "G_level_a": 60.15744751855281,
+        "Y_scale_a": 166.19642085660016,
+        "normalized_M3_divergence": 0.370747358066177,
+        "skill_M2_vs_Level": -0.028065076590795268,
+        "skill_M3_vs_Level": -0.024260278557132642,
+        "skill_M3_vs_M2": 0.0037009311183683335,
+        "supported_records": 1253
+      },
+      "month": "2019-10",
+      "oos_records": 1296,
+      "supported_fraction": 0.966820987654321,
+      "supported_records": 1253,
+      "unsupported_candidate_floor": 0,
+      "unsupported_m3_distance": 43
+    }
+  ],
+  "pooled_by_horizon": [
+    {
+      "G_M2_a": 39.013780108139684,
+      "G_M3_a": 35.52620705168764,
+      "G_level_a": 27.40914379045092,
+      "Y_scale_a": 147.37583578020553,
+      "horizon_minutes": 15,
+      "normalized_M3_divergence": 0.24105856203367682,
+      "skill_M2_vs_Level": -0.4233855827970703,
+      "skill_M3_vs_Level": -0.2961443569085376,
+      "skill_M3_vs_M2": 0.08939336426219335,
+      "supported_records": 4768
+    },
+    {
+      "G_M2_a": 41.16220897086774,
+      "G_M3_a": 37.463351847990644,
+      "G_level_a": 32.232957979220295,
+      "Y_scale_a": 147.36072738070635,
+      "horizon_minutes": 30,
+      "normalized_M3_divergence": 0.25422887436761965,
+      "skill_M2_vs_Level": -0.27702238799814416,
+      "skill_M3_vs_Level": -0.1622685039375611,
+      "skill_M3_vs_M2": 0.08986051077810076,
+      "supported_records": 4771
+    },
+    {
+      "G_M2_a": 45.397185363646905,
+      "G_M3_a": 40.93335240666388,
+      "G_level_a": 38.6009632966527,
+      "Y_scale_a": 147.35702309284727,
+      "horizon_minutes": 60,
+      "normalized_M3_divergence": 0.27778351888170566,
+      "skill_M2_vs_Level": -0.17606353537771802,
+      "skill_M3_vs_Level": -0.06042308043160749,
+      "skill_M3_vs_M2": 0.09832840783467534,
+      "supported_records": 4773
+    },
+    {
+      "G_M2_a": 51.7086826946392,
+      "G_M3_a": 46.52076046386181,
+      "G_level_a": 48.035927893635225,
+      "Y_scale_a": 147.42446682469566,
+      "horizon_minutes": 120,
+      "normalized_M3_divergence": 0.31555657935110765,
+      "skill_M2_vs_Level": -0.07645849600608257,
+      "skill_M3_vs_Level": 0.03154237871970356,
+      "skill_M3_vs_M2": 0.10032980846590467,
+      "supported_records": 4781
+    },
+    {
+      "G_M2_a": 61.503391448130884,
+      "G_M3_a": 58.77457591314309,
+      "G_level_a": 69.49973065875949,
+      "Y_scale_a": 146.44701321811831,
+      "horizon_minutes": 240,
+      "normalized_M3_divergence": 0.40133680176600245,
+      "skill_M2_vs_Level": 0.11505568632906316,
+      "skill_M3_vs_Level": 0.15431937136960172,
+      "skill_M3_vs_M2": 0.04436853758364123,
+      "supported_records": 4783
+    }
+  ],
+  "pooled_by_month": [
+    {
+      "G_M2_a": 38.9128109907711,
+      "G_M3_a": 36.76156656079179,
+      "G_level_a": 36.457629517844005,
+      "Y_scale_a": 125.13027997551359,
+      "month": "2019-01",
+      "normalized_M3_divergence": 0.29378633667235116,
+      "skill_M2_vs_Level": -0.06734342044167785,
+      "skill_M3_vs_Level": -0.008336719829769246,
+      "skill_M3_vs_M2": 0.055283706707529134,
+      "supported_records": 5637
+    },
+    {
+      "G_M2_a": 52.57140914731969,
+      "G_M3_a": 41.51074502446501,
+      "G_level_a": 51.92500638599229,
+      "Y_scale_a": 139.58986888107117,
+      "month": "2019-04",
+      "normalized_M3_divergence": 0.2973764884028342,
+      "skill_M2_vs_Level": -0.01244877576946779,
+      "skill_M3_vs_Level": 0.20056350661011602,
+      "skill_M3_vs_M2": 0.21039314529043018,
+      "supported_records": 5620
+    },
+    {
+      "G_M2_a": 48.405872290698134,
+      "G_M3_a": 47.087180569385254,
+      "G_level_a": 49.51186112429215,
+      "Y_scale_a": 151.69482972287804,
+      "month": "2019-07",
+      "normalized_M3_divergence": 0.31040728715280497,
+      "skill_M2_vs_Level": 0.02233785619202633,
+      "skill_M3_vs_Level": 0.04897171101728737,
+      "skill_M3_vs_M2": 0.02724239144774765,
+      "supported_records": 6355
+    },
+    {
+      "G_M2_a": 50.77444894404321,
+      "G_M3_a": 49.05518519115315,
+      "G_level_a": 34.931601213398785,
+      "Y_scale_a": 169.30051603515005,
+      "month": "2019-10",
+      "normalized_M3_divergence": 0.2897521303536272,
+      "skill_M2_vs_Level": -0.45353912160681453,
+      "skill_M3_vs_Level": -0.40432111575626695,
+      "skill_M3_vs_M2": 0.03386080575260997,
+      "supported_records": 6264
+    }
+  ],
+  "pooled_overall": {
+    "G_M2_a": 47.766514556700734,
+    "G_M3_a": 43.85307632335832,
+    "G_level_a": 43.172626106842436,
+    "Y_scale_a": 147.19272602892696,
+    "normalized_M3_divergence": 0.2979296430364373,
+    "skill_M2_vs_Level": -0.10640743601025027,
+    "skill_M3_vs_Level": -0.015761149549530007,
+    "skill_M3_vs_M2": 0.08192848629759253,
+    "supported_records": 23876
+  },
+  "protocol_merge_commit": "fec13c28cb5d4b2490256f8a26d82f45d8af6051",
+  "schema_version": "evcf-jpl-r4-i0-accepted-reference/v1",
+  "source_status_sha256": "a8b7142e0361b5cd56e53c7de99d8e699a27e1aee78728810773c127f385823f",
+  "support": {
+    "minimum_cell_supported_fraction": 0.5,
+    "minimum_cell_supported_records": 250,
+    "minimum_pooled_supported_fraction": 0.7,
+    "oos_origin_horizon_records": 25375,
+    "pooled_supported_fraction": 0.9409261083743843,
+    "support_pass": true,
+    "supported_origin_horizon_records": 23876
+  }
+}

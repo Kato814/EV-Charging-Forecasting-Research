@@ -23,7 +23,7 @@ Post-R3 screening 排除了 larger set/trajectory encoder、generic residual/ram
 
 下一问题不是再换模型，而是：
 
-> 在冻结合法 issue-time 状态下，历史中非常相似的状态是否仍对应 materially divergent future station current；完整 M3 state 是否能比简单 current-level analog 稳定选出未来更接近的历史状态？
+> 在冻结合法 issue-time 状态下，历史中非常相似的状态是否仍对应 materially divergent future station current；完整 M2 或 M3 state 是否能比简单 current-level analog 稳定选出未来更接近的历史状态？
 
 这是 empirical state-aliasing / information-sufficiency gate，不是不可预测定理、kNN方法创新或概率预测创新。
 
@@ -35,7 +35,7 @@ M2-State      = 完整 canonical M2，201 raw -> 204 encoded
 M3-State      = 完整 canonical M3，311 raw -> 391 encoded
 ```
 
-M3 primary rich-state arm；M2 secondary representation control；Level primary baseline。
+M2/M3 都是合法 information-state arm。M2 同时防止“高维 M3 距离没有收益”被误解释成“issue-time 信息本身不足”。只要 M2 或 M3 任一稳定优于 Level，就不能通过 state-aliasing PASS。
 
 使用仓库现有 `RidgePreprocessor`：historical-only median imputation、nullable indicators、mean/std standardization。禁止 PCA、metric learning、feature weights/selection、target supervision。
 
@@ -94,9 +94,9 @@ G_M2    = mean(D_M2)
 G_M3    = mean(D_M3)
 Y_scale = mean(abs(y))
 
+skill_M2_vs_Level = 1 - G_M2/G_level
 skill_M3_vs_Level = 1 - G_M3/G_level
 skill_M3_vs_M2    = 1 - G_M3/G_M2
-skill_M2_vs_Level = 1 - G_M2/G_level
 normalized_M3_divergence = G_M3/Y_scale
 ```
 
@@ -106,15 +106,15 @@ Positive skill 表示 richer state 选出的 historical analog future 更接近�
 
 ### PASS_STATE_ALIASING_SIGNAL
 
-全部满足：support pass；pooled normalized M3 divergence>=0.10；>=3/5 horizons normalized divergence>=0.08；pooled M3-vs-Level skill<=0.05；pooled M3-vs-M2 skill<=0.02；只有<=1/5 horizons和<=1/4 months的 M3-vs-Level skill>=0.10；60-min skill<=0.05且normalized divergence>=0.10。
+全部满足：support pass；pooled normalized M3 divergence>=0.10；>=3/5 horizons normalized divergence>=0.08；pooled M2-vs-Level<=0.05；pooled M3-vs-Level<=0.05；pooled M3-vs-M2<=0.02；M2/M3 各自只有<=1/5 horizons和<=1/4 months的 vs-Level skill>=0.10；60-min M2-vs-Level和M3-vs-Level均<=0.05且normalized divergence>=0.10。
 
-PASS只说明 frozen metric 下存在 material empirical aliasing，授权另行 uncertainty/external-information/target-design protocol；不自动开 holdout。
+PASS只说明 frozen metric 下存在 material empirical aliasing，且两个合法 state tier 都没有明显优于 current-level analog；只授权另行 uncertainty/external-information/target-design protocol，不自动开 holdout。
 
 ### STOP_STATE_ALIASING_ROUTE
 
 Support pass 后满足任一：
 
-A. pooled M3-vs-Level skill>=0.10，>=3/5 horizons和>=3/4 months skill>=0.05，且60-min>=0.05；
+A. **M2 或 M3 任一 arm** 的 pooled vs-Level skill>=0.10，>=3/5 horizons和>=3/4 months skill>=0.05，且60-min>=0.05；
 
 或 B. pooled normalized M3 divergence<0.05，且>=4/5 horizons<0.08。
 

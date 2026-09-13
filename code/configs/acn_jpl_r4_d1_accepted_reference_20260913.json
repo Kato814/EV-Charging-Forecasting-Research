@@ -1,0 +1,12 @@
+{
+  "aggregate_sha256": "d52308fef74d94eb6eb6b6e6252aa8f6046cad9aa000586599dd99e947d9c0e8",
+  "code_commit": "51048259f8d9c61f324db07e05ded0a3c2f9d48e",
+  "d1_protocol_merge_commit": "e20481f304d416433ca2d30b9e3bae57a017a8f6",
+  "pooled_records": 23876,
+  "preprocessor_fit_count": 1100,
+  "schema_version": "evcf-jpl-r4-d1-accepted-reference/v1",
+  "source_r4_code_commit": "d3f00320e90aeb213d97d63d3460f58d495dd34a",
+  "source_r4_decision": "MIXED_STATE_ALIASING_SIGNAL",
+  "source_r4_status_sha256": "a8b7142e0361b5cd56e53c7de99d8e699a27e1aee78728810773c127f385823f",
+  "source_status_sha256": "522af0c71236ad3da7d8de006875394420f702aa650613660e619d8dd0048c94"
+}

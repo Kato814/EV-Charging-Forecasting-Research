@@ -1,88 +1,126 @@
 # 主控交付说明｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-13。接管顺序：先读 [CURRENT_STATUS](CURRENT_STATUS.md)、[R4-I0 protocol](docs/JPL_R4_I0_INFORMATION_SUFFICIENCY_PROTOCOL_20260913.md)、[post-R3 screening](docs/JPL_POST_R3_METHOD_SCREENING_20260913.md)、[R3-C0 outcome](docs/JPL_R3_C0_CONTROL_ENDOGENEITY_OUTCOME_20260913.md)。历史链再读 R2/R1/P1 outcomes 与 [EXPERIMENT_LEDGER](docs/EXPERIMENT_LEDGER.md)。
+更新：2026-09-13。接管时先读 [CURRENT_STATUS](CURRENT_STATUS.md)、[R4-I0 outcome](docs/JPL_R4_I0_INFORMATION_SUFFICIENCY_OUTCOME_20260913.md) 和 [R4-D1 protocol](docs/JPL_R4_D1_STATE_GEOMETRY_DIAGNOSTIC_PROTOCOL_20260913.md)。历史协议/结果再按 R4-I0 → R3-C0 → R2 → R1 → P1 顺序回读。
 
 ## 1. 当前科学状态
 
 ```text
-S1 = MIXED_STRUCTURED_SIGNAL
-P1 = STOP_MECHANISM_ROUTE, CLOSED
-R1 = MIXED_JOINT_STATE_SIGNAL, CLOSED
-R2 = STOP_HIGHER_ORDER_SET_ROUTE, CLOSED
+S1    = MIXED_STRUCTURED_SIGNAL
+P1    = STOP_MECHANISM_ROUTE, CLOSED
+R1    = MIXED_JOINT_STATE_SIGNAL, CLOSED
+R2    = STOP_HIGHER_ORDER_SET_ROUTE, CLOSED
 R3-C0 = STOP_CONTROL_ENDOGENEITY_ROUTE, CLOSED
-R4-I0 = information-sufficiency / state-aliasing protocol + implementation frozen; NOT RUN
+R4-I0 = MIXED_STATE_ALIASING_SIGNAL
 ```
 
-Final holdout `2019-03/06/09/12` 继续封存。当前唯一授权本机动作是 pinned R4-I0 zero-fit launcher 首次 development-only 运行。
+Final holdout `2019-03/06/09/12` 继续封存。当前**没有用户本机命令**。
 
-R3-C0 overall valid control-state support 仅 `0.3625615764`，正式 `STOP_CONTROL_ENDOGENEITY_ROUTE / INSUFFICIENT_CONTROL_STATE_SUPPORT`。有效子集虽然出现约7%的 pooled error contrast，但不能降低 support threshold rescue；而且 60-min 下 Equal 与 S1 同时维持 pooled 方向只有 2/4 months，因此不能把描述性关联提升为稳定 PASS 机制证据。
+## 2. R4-I0 正式结果
 
-## 2. R4-I0 frozen question
-
-不是再换 deterministic backbone，而是检验：在合法 issue-time state 已很相似时，future `station_current_mean_a` 是否仍明显分叉，以及完整 M2/M3 是否能比 simple current-level analog 稳定选出 future outcome 更接近的历史状态。
+首次 R4-I0 development-only zero-fit run 已 COMPLETE：
 
 ```text
-Level-Control = fold-local M2 Ridge 标准化后的 station_current_a 单坐标
-M2-State      = canonical M2, 201 raw -> 204 encoded
-M3-State      = canonical M3, 311 raw -> 391 encoded
-MIN_CANDIDATES = 10
-K = 3
-```
-
-每个 month × local test day × horizon：历史候选只允许 label 已在 test-day midnight 前可用的 rows；`RidgePreprocessor` 仅 fit eligible history；候选只取同一 month、exact same America/Los_Angeles 15-min clock slot；future target/error 不参与 matching。Level distance 为 standardized current gap；M2/M3 为 encoded RMS Euclidean distance；ties 由更早 issue time 打破。
-
-Support 只由 M3 historical geometry 定义：historical third-NN M3 distance 的 empirical q95（`higher`）为 threshold，test third-NN <= q95 才 in-support。同一 supported set 用于三组 analog。
-
-```text
-pooled supported fraction >= 0.70
-每个20个 month-horizon cell supported fraction >= 0.50
-每个 cell supported records >= 250
-```
-
-Support fail => `STOP_STATE_ALIASING_ROUTE / INSUFFICIENT_ANALOG_SUPPORT`。首次结果后禁止改 K、same-clock window、candidate floor、q95、metric、features 或 decision thresholds。
-
-完整 `PASS_STATE_ALIASING_SIGNAL / MIXED_STATE_ALIASING_SIGNAL / STOP_STATE_ALIASING_ROUTE` 数值判据只以 frozen R4-I0 protocol 为准。PASS 也只表示 frozen metric 下的 empirical aliasing，不是 information-theoretic irreducibility，且不自动打开 final holdout。
-
-## 3. Frozen code identity
-
-```text
-protocol PR                   #78
-protocol merge                fec13c28cb5d4b2490256f8a26d82f45d8af6051
-implementation PR             #79
-implementation merge          58ebcb97869dc48ea0dfa5a7615134a5e822ac3b
-pre-result reporting repair   #80
+source status SHA256          a8b7142e0361b5cd56e53c7de99d8e699a27e1aee78728810773c127f385823f
 reviewed executable head      d3f00320e90aeb213d97d63d3460f58d495dd34a
-reporting repair merge        1590b980b50e6ac1cb2db955b102431aa0c1ad25
+runtime                       39.9417172 s
+fit_count                     0
+pooled supported fraction     0.9409261084
+supported rows                23876 / 25375
+decision                      MIXED_STATE_ALIASING_SIGNAL
+holdout_accessed              false
 ```
 
-PR #80 在任何 R4 outcome 产生前补齐冻结协议要求的 public distance-support summaries：candidate count、test third-neighbor M3 distance、historical q95 threshold 等。它不改变 causal eligibility、preprocessing、distance、support、divergence 或 PASS/MIXED/STOP。完整 pytest/compileall/Ruff 已通过。
+Support 不是问题：所有 20 个 month×horizon cells 均超过 `0.50` supported fraction 与 `250` supported-record floor。
 
-## 4. Pinned launcher
+## 3. 为什么不是 PASS
+
+13 个冻结 PASS 条件中只有一个失败：
 
 ```text
-evcf_r4_i0_launcher_v1.py
-SHA256 = 880a5221594b5434386d62ec1b242c915cf229802ddc5644f09b52f9ea82345e
-expected reviewed head = d3f00320e90aeb213d97d63d3460f58d495dd34a
+required pooled skill_M3_vs_M2 <= 0.02
+actual   pooled skill_M3_vs_M2  = 0.0819284863
 ```
 
-Launcher contract：development-only 2019-01/04/07/10；holdout paths blocked；frozen Python/packages；缺失 reviewed code 时只 fetch PR #80 head ref；detached exact-code worktree；development snapshots 与已有 worktree tracked state 前后校验；child environment 移除 `ACN_API_TOKEN`；不 reset/clean/stash/delete；不自动清理；public result 必须 `fit_count=0` 且 forbidden-action flags 全 false，并包含冻结 distance-support summaries。
+其余 12 个 PASS 条件全部满足。因此不能把 R4 写成“rich issue-time state 完全没有增量信息”。
 
-运行结束后用户只上传最新 `evcf_r4_i0_status_*.json`。若 `INCOMPLETE`，先只读诊断，不重复大实验；若 `COMPLETE`，直接按 frozen PASS/MIXED/STOP 裁决，不改阈值。
+M3 相对 M2：
 
-## 5. 当前执行顺序
+- pooled +8.19%；
+- 5/5 pooled horizons 为正；
+- 4/4 pooled months 为正；
+- 19/20 month×horizon cells 为正。
+
+## 4. 为什么也不是 STOP
+
+Pooled：
 
 ```text
-1. protocol PR + CI/review/merge                         DONE
-2. zero-fit implementation PR                            DONE
-3. causal/preprocessing/candidate/support/decision tests DONE
-4. full pytest / compileall / Ruff                       PASS
-5. pre-result reporting repair + pinned launcher         DONE
-6. development-only R4-I0 run exactly once               NEXT
-7. frozen PASS/MIXED/STOP decision                       AFTER RUN
+M2 vs Level skill             -0.106407
+M3 vs Level skill             -0.015761
+normalized M3 divergence       0.297930
 ```
 
-## 6. 资产与表达边界
+M2/M3 都没有达到 STOP 所需的跨 horizon/month 稳定 vs-Level improvement；close-M3 future divergence 也并不小。
 
-保留全部历史 worktree、failed/complete status、private caches、R2/R3 outputs 与 `evcf-r2-set`；不 reset/clean/stash/force push。PowerShell 命令必须单行。代码通过、PR合并、本机运行完成、科学假设通过要分开报告。
+所以正式结果必须保持 MIXED，不能事后修改阈值。
 
-不得声称 first EV predictability、first similar-state/kNN 或 first probabilistic EV forecasting。R4-I0 的窄边界是：在连续 richer deterministic representations 失败后，对 frozen causal JPL issue-time state 做 preregistered empirical information-sufficiency/state-aliasing test。
+## 5. R4 的关键结构
+
+Horizon：
+
+```text
+15m   M3 vs Level -29.61%   M3 vs M2 +8.94%
+30m   M3 vs Level -16.23%   M3 vs M2 +8.99%
+60m   M3 vs Level  -6.04%   M3 vs M2 +9.83%
+120m  M3 vs Level  +3.15%   M3 vs M2 +10.03%
+240m  M3 vs Level +15.43%   M3 vs M2 +4.44%
+```
+
+Month：
+
+```text
+2019-01  M3 vs Level  -0.83%   M3 vs M2  +5.53%
+2019-04  M3 vs Level +20.06%   M3 vs M2 +21.04%
+2019-07  M3 vs Level  +4.90%   M3 vs M2  +2.72%
+2019-10  M3 vs Level -40.43%   M3 vs M2  +3.39%
+```
+
+当前最稳妥的描述：**M3 session-state information 对 M2 有稳定增量价值，但 richer state 相对 instantaneous current-level continuity 的价值具有明显 horizon/month dependence。**
+
+## 6. 当前下一步：R4-D1
+
+R4-D1 是 zero-fit/read-only state-geometry failure analysis，不是新预测模型。
+
+问题：
+
+> M3 analog 是否通过获得更近的 session-state geometry，同时牺牲了 current-level similarity，从而造成短时距/October 相对 Level 较差，而长时距/April 相对更好？
+
+冻结诊断：
+
+- exact replay 原 R4 causal eligibility、same-clock candidates、K=3、q95 support、supported rows 与三组 analog identities；
+- 对 Level/M2/M3 三组 frozen analog identities 交叉计算：
+  - standardized current-level gap；
+  - complete M2 RMS geometry；
+  - M3-only session-extension RMS geometry；
+  - complete M3 RMS geometry；
+- 报告三组 neighbor overlap；
+- 复用原始 `D_Level/D_M2/D_M3`，仅作 future-divergence difference；
+- 只汇总 pooled、5 horizons、4 months、完整20 cells。
+
+R4-D1 **不得**改变 analog、K、support、metric weights，不得 PCA/feature selection，不得训练模型，不得访问 holdout。
+
+## 7. 当前执行顺序
+
+```text
+R4-I0 formal run                  DONE
+R4-I0 frozen decision             MIXED
+R4 outcome archive                current docs PR
+R4-D1 protocol freeze             current docs PR
+R4-D1 implementation              AFTER docs merge
+R4-D1 local run                   NOT AUTHORIZED YET
+Final holdout                     SEALED
+```
+
+## 8. 资产与表达保护
+
+保留全部 worktree、status、private caches、R2/R3/R4 outputs 与 `evcf-r2-set`；不 reset/clean/stash/force push。PowerShell 必须单行。任何 D1 结果都不能回写成 R4 PASS，也不能把 state-aliasing 解释成 information-theoretic irreducibility。

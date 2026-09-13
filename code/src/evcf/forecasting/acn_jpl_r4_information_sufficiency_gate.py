@@ -286,6 +286,51 @@ def analog_divergence(test_target: float, analog_targets: np.ndarray) -> float:
     return float(np.mean(np.abs(values - target)))
 
 
+def _distance_support_summary(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    required = (
+        "candidate_count",
+        "test_third_m3_distance",
+        "historical_q95_m3_distance",
+    )
+    if not all(all(key in item for key in required) for item in records):
+        return {}
+    candidate_counts = np.asarray(
+        [float(item["candidate_count"]) for item in records], dtype=np.float64
+    )
+    test_third = np.asarray(
+        [float(item["test_third_m3_distance"]) for item in records], dtype=np.float64
+    )
+    historical_q95 = np.asarray(
+        [float(item["historical_q95_m3_distance"]) for item in records], dtype=np.float64
+    )
+    if (
+        not np.isfinite(candidate_counts).all()
+        or not np.isfinite(test_third).all()
+        or not np.isfinite(historical_q95).all()
+        or np.any(candidate_counts < MIN_CANDIDATES)
+        or np.any(candidate_counts != np.floor(candidate_counts))
+        or np.any(test_third < 0.0)
+        or np.any(historical_q95 < 0.0)
+    ):
+        raise R4I0Error("DISTANCE_SUPPORT_SUMMARY_INVALID")
+    return {
+        "candidate_count_min": int(np.min(candidate_counts)),
+        "candidate_count_mean": float(np.mean(candidate_counts)),
+        "candidate_count_median": float(np.median(candidate_counts)),
+        "candidate_count_max": int(np.max(candidate_counts)),
+        "test_third_m3_distance_mean": float(np.mean(test_third)),
+        "test_third_m3_distance_median": float(np.median(test_third)),
+        "test_third_m3_distance_p95": float(
+            np.quantile(test_third, 0.95, method="higher")
+        ),
+        "historical_q95_m3_distance_mean": float(np.mean(historical_q95)),
+        "historical_q95_m3_distance_median": float(np.median(historical_q95)),
+        "historical_q95_m3_distance_p95": float(
+            np.quantile(historical_q95, 0.95, method="higher")
+        ),
+    }
+
+
 def _aggregate(records: Sequence[Mapping[str, Any]]) -> dict[str, Any] | None:
     if not records:
         return None
@@ -321,6 +366,7 @@ def _aggregate(records: Sequence[Mapping[str, Any]]) -> dict[str, Any] | None:
         "distance_ratio_mean": float(np.mean(ratios)),
         "distance_ratio_median": float(np.median(ratios)),
         "distance_ratio_p95": float(np.quantile(ratios, 0.95, method="higher")),
+        **_distance_support_summary(records),
     }
 
 
@@ -573,6 +619,8 @@ def run_gate(
                         "y_abs_a": abs(target),
                         "distance_ratio": float(selection.distance_ratio),
                         "candidate_count": selection.candidate_count,
+                        "test_third_m3_distance": selection.test_third_m3_distance,
+                        "historical_q95_m3_distance": selection.historical_q95_m3_distance,
                     }
                     records.append(record)
                     cell_records.append(record)

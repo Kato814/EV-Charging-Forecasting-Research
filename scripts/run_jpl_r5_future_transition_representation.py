@@ -7,7 +7,10 @@ import json
 import sys
 from pathlib import Path
 
-from evcf.forecasting.acn_jpl_r5_future_transition_representation import R5Error, run_r5
+from evcf.forecasting.acn_jpl_r5_future_transition_representation_compat import (
+    R5Error,
+    run_r5,
+)
 
 
 def _failure(reason_code: str) -> dict[str, object]:

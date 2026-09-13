@@ -1,74 +1,86 @@
 # 当前状态｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-13。当前入口为本文件与 [HANDOFF](HANDOFF.md)。正式 R4-I0 结果见 [R4-I0 outcome](docs/JPL_R4_I0_INFORMATION_SUFFICIENCY_OUTCOME_20260913.md)；R4-D1 只读诊断协议见 [R4-D1 protocol](docs/JPL_R4_D1_STATE_GEOMETRY_DIAGNOSTIC_PROTOCOL_20260913.md)。
+更新：2026-09-13。当前入口为本文件与 [HANDOFF](HANDOFF.md)。正式 R4-I0 结果见 [R4-I0 outcome](docs/JPL_R4_I0_INFORMATION_SUFFICIENCY_OUTCOME_20260913.md)；R4-D1 结果见 [R4-D1 outcome](docs/JPL_R4_D1_STATE_GEOMETRY_DIAGNOSTIC_OUTCOME_20260913.md)；下一只读诊断协议见 [R4-D2 protocol](docs/JPL_R4_D2_QUERY_GEOMETRY_REGIME_PROTOCOL_20260913.md)。
 
-**S1=`MIXED_STRUCTURED_SIGNAL`；P1=`STOP_MECHANISM_ROUTE` 且关闭；R1=`MIXED_JOINT_STATE_SIGNAL` 且关闭；R2=`STOP_HIGHER_ORDER_SET_ROUTE` 且关闭；R3-C0=`STOP_CONTROL_ENDOGENEITY_ROUTE` 且关闭；R4-I0=`MIXED_STATE_ALIASING_SIGNAL`。R4-D1 协议和实现均已冻结并合并，当前唯一授权动作是 development-only R4-D1 read-only 运行一次。final holdout 2019-03/06/09/12 继续封存。**
+**S1=`MIXED_STRUCTURED_SIGNAL`；P1=`STOP_MECHANISM_ROUTE` 且关闭；R1=`MIXED_JOINT_STATE_SIGNAL` 且关闭；R2=`STOP_HIGHER_ORDER_SET_ROUTE` 且关闭；R3-C0=`STOP_CONTROL_ENDOGENEITY_ROUTE` 且关闭；R4-I0=`MIXED_STATE_ALIASING_SIGNAL`。R4-D1 已 COMPLETE；formal R4 decision 不变。final holdout 2019-03/06/09/12 继续封存。**
 
-## 1. R4-I0 正式结果
-
-首次 development-only R4-I0 已 COMPLETE：
+## 1. R4-D1 run validity
 
 ```text
-runtime                      39.9417172 s
-fit_count                    0
-supported fraction           0.9409261084
-supported rows               23876 / 25375
-decision                     MIXED_STATE_ALIASING_SIGNAL
-holdout_accessed             false
+status                        COMPLETE
+source status SHA256          522af0c71236ad3da7d8de006875394420f702aa650613660e619d8dd0048c94
+runtime                       75.3963333 s
+supported records             23876
+fit_count                     0
+R4 replay verified            true
+scientific decision unchanged true
+holdout accessed              false
+development data unchanged    true
 ```
 
-R4-I0 的 13 个 PASS 条件中 12 个满足，唯一失败条件是 `pooled skill_M3_vs_M2 <= 0.02`，实际为 `+0.0819284863`。因此 M3 相对 M2 有稳定增量信息，但 M3 pooled 相对 Level 仍为 `-0.015761`，正式结论必须保持 MIXED。
+## 2. D1 的核心结果
 
-## 2. R4-D1 做什么
-
-R4-D1 **不是新预测模型**。它只解释：为什么 M3 相对 M2 更好，却不能稳定超过只看当前站级电流的 Level-Control。
-
-冻结做法：exact replay 原 R4 supported rows 与 Level/M2/M3 三组 K=3 analog identities，然后在相同邻居上交叉计算：
-
-- standardized current-level gap；
-- complete M2 RMS geometry；
-- M3-only session-extension RMS geometry；
-- complete M3 RMS geometry；
-- Level/M2/M3 neighbor overlap；
-- 原始 `D_Level/D_M2/D_M3` 及 `DeltaFuture`。
-
-禁止：改 K、改 same-clock window、改 q95/support、重选 analog、PCA、metric learning、feature selection、hybrid/two-stage matching、模型训练、target-informed matching、final holdout。
-
-## 3. R4-D1 实现状态
+Pooled geometry：
 
 ```text
-R4-D1 protocol PR            #82
-protocol merge               e20481f304d416433ca2d30b9e3bae57a017a8f6
-R4-D1 implementation PR      #83
-reviewed executable head     51048259f8d9c61f324db07e05ded0a3c2f9d48e
-implementation merge         1a55796aa79ce976d115ac5b508ebb250a77c6a6
+                         Level       M2         M3
+current-level gap        0.05693    0.20448    0.19514
+M2 RMS geometry          0.74920    0.35782    0.42044
+M3 extension RMS         0.63620    0.65480    0.39369
+full M3 RMS              0.78589    0.58670    0.46207
+future divergence (A)   43.17263   47.76651   43.85308
 ```
 
-PR #83 完整 CI 已通过：1177 tests passed、2 skipped；compileall PASS；Ruff PASS。第一次 CI 仅有两个 test-style Ruff 问题（import order 与 `range(0, 201)`），已作零逻辑修复后完整复验通过。
+相对 Level，M3 的 current-level gap 约为 **3.43×**，但 M3-extension geometry 近 **38.12%**，full-M3 geometry 近 **41.20%**。因此，M3 确实用 instantaneous current continuity 换取 richer session-state similarity。
 
-## 4. Pinned launcher
+相对 M2，M3 的 session-extension geometry 近 **39.88%**、full-M3 geometry 近 **21.24%**；同时 shared-M2 geometry 远约 **17.50%**。M3 相对 M2 的增量主要来自 session extension，而不是单纯当前电流。
 
-当前唯一授权 launcher：
+## 3. D1 为什么不足以直接做模型
+
+Horizon 上，issue-time geometry 基本不随 15/30/60/120/240 min 改变，但 `D_M3-D_Level` 从 `+8.1171 A` 逐步变为 `-10.7252 A`。因此 horizon reversal 不是由不同 horizon 选择了不同几何类型的邻居造成，而是同一种 state similarity 对不同未来时间尺度的价值不同。
+
+Month 上：
 
 ```text
-evcf_r4_d1_launcher_v1.py
-SHA256 = e84bbe7bc165b84cbe6d6f8e9df7e07fb9730a1c956dde1174fd33c09f211dfa
-expected reviewed head = 51048259f8d9c61f324db07e05ded0a3c2f9d48e
+2019-01  D_M3-D_Level   +0.3039 A
+2019-04                  -10.4143 A
+2019-07                   -2.4247 A
+2019-10                  +14.1236 A
 ```
 
-Launcher 保护：development-only 2019-01/04/07/10；holdout path blocked；固定 Python/packages；必要时仅 fetch PR #83 head；detached exact-code worktree；运行前后校验 development snapshots 与已有 worktree tracked state；移除 `ACN_API_TOKEN`；不自动清理；要求 `fit_count=0`、`r4_replay_verified=true`、`scientific_decision_unchanged=true`，且所有禁止动作 flag 为 false。
+四个月都存在几何冲突，但 aggregate geometry 不能解释 April/October 的巨大反转。因此 D1 结论是：**geometry conflict mechanistically present, but insufficient as a complete regime explanation**。
+
+## 4. 下一科学问题：R4-D2
+
+R4-D2 仍是 zero-fit/read-only diagnostic，不是新预测模型。
+
+冻结问题：
+
+> 对每个 supported query，仅用 issue-time geometry 构造 current-continuity loss 与 session-state gain 的 target-free balance score，能否稳定区分什么时候 M3 比 Level 的未来更接近？
+
+主分数：
+
+```text
+S_current = (C_M3-C_Level)/(C_M3+C_Level+1e-12)
+S_session = (QE_Level-QE_M3)/(QE_Level+QE_M3+1e-12)
+B         = S_session-S_current
+```
+
+未来只作为诊断 outcome：`A=D_Level-D_M3`，正值表示 M3 更好。B 的 pooled quartile cutpoints 只根据 issue-time geometry 确定，不能用 target 调参；同一 cutpoints 用于全部 horizon/month/cell。
+
+R4-D2 禁止训练 gate、分类器、回归器或预测模型，禁止改变 analog/K/support，禁止 month 作为 gating input，禁止访问 final holdout。
 
 ## 5. 当前执行状态
 
 | 项目 | 状态 |
 | --- | --- |
-| R4-I0 run | COMPLETE |
 | R4-I0 decision | **MIXED_STATE_ALIASING_SIGNAL** |
-| R4-D1 protocol | FROZEN / MERGED |
-| R4-D1 implementation | CI PASS / MERGED |
-| R4-D1 model fit | 必须为 0 |
-| R4-D1 local run | **NOT RUN** |
-| Final holdout | SEALED |
-| 当前用户本机动作 | **运行 pinned R4-D1 launcher exactly once** |
+| R4-D1 run | **COMPLETE** |
+| R4-D1 outcome archive | 当前 docs PR |
+| R4-D2 protocol | 当前 docs PR，待 CI/merge |
+| R4-D2 implementation | NOT STARTED |
+| R4-D2 local run | NOT AUTHORIZED |
+| Final holdout | **SEALED** |
+| 当前用户本机动作 | **无** |
 
-R4-D1 结果只用于解释 R4 的 MIXED 结构，不能把 R4 改写成 PASS/STOP。完成后才允许选择下一类真正的预测模型问题。
+只有 R4-D2 protocol 合并并完成独立实现/CI/pinned launcher 后，才允许一次 development-only D2 run。D2 完成后，才决定是否进入真正的 adaptive Level/M3 two-branch forecasting model。

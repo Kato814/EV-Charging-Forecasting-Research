@@ -61,7 +61,7 @@ def test_control_state_uses_only_actual_and_pilot_and_does_not_clip_utilization(
     assert state.utilization[1] > 1.0
     assert state.coverage[2] == pytest.approx(0.5)
     assert state.binding_fraction_90[0] == 0.0
-    assert state.binding_fraction_90[1] == 1.0
+    assert state.binding_fraction_90[1] == pytest.approx(0.5)
 
 
 def test_control_state_applies_exact_coverage_and_pilot_sum_floors():

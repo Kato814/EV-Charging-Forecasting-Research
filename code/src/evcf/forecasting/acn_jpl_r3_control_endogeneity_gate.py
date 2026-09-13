@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import math
 import subprocess
 from collections.abc import Callable, Mapping, Sequence
@@ -373,7 +372,7 @@ def contrast_metrics(
     fraction = 0.0 if base <= 0 else delta / base
     return (
         {
-            "pair_count": int(len(d)),
+            "pair_count": len(d),
             "low_mae_a": 0.0 if not len(ae_low) else float(np.mean(ae_low)),
             "high_mae_a": 0.0 if not len(ae_high) else float(np.mean(ae_high)),
             "delta_mae_a": delta,
@@ -391,7 +390,7 @@ def _aggregate(records: Sequence[Mapping[str, Any]], model: str) -> dict[str, An
     base = float(np.mean(b)) if len(b) else 0.0
     delta = float(np.mean(d)) if len(d) else 0.0
     return {
-        "pair_records": int(len(d)),
+        "pair_records": len(d),
         "delta_mae_a": delta,
         "base_mae_a": base,
         "delta_fraction": 0.0 if base <= 0 else float(delta / base),
@@ -588,10 +587,10 @@ def run_gate(
         supports.append(
             {
                 "month": contract.month,
-                "common_oos_issue_count": int(len(common)),
+                "common_oos_issue_count": len(common),
                 "valid_issue_count": valid_count,
                 "valid_issue_fraction": float(valid_fraction),
-                "matched_pair_count": int(len(pairs.low_rows)),
+                "matched_pair_count": len(pairs.low_rows),
                 "binding_fraction_90_mean": None
                 if not valid_count
                 else float(np.nanmean(common_binding[common_valid])),

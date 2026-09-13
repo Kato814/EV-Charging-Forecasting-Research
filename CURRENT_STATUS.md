@@ -1,82 +1,124 @@
 # 当前状态｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-13。当前入口为本文件与 [HANDOFF](HANDOFF.md)。R2 正式结果见 [R2 outcome](docs/JPL_R2_HIGHER_ORDER_SESSION_SET_OUTCOME_20260913.md)；R3-C0 正式结果见 [R3-C0 outcome](docs/JPL_R3_C0_CONTROL_ENDOGENEITY_OUTCOME_20260913.md)；post-R3 方向筛选见 [post-R3 screening](docs/JPL_POST_R3_METHOD_SCREENING_20260913.md)。
+更新：2026-09-13。当前入口为本文件与 [HANDOFF](HANDOFF.md)。R3-C0 正式结果见 [R3-C0 outcome](docs/JPL_R3_C0_CONTROL_ENDOGENEITY_OUTCOME_20260913.md)；post-R3 方向筛选见 [post-R3 screening](docs/JPL_POST_R3_METHOD_SCREENING_20260913.md)；当前新协议见 [R4-I0 protocol](docs/JPL_R4_I0_INFORMATION_SUFFICIENCY_PROTOCOL_20260913.md)。
 
-**S1=`MIXED_STRUCTURED_SIGNAL`；P1=`STOP_MECHANISM_ROUTE` 且关闭；R1=`MIXED_JOINT_STATE_SIGNAL` 且诊断关闭；R2=`STOP_HIGHER_ORDER_SET_ROUTE` 且关闭；R3-C0=`STOP_CONTROL_ENDOGENEITY_ROUTE` 且关闭。下一阶段为 R4-I0：issue-time information-sufficiency / state-aliasing protocol design。final holdout 2019-03/06/09/12 继续封存。**
+**S1=`MIXED_STRUCTURED_SIGNAL`；P1=`STOP_MECHANISM_ROUTE` 且关闭；R1=`MIXED_JOINT_STATE_SIGNAL` 且关闭；R2=`STOP_HIGHER_ORDER_SET_ROUTE` 且关闭；R3-C0=`STOP_CONTROL_ENDOGENEITY_ROUTE` 且关闭。当前阶段冻结为 R4-I0：issue-time information sufficiency / state aliasing。final holdout 2019-03/06/09/12 继续封存。**
 
-## 1. 已关闭的 R3-C0
+## 1. R3-C0 已关闭
 
-R3-C0 已完成唯一授权的 development-only 0-fit gate：
-
-```text
-status                         = COMPLETE
-runtime                        = 10.9733355 s
-fit_count                      = 0
-model_fit_attempted            = false
-reference_models_retrained     = false
-overall_valid_issue_fraction   = 0.3625615764
-decision                       = STOP_CONTROL_ENDOGENEITY_ROUTE
-stop_reason                    = INSUFFICIENT_CONTROL_STATE_SUPPORT
-```
-
-冻结 support 要求为 overall valid >=0.70，且每月 valid >=0.50、matched pairs >=100。实际仅 2019-01 的月度 valid fraction 超过0.50：
+R3-C0 唯一授权的 development-only 0-fit gate 已 COMPLETE：
 
 ```text
-2019-01  0.530268  pairs=345
-2019-04  0.248305  pairs=145
-2019-07  0.277434  pairs=179
-2019-10  0.382716  pairs=246
+runtime                        10.9733355 s
+fit_count                      0
+overall_valid_issue_fraction   0.3625615764
+decision                       STOP_CONTROL_ENDOGENEITY_ROUTE
+stop_reason                    INSUFFICIENT_CONTROL_STATE_SUPPORT
 ```
 
-因此 route 在 effect-size 解释前即触发 STOP。禁止降低 coverage/pilot floor、改5个 current-level bins、重做 matching 或训练 future-control predictor rescue。
+冻结 support 要求 overall>=0.70、每月 valid>=0.50、pairs>=100；实际仅 January 达到月度 valid floor。Equal/S1 在有效子集上的 pooled delta_fraction 约 -7%，但不能因描述性差异放宽支持阈值或重新打开 control route。development 数据与 R2 private cache 保持不变，holdout 未访问。
 
-在有效子集上存在描述性差异，但不能升级为机制证据：
+## 2. R4-I0 科学问题
+
+R4-I0 不训练新的 forecasting model。它检验：
+
+> 在冻结合法 issue-time 状态下，历史中“非常相似”的状态是否仍对应 materially different future `station_current_mean_a`；完整 M3 state 是否能比仅当前负荷水平稳定选出 future outcome 更接近的历史 analog？
+
+这是 empirical state-aliasing / information-sufficiency gate，不是严格的信息论不可预测证明，也不是 nearest-neighbor forecasting 方法创新。
+
+## 3. 冻结 analog 设计
+
+Development：2019-01/04/07/10；horizons：15/30/60/120/240 min。
+
+三组 analog：
 
 ```text
-Equal pooled delta_fraction     -0.071229
-S1 pooled delta_fraction        -0.073845
-R1-Joint pooled delta_fraction  -0.086692
+Level-Control = M2 Ridge 标准化后的 station_current_a 单坐标
+M2-State      = 完整 canonical M2，201 raw -> 204 encoded
+M3-State      = 完整 canonical M3，311 raw -> 391 encoded
 ```
 
-定义为 low-U error minus high-U error，因此负值表示有效子集中 lower-U issue 的 matched error 平均更低。但 support 稀疏，Equal 的 horizon sign 仅3/5与 pooled 一致，60-min 两个 primary references 仅2/4月份同时保持 pooled 方向；不能据此建立稳定 control-endogeneity route。
+每个 month × local test day × horizon：
 
-正式运行后 development 数据未改变，R2 private cache 未改变，历史 worktree 保留，final holdout 未访问。
+1. 历史候选必须 issue time 早于 test-day midnight，且该 horizon 标签在 midnight 前已可用；
+2. 使用仓库现有 `RidgePreprocessor` 在 eligible historical rows 上做 training-only median/imputation/nullable indicators/standardization；
+3. 候选只取**同一 America/Los_Angeles 当地15分钟 clock slot**；
+4. `MIN_CANDIDATES=10`；
+5. `K=3` analogs；
+6. Level 距离为标准化 station_current 绝对差；M2/M3 为 encoded vector RMS Euclidean distance；
+7. ties 由更早 issue time 决定；
+8. future target/error 禁止参与匹配。
 
-## 2. 当前下一问题：R4-I0 information sufficiency / state aliasing
+## 4. “相似状态”支持规则
 
-S1/P1/R1/R2/R3 已连续检验 future composition、显式 session mechanism、低阶 joint state、高阶 nonlinear session set、pilot-vs-actual control state。继续增加 session/control representation 的科学收益已不足。
+Support 只由 M3 历史 feature geometry 定义：
 
-post-R3 选择将下列路线排除为当前核心：
+- 在 same-clock historical candidate pool 内，对每个历史 row 计算其第三近邻 M3 distance；
+- 取这些 third-NN distances 的 empirical q95，quantile method=`higher`；
+- test issue 的第三近邻 M3 distance <= historical q95 才算 in-support。
 
-- larger Deep Sets / Set Transformer / attention / trajectory encoder；
-- generic ramp/residual correction；
-- peak-profile/peak-magnitude forecasting；
-- latent/censored demand；
-- generic probabilistic multi-horizon model；
-- generic horizon routing/MoE/similar-day selection。
+同一 supported test-row set 用于 Level/M2/M3 三组比较。
 
-下一步先回答：
+整体 support gate：
 
-> **在冻结的合法 issue-time 信息集合下，是否存在“当前状态非常相似，但未来 station current 显著分叉”的 state aliasing；并且这种分叉是否随 horizon 稳定增大？**
+```text
+pooled supported origin-horizon fraction >= 0.70
+每个 month-horizon supported fraction >= 0.50
+每个 month-horizon supported records >= 250
+```
 
-这不是新预测模型，而是 information-sufficiency / identifiability gate。其作用是决定是否还有理由继续寻找 deterministic point-forecast model，还是应承认当前信息边界的预测上限并另行设计 uncertainty / external-information 路线。
+Support fail 直接 `STOP_STATE_ALIASING_ROUTE / INSUFFICIENT_ANALOG_SUPPORT`，禁止事后改 K、clock window、candidate floor 或 q95。
 
-## 3. R4-I0 当前边界
+## 5. Future-outcome divergence
 
-R4-I0 尚未冻结完整 protocol，当前**禁止本机运行**。protocol 设计必须先明确：
+Analog identity 固定后才读取标签：
 
-1. exact legal state vector；
-2. causal historical-only scaling；
-3. historical-neighbor / matched-control rule；
-4. support floor；
-5. label-dispersion metric；
-6. 15/30/60/120/240 min 独立判据；
-7. PASS/MIXED/STOP thresholds；
-8. future label 只用于结果诊断，不能进入 state matching；
-9. positive gate 不等于 probabilistic forecasting novelty；
-10. PASS 也不自动开放 final holdout。
+```text
+D_a(i,h) = mean_j |y(i,h)-y(j,h)|, j 属于该 arm 的3个 analog
+```
 
-## 4. 当前执行状态
+聚合报告：
+
+```text
+G_level
+G_M2
+G_M3
+Y_scale = mean(abs(y))
+skill_M3_vs_Level = 1 - G_M3/G_level
+skill_M3_vs_M2    = 1 - G_M3/G_M2
+skill_M2_vs_Level = 1 - G_M2/G_level
+normalized_M3_divergence = G_M3/Y_scale
+```
+
+正 skill 表示 richer state 选出的历史状态未来更接近。
+
+## 6. 冻结科学判据
+
+### PASS_STATE_ALIASING_SIGNAL
+
+全部满足：support pass；pooled normalized M3 divergence>=0.10；>=3/5 horizons normalized divergence>=0.08；pooled M3-vs-Level skill<=5%；pooled M3-vs-M2 skill<=2%；只有<=1/5 horizons、<=1/4 months 的 M3-vs-Level skill>=10%；60-min skill<=5% 且 normalized divergence>=0.10。
+
+含义：在 frozen metric 下，相近 M3 state 仍有 materially divergent futures，且完整 M3 没有明显优于 simple current-level analog。只授权后续 uncertainty/external-information/target-design protocol，不开 holdout。
+
+### STOP_STATE_ALIASING_ROUTE
+
+Support pass 后满足任一：
+
+A. M3 materially resolves divergence：pooled M3-vs-Level skill>=10%，>=3/5 horizons 和 >=3/4 months skill>=5%，且 60-min skill>=5%；
+
+或 B. M3 analog future divergence 本身很小：pooled normalized divergence<0.05，且 >=4/5 horizons <0.08。
+
+含义：不支持“当前 legal issue-time state 信息不足”解释。
+
+其余为 `MIXED_STATE_ALIASING_SIGNAL`，只能做另行冻结的只读 failure analysis。
+
+## 7. Novelty boundary
+
+不得宣称 first EV predictability、first kNN/similar-day、first probabilistic EV forecast。2024 Applied Energy 已研究 EV charging predictability heterogeneity；2026 Applied Energy 已有 EV similar-day selection；DiffPLF/CUP-EV 等已覆盖概率多时距 EV load forecasting。
+
+R4-I0 的窄贡献边界仅是：**在本项目连续 richer deterministic representations 失败之后，对冻结 causal JPL issue-time state 做结果前注册的 empirical information-sufficiency / state-aliasing test。**
+
+## 8. 当前执行状态
 
 | 项目 | 状态 |
 | --- | --- |
@@ -89,25 +131,13 @@ R4-I0 尚未冻结完整 protocol，当前**禁止本机运行**。protocol 设�
 | R1 | MIXED/CLOSED |
 | R2 | STOP/CLOSED |
 | R3-C0 | STOP/CLOSED，0 fits |
-| R3-C0 data/cache integrity | PASS |
 | post-R3 screening | COMPLETE |
-| R4-I0 | protocol design only；no run |
+| R4-I0 protocol | **frozen in current protocol PR; no implementation/run yet** |
+| R4-I0 model fit | 必须为0 |
 | 当前用户本机命令 | **无** |
 
-## 5. Novelty / scope boundary
+当前下一动作仅在 GitHub：protocol PR 全量 CI/审查/合并；之后才允许单独 zero-fit implementation PR。
 
-当前不得把以下内容写成创新：generic Deep Sets/Set Transformer、active-session forecasting、variable-size EV population、generic ramp residual、peak forecasting、latent-demand censoring、probabilistic EV forecasting、similar-day selection、generic predictability analysis。
+## 9. 资产与执行保护
 
-R4-I0 若继续，窄问题只能是：**冻结 JPL issue-time state 的 empirical aliasing / information sufficiency 是否足以解释 richer deterministic representation 的连续失效。** Existing user-level predictability and generic uncertainty literature构成 novelty boundary，不是本项目可重复声称的贡献。
-
-## 6. 执行与资产保护
-
-- final holdout继续封存；
-- 保留所有历史 worktree、失败/成功 status、private cache 和 R2/R3 outputs；
-- 不 reset/clean/stash/force push；
-- 不修改冻结 reference predictions；
-- 不降低 R3-C0 support thresholds 做 rescue；
-- R4-I0 protocol 未合并前不写实现、不运行本机数据；
-- 代码/PR通过、本机运行完成、科学假设通过分别报告。
-
-后续长任务 PowerShell 输出继续按用户要求只保留**阶段 / 月份 / 时距 / 粗粒度完成数 / 完成状态**。
+保留全部历史 worktree、failed/complete status、private caches、R2/R3 outputs 和 `evcf-r2-set`；不 reset/clean/stash/force push。R4-I0 protocol 未合并前不写实现、不运行本机数据。后续长任务 PowerShell 仅输出 stage/month/horizon/coarse progress/completion。

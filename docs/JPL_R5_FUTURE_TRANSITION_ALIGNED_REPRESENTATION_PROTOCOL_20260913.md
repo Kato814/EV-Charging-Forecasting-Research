@@ -90,21 +90,21 @@ For training row `i`, define the transition vector
 r_i,h = y_i,h - p_i
 ```
 
-For each refit and horizon, compute a training-only robust scale
+For each refit and horizon, compute training-only robust location and scale:
 
 ```text
 m_h = median(r_i,h)
 s_h = max(median(abs(r_i,h - m_h)), 1.0 A)
-q_i,h = r_i,h / s_h
+q_i,h = (r_i,h - m_h) / s_h
 ```
 
-Both R5 arms predict the same normalized five-dimensional transition vector `q_i`. Published load forecasts are reconstructed as
+Both R5 arms predict the same centered and scaled five-dimensional transition vector `q_i`. Published load forecasts are reconstructed as
 
 ```text
-yhat_i,h = p_i + s_h * qhat_i,h
+yhat_i,h = p_i + m_h + s_h * qhat_i,h
 ```
 
-No clipping or nonnegative projection is applied to the primary result.
+The location and scale are fitted only from the historical training rows of the corresponding daily refit. No clipping or nonnegative projection is applied to the primary result.
 
 ## 6. Matched network architecture
 
@@ -207,13 +207,18 @@ The primary mechanism comparison is `R5-FTAR vs R5-Direct`; strong-baseline comp
 
 ## 11. Held-out geometry audit
 
+The latent coordinate system changes after every daily refit, so latent distances must never be computed between rows produced by different refits.
+
 For OOS rows with all five future labels available, compute an offline diagnostic only:
 
-- normalize transition vectors with the corresponding refit's training-only `s_h`;
-- use a deterministic PCG64 seed `20260913` to draw at most 20,000 distinct unordered OOS row pairs per development month;
-- compute Spearman correlation between latent RMS distance and future-transition RMS distance separately for Direct and FTAR.
+1. For each daily refit separately, normalize transition vectors with that refit's training-only `m_h` and `s_h`.
+2. Form unordered OOS row pairs **only within that same daily test block/refit**.
+3. For each valid pair, compute Direct latent RMS distance, FTAR latent RMS distance and normalized future-transition RMS distance.
+4. Within each development month, concatenate the valid same-refit pair records across its daily refits. Never form a cross-refit latent pair.
+5. If a month contains more than 20,000 valid pair records, use deterministic PCG64 seed `20260913` to sample 20,000 pair records without replacement; otherwise use all valid pair records.
+6. Compute Spearman correlation between latent RMS distance and future-transition RMS distance separately for Direct and FTAR for each month and for the pooled union of the retained month-level pair records.
 
-Future OOS labels used in this audit never affect predictions or training. The audit is aggregate-only.
+Future OOS labels used in this audit never affect predictions, model fitting, preprocessing or pair selection. The audit is aggregate-only.
 
 ## 12. Required reporting
 
@@ -230,7 +235,7 @@ Also report:
 - FTAR-vs-Equal and FTAR-vs-S1 improvement;
 - horizon and month win counts;
 - maximum horizon degradation vs Direct;
-- held-out latent/future-transition Spearman for Direct and FTAR;
+- held-out same-refit latent/future-transition Spearman for Direct and FTAR;
 - exact model fit counts and elapsed runtime.
 
 No row-level predictions, model objects, absolute paths or private cache identifiers are public.
@@ -246,7 +251,7 @@ All must hold:
 3. FTAR beats Direct in at least 3/5 horizons;
 4. FTAR beats Direct in at least 3/4 development months;
 5. no horizon FTAR MAE degradation vs Direct exceeds 5%;
-6. pooled held-out latent/future-transition Spearman is higher for FTAR than Direct.
+6. pooled held-out same-refit latent/future-transition Spearman is higher for FTAR than Direct.
 
 A PASS only authorizes a later robustness/ablation stage. It does not authorize final holdout.
 
@@ -278,13 +283,14 @@ R5 must not:
 - add individual-session set encoding;
 - revive P1 survival/TPP or R2 set routes;
 - add clipping/calibration/post-hoc residual correction;
-- select favorable hours/days/cells for the formal decision.
+- select favorable hours/days/cells for the formal decision;
+- compare latent vectors produced by different daily refits as if they occupied one shared coordinate system.
 
 ## 15. Execution sequence
 
 1. archive accepted D2 and merge this protocol;
 2. implement Direct/FTAR in a separate PR;
-3. add unit tests for causal rows, transition scaling, pairwise geometry loss, matched architecture, decision logic and holdout blocking;
+3. add unit tests for causal rows, centered transition scaling/reconstruction, pairwise geometry loss, matched architecture, same-refit geometry audit, decision logic and holdout blocking;
 4. full pytest/compileall/Ruff plus CUDA-environment launcher checks;
 5. release one pinned development-only launcher;
 6. run exactly one formal R5 development experiment;

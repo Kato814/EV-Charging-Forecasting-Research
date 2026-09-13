@@ -165,6 +165,10 @@ def _assert_close(actual: Any, expected: Any, context: str) -> None:
         if int(actual) != expected:
             raise R4D1Error("R4_REPLAY_MISMATCH")
         return
+    if isinstance(expected, str):
+        if actual != expected:
+            raise R4D1Error("R4_REPLAY_MISMATCH")
+        return
     try:
         actual_value = float(actual)
         expected_value = float(expected)

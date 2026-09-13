@@ -203,8 +203,8 @@ def test_decision_support_failure_precedes_effect_logic():
     decision, support = r4.decide(
         support=_support(False),
         pooled=None,
-        by_horizon=tuple(),
-        by_month=tuple(),
+        by_horizon=(),
+        by_month=(),
     )
     assert decision == "STOP_STATE_ALIASING_ROUTE"
     assert support["stop_reason"] == "INSUFFICIENT_ANALOG_SUPPORT"

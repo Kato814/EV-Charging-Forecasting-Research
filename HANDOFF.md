@@ -1,6 +1,6 @@
 # 主控交付说明｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-13。接管时先读 [CURRENT_STATUS](CURRENT_STATUS.md)、[R4-I0 protocol](docs/JPL_R4_I0_INFORMATION_SUFFICIENCY_PROTOCOL_20260913.md)、[post-R3 screening](docs/JPL_POST_R3_METHOD_SCREENING_20260913.md) 和 [R3-C0 outcome](docs/JPL_R3_C0_CONTROL_ENDOGENEITY_OUTCOME_20260913.md)。历史链再读 R2/R1/P1 outcomes 与 [EXPERIMENT_LEDGER](docs/EXPERIMENT_LEDGER.md)。
+更新：2026-09-13。接管顺序：先读 [CURRENT_STATUS](CURRENT_STATUS.md)、[R4-I0 protocol](docs/JPL_R4_I0_INFORMATION_SUFFICIENCY_PROTOCOL_20260913.md)、[post-R3 screening](docs/JPL_POST_R3_METHOD_SCREENING_20260913.md)、[R3-C0 outcome](docs/JPL_R3_C0_CONTROL_ENDOGENEITY_OUTCOME_20260913.md)。历史链再读 R2/R1/P1 outcomes 与 [EXPERIMENT_LEDGER](docs/EXPERIMENT_LEDGER.md)。
 
 ## 1. 当前科学状态
 
@@ -10,138 +10,79 @@ P1 = STOP_MECHANISM_ROUTE, CLOSED
 R1 = MIXED_JOINT_STATE_SIGNAL, CLOSED
 R2 = STOP_HIGHER_ORDER_SET_ROUTE, CLOSED
 R3-C0 = STOP_CONTROL_ENDOGENEITY_ROUTE, CLOSED
-R4-I0 = information-sufficiency / state-aliasing protocol frozen in current PR; NOT RUN
+R4-I0 = information-sufficiency / state-aliasing protocol + implementation frozen; NOT RUN
 ```
 
-Final holdout `2019-03/06/09/12` 继续封存。当前**没有用户本机命令**。
+Final holdout `2019-03/06/09/12` 继续封存。当前唯一授权本机动作是 pinned R4-I0 zero-fit launcher 首次 development-only 运行。
 
-## 2. 为什么进入 R4-I0
+R3-C0 overall valid control-state support 仅 `0.3625615764`，正式 `STOP_CONTROL_ENDOGENEITY_ROUTE / INSUFFICIENT_CONTROL_STATE_SUPPORT`。有效子集虽然出现约7%的 pooled error contrast，但不能降低 support threshold rescue；而且 60-min 下 Equal 与 S1 同时维持 pooled 方向只有 2/4 months，因此不能把描述性关联提升为稳定 PASS 机制证据。
 
-S1/P1/R1/R2/R3 已依次检验 future composition、explicit session mechanism、pairwise joint state、higher-order nonlinear session set、pilot-vs-actual control state。R3-C0 因 overall valid control-state support 仅0.36256触发 STOP；不能降低阈值 rescue。
+## 2. R4-I0 frozen question
 
-Post-R3 screening 排除了 larger set/trajectory encoder、generic residual/ramp、peak forecasting、latent/censored demand、generic probabilistic EV forecasting、generic horizon MoE 和 similar-day selection作为当前新核心。
-
-下一问题不是再换模型，而是：
-
-> 在冻结合法 issue-time 状态下，历史中非常相似的状态是否仍对应 materially divergent future station current；完整 M2 或 M3 state 是否能比简单 current-level analog 稳定选出未来更接近的历史状态？
-
-这是 empirical state-aliasing / information-sufficiency gate，不是不可预测定理、kNN方法创新或概率预测创新。
-
-## 3. Frozen R4-I0 state tiers
+不是再换 deterministic backbone，而是检验：在合法 issue-time state 已很相似时，future `station_current_mean_a` 是否仍明显分叉，以及完整 M2/M3 是否能比 simple current-level analog 稳定选出 future outcome 更接近的历史状态。
 
 ```text
 Level-Control = fold-local M2 Ridge 标准化后的 station_current_a 单坐标
-M2-State      = 完整 canonical M2，201 raw -> 204 encoded
-M3-State      = 完整 canonical M3，311 raw -> 391 encoded
+M2-State      = canonical M2, 201 raw -> 204 encoded
+M3-State      = canonical M3, 311 raw -> 391 encoded
+MIN_CANDIDATES = 10
+K = 3
 ```
 
-M2/M3 都是合法 information-state arm。M2 同时防止“高维 M3 距离没有收益”被误解释成“issue-time 信息本身不足”。只要 M2 或 M3 任一稳定优于 Level，就不能通过 state-aliasing PASS。
+每个 month × local test day × horizon：历史候选只允许 label 已在 test-day midnight 前可用的 rows；`RidgePreprocessor` 仅 fit eligible history；候选只取同一 month、exact same America/Los_Angeles 15-min clock slot；future target/error 不参与 matching。Level distance 为 standardized current gap；M2/M3 为 encoded RMS Euclidean distance；ties 由更早 issue time 打破。
 
-使用仓库现有 `RidgePreprocessor`：historical-only median imputation、nullable indicators、mean/std standardization。禁止 PCA、metric learning、feature weights/selection、target supervision。
-
-R4-I0 不 instantiate Ridge regression 或任何 estimator；model fit count 必须为0。
-
-## 4. Frozen causal analog construction
-
-每个 development month × local test day × horizon：
-
-1. test rows 为冻结 OOS rows；
-2. historical rows 只有在 issue time 早于 test-day midnight 且该 horizon label 已在 midnight 前可用时 eligible；
-3. preprocessors 只 fit eligible historical rows；
-4. 每个 test issue 的 candidate pool 只含同一 month、exact same `America/Los_Angeles` 15-min clock slot 的 eligible historical rows；
-5. `MIN_CANDIDATES=10`；
-6. `K=3` analogs；
-7. future label/error 永不参与 matching。
-
-Distances：
+Support 只由 M3 historical geometry 定义：historical third-NN M3 distance 的 empirical q95（`higher`）为 threshold，test third-NN <= q95 才 in-support。同一 supported set 用于三组 analog。
 
 ```text
-Level: abs(z_station_current_i - z_station_current_j)
-M2:    sqrt(mean((z_M2_i-z_M2_j)^2))
-M3:    sqrt(mean((z_M3_i-z_M3_j)^2))
-```
-
-同距离 tie 由更早 issue time 打破。
-
-## 5. Frozen similarity support
-
-“相似”只用 M3 historical feature geometry 定义：
-
-- same-clock candidate pool 内，每个历史 row 计算第三近邻 M3 distance；
-- historical support threshold = 这些 third-NN distances 的 empirical q95，quantile method=`higher`；
-- test third-NN M3 distance <= threshold 才 in-support。
-
-同一 supported test set 用于 Level/M2/M3。
-
-Support gate：
-
-```text
-pooled supported origin-horizon fraction >= 0.70
+pooled supported fraction >= 0.70
 每个20个 month-horizon cell supported fraction >= 0.50
 每个 cell supported records >= 250
 ```
 
-Support fail => `STOP_STATE_ALIASING_ROUTE / INSUFFICIENT_ANALOG_SUPPORT`。结果后禁止改 K、same-clock window、candidate floor 或 q95 rule。
+Support fail => `STOP_STATE_ALIASING_ROUTE / INSUFFICIENT_ANALOG_SUPPORT`。首次结果后禁止改 K、same-clock window、candidate floor、q95、metric、features 或 decision thresholds。
 
-## 6. Frozen outcome divergence
+完整 `PASS_STATE_ALIASING_SIGNAL / MIXED_STATE_ALIASING_SIGNAL / STOP_STATE_ALIASING_ROUTE` 数值判据只以 frozen R4-I0 protocol 为准。PASS 也只表示 frozen metric 下的 empirical aliasing，不是 information-theoretic irreducibility，且不自动打开 final holdout。
 
-Analog identities 固定后才使用 target labels：
+## 3. Frozen code identity
 
 ```text
-D_a(i,h) = mean_j |y(i,h)-y(j,h)|, j in 3 analogs
-G_level = mean(D_level)
-G_M2    = mean(D_M2)
-G_M3    = mean(D_M3)
-Y_scale = mean(abs(y))
-
-skill_M2_vs_Level = 1 - G_M2/G_level
-skill_M3_vs_Level = 1 - G_M3/G_level
-skill_M3_vs_M2    = 1 - G_M3/G_M2
-normalized_M3_divergence = G_M3/Y_scale
+protocol PR                   #78
+protocol merge                fec13c28cb5d4b2490256f8a26d82f45d8af6051
+implementation PR             #79
+implementation merge          58ebcb97869dc48ea0dfa5a7615134a5e822ac3b
+pre-result reporting repair   #80
+reviewed executable head      d3f00320e90aeb213d97d63d3460f58d495dd34a
+reporting repair merge        1590b980b50e6ac1cb2db955b102431aa0c1ad25
 ```
 
-Positive skill 表示 richer state 选出的 historical analog future 更接近。
+PR #80 在任何 R4 outcome 产生前补齐冻结协议要求的 public distance-support summaries：candidate count、test third-neighbor M3 distance、historical q95 threshold 等。它不改变 causal eligibility、preprocessing、distance、support、divergence 或 PASS/MIXED/STOP。完整 pytest/compileall/Ruff 已通过。
 
-## 7. Frozen decisions
+## 4. Pinned launcher
 
-### PASS_STATE_ALIASING_SIGNAL
+```text
+evcf_r4_i0_launcher_v1.py
+SHA256 = 880a5221594b5434386d62ec1b242c915cf229802ddc5644f09b52f9ea82345e
+expected reviewed head = d3f00320e90aeb213d97d63d3460f58d495dd34a
+```
 
-全部满足：support pass；pooled normalized M3 divergence>=0.10；>=3/5 horizons normalized divergence>=0.08；pooled M2-vs-Level<=0.05；pooled M3-vs-Level<=0.05；pooled M3-vs-M2<=0.02；M2/M3 各自只有<=1/5 horizons和<=1/4 months的 vs-Level skill>=0.10；60-min M2-vs-Level和M3-vs-Level均<=0.05且normalized divergence>=0.10。
+Launcher contract：development-only 2019-01/04/07/10；holdout paths blocked；frozen Python/packages；缺失 reviewed code 时只 fetch PR #80 head ref；detached exact-code worktree；development snapshots 与已有 worktree tracked state 前后校验；child environment 移除 `ACN_API_TOKEN`；不 reset/clean/stash/delete；不自动清理；public result 必须 `fit_count=0` 且 forbidden-action flags 全 false，并包含冻结 distance-support summaries。
 
-PASS只说明 frozen metric 下存在 material empirical aliasing，且两个合法 state tier 都没有明显优于 current-level analog；只授权另行 uncertainty/external-information/target-design protocol，不自动开 holdout。
+运行结束后用户只上传最新 `evcf_r4_i0_status_*.json`。若 `INCOMPLETE`，先只读诊断，不重复大实验；若 `COMPLETE`，直接按 frozen PASS/MIXED/STOP 裁决，不改阈值。
 
-### STOP_STATE_ALIASING_ROUTE
+## 5. 当前执行顺序
 
-Support pass 后满足任一：
+```text
+1. protocol PR + CI/review/merge                         DONE
+2. zero-fit implementation PR                            DONE
+3. causal/preprocessing/candidate/support/decision tests DONE
+4. full pytest / compileall / Ruff                       PASS
+5. pre-result reporting repair + pinned launcher         DONE
+6. development-only R4-I0 run exactly once               NEXT
+7. frozen PASS/MIXED/STOP decision                       AFTER RUN
+```
 
-A. **M2 或 M3 任一 arm** 的 pooled vs-Level skill>=0.10，>=3/5 horizons和>=3/4 months skill>=0.05，且60-min>=0.05；
+## 6. 资产与表达边界
 
-或 B. pooled normalized M3 divergence<0.05，且>=4/5 horizons<0.08。
+保留全部历史 worktree、failed/complete status、private caches、R2/R3 outputs 与 `evcf-r2-set`；不 reset/clean/stash/force push。PowerShell 命令必须单行。代码通过、PR合并、本机运行完成、科学假设通过要分开报告。
 
-含义：不支持当前 issue-time information insufficiency 解释。
-
-其余 => `MIXED_STATE_ALIASING_SIGNAL`，只能做另行 preregistered read-only failure analysis。
-
-## 8. Novelty boundary
-
-不得声称 first EV predictability、first similar-state/kNN、first probabilistic EV forecasting。Applied Energy 2024已有用户级 charging predictability heterogeneity；Applied Energy 2026已有 similar-day EV load forecasting；DiffPLF/CUP-EV等覆盖概率多时距EV负荷预测。
-
-R4-I0 的窄边界是：**在本项目连续 richer deterministic representations 失败后，对 frozen causal JPL issue-time state 做 preregistered empirical information-sufficiency/state-aliasing test。**
-
-## 9. Current execution order
-
-当前无本机动作。顺序必须是：
-
-1. R4-I0 protocol PR full CI/review/merge；
-2. 新建独立 zero-fit implementation PR；
-3. tests 锁 causal eligibility、Ridge preprocessing、same-clock candidates、K=3、q95 support、distance/decision rules；
-4. full pytest/compileall/Ruff；
-5. CI通过后发布 pinned one-time launcher；
-6. development-only run exactly once；
-7. frozen PASS/MIXED/STOP 裁决。
-
-禁止在 protocol merge 前实现/运行，禁止 target-informed matching、alternate K/time windows/PCA/metric learning/feature selection、新 deterministic backbone和 final holdout 访问。
-
-## 10. Asset / runtime protection
-
-保留所有历史 worktree、failed/complete status、private caches、R2/R3 outputs 和 `evcf-r2-set`；不 reset/clean/stash/force push。长任务 PowerShell 只输出 stage/month/horizon/coarse completed count/completion。代码通过、PR合并、本机运行完成、科学假设通过分别报告。
+不得声称 first EV predictability、first similar-state/kNN 或 first probabilistic EV forecasting。R4-I0 的窄边界是：在连续 richer deterministic representations 失败后，对 frozen causal JPL issue-time state 做 preregistered empirical information-sufficiency/state-aliasing test。

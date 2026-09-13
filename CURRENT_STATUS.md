@@ -22,7 +22,7 @@ stop_reason                    INSUFFICIENT_CONTROL_STATE_SUPPORT
 
 R4-I0 不训练新的 forecasting model。它检验：
 
-> 在冻结合法 issue-time 状态下，历史中“非常相似”的状态是否仍对应 materially different future `station_current_mean_a`；完整 M3 state 是否能比仅当前负荷水平稳定选出 future outcome 更接近的历史 analog？
+> 在冻结合法 issue-time 状态下，历史中“非常相似”的状态是否仍对应 materially different future `station_current_mean_a`；完整 M2 或 M3 state 是否能比仅当前负荷水平稳定选出 future outcome 更接近的历史 analog？
 
 这是 empirical state-aliasing / information-sufficiency gate，不是严格的信息论不可预测证明，也不是 nearest-neighbor forecasting 方法创新。
 
@@ -37,6 +37,8 @@ Level-Control = M2 Ridge 标准化后的 station_current_a 单坐标
 M2-State      = 完整 canonical M2，201 raw -> 204 encoded
 M3-State      = 完整 canonical M3，311 raw -> 391 encoded
 ```
+
+M2 和 M3 都是 information-sufficiency 的合法状态 arm。若 M2 已经明显优于 Level，就不能因为高维 M3 距离效果不好而误判“信息不足”。
 
 每个 month × local test day × horizon：
 
@@ -84,9 +86,9 @@ G_level
 G_M2
 G_M3
 Y_scale = mean(abs(y))
+skill_M2_vs_Level = 1 - G_M2/G_level
 skill_M3_vs_Level = 1 - G_M3/G_level
 skill_M3_vs_M2    = 1 - G_M3/G_M2
-skill_M2_vs_Level = 1 - G_M2/G_level
 normalized_M3_divergence = G_M3/Y_scale
 ```
 
@@ -96,17 +98,17 @@ normalized_M3_divergence = G_M3/Y_scale
 
 ### PASS_STATE_ALIASING_SIGNAL
 
-全部满足：support pass；pooled normalized M3 divergence>=0.10；>=3/5 horizons normalized divergence>=0.08；pooled M3-vs-Level skill<=5%；pooled M3-vs-M2 skill<=2%；只有<=1/5 horizons、<=1/4 months 的 M3-vs-Level skill>=10%；60-min skill<=5% 且 normalized divergence>=0.10。
+全部满足：support pass；pooled normalized M3 divergence>=0.10；>=3/5 horizons normalized divergence>=0.08；pooled M2-vs-Level skill<=5%；pooled M3-vs-Level skill<=5%；pooled M3-vs-M2 skill<=2%；M2 与 M3 各自只有<=1/5 horizons、<=1/4 months 的 vs-Level skill>=10%；60-min M2-vs-Level 和 M3-vs-Level 均<=5%，且60-min normalized divergence>=0.10。
 
-含义：在 frozen metric 下，相近 M3 state 仍有 materially divergent futures，且完整 M3 没有明显优于 simple current-level analog。只授权后续 uncertainty/external-information/target-design protocol，不开 holdout。
+含义：在 frozen metric 下，相近 M3 state 仍有 materially divergent futures，且 M2/M3 两个合法状态 tier 都没有明显优于 simple current-level analog。只授权后续 uncertainty/external-information/target-design protocol，不开 holdout。
 
 ### STOP_STATE_ALIASING_ROUTE
 
 Support pass 后满足任一：
 
-A. M3 materially resolves divergence：pooled M3-vs-Level skill>=10%，>=3/5 horizons 和 >=3/4 months skill>=5%，且 60-min skill>=5%；
+A. **M2 或 M3 任一 legal state arm** materially resolves divergence：同一 arm 的 pooled vs-Level skill>=10%，>=3/5 horizons 和 >=3/4 months skill>=5%，且60-min>=5%；
 
-或 B. M3 analog future divergence 本身很小：pooled normalized divergence<0.05，且 >=4/5 horizons <0.08。
+或 B. M3 analog future divergence 本身很小：pooled normalized divergence<0.05，且>=4/5 horizons<0.08。
 
 含义：不支持“当前 legal issue-time state 信息不足”解释。
 

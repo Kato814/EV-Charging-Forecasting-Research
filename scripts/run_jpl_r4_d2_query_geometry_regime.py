@@ -1,0 +1,74 @@
+"""CLI for the frozen JPL/ACN R4-D2 query-geometry regime diagnostic."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from evcf.forecasting.acn_jpl_r4_d2_query_geometry_regime import (
+    R4D2Error,
+    run_diagnostic,
+)
+
+
+def _failure(reason_code: str) -> dict[str, object]:
+    return {
+        "schema_version": "evcf-jpl-r4-d2-query-geometry-regime-summary/v1",
+        "status": "INCOMPLETE",
+        "reason_code": reason_code,
+        "fit_count": 0,
+        "model_fit_attempted": False,
+        "forecast_model_fit_attempted": False,
+        "gate_fit_attempted": False,
+        "classifier_fit_attempted": False,
+        "regressor_fit_attempted": False,
+        "holdout_accessed": False,
+        "reference_models_retrained": False,
+        "alternate_analog_rule": False,
+        "metric_learning": False,
+        "pca_or_feature_selection": False,
+        "target_informed_scoring": False,
+        "calendar_month_gating": False,
+    }
+
+
+def _progress(message: str) -> None:
+    print(message, file=sys.stderr, flush=True)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--interim-root", type=Path, required=True)
+    parser.add_argument("--processed-root", type=Path, required=True)
+    parser.add_argument("--code-commit", required=True)
+    parser.add_argument("--repo-root", type=Path, required=True)
+    parser.add_argument("--authorize-r4-d2", action="store_true")
+    args = parser.parse_args()
+
+    if not args.authorize_r4_d2:
+        print(json.dumps(_failure("R4_D2_NOT_AUTHORIZED"), sort_keys=True))
+        return 2
+
+    try:
+        result = run_diagnostic(
+            interim_root=args.interim_root,
+            processed_root=args.processed_root,
+            code_commit=args.code_commit,
+            repo_root=args.repo_root,
+            progress=_progress,
+        )
+    except R4D2Error as exc:
+        print(json.dumps(_failure(exc.reason_code), sort_keys=True))
+        return 2
+    except (OSError, TypeError, ValueError, RuntimeError, FloatingPointError):
+        print(json.dumps(_failure("UNEXPECTED_ERROR"), sort_keys=True))
+        return 2
+
+    print(json.dumps(result, sort_keys=True, separators=(",", ":")))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

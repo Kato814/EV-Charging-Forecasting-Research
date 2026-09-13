@@ -16,7 +16,7 @@ R4-D1 = COMPLETE diagnostic; no decision change
 
 Final holdout `2019-03/06/09/12` 继续封存。
 
-## 2. R4-D1 accepted run
+## 2. Accepted R4-D1
 
 ```text
 D1 source status SHA256       522af0c71236ad3da7d8de006875394420f702aa650613660e619d8dd0048c94
@@ -28,17 +28,11 @@ R4 replay verified             true
 holdout accessed               false
 ```
 
-Pooled D1 shows M3 current-level gap `0.19514` vs Level `0.05693` (~3.43x farther), while M3 session-extension RMS `0.39369` vs Level `0.63620` (~38.12% closer) and complete-M3 RMS `0.46207` vs Level `0.78589` (~41.20% closer).
+D1 establishes that M3 selects substantially closer session-state histories while sacrificing current-level similarity relative to Level-Control, but this aggregate trade-off cannot explain horizon/month reversal by itself. Do not turn D1 into a causal claim or a post-hoc R4 PASS/STOP.
 
-The geometry conflict is real, but it does not fully explain outcome heterogeneity. Geometry is almost unchanged across horizons while `D_M3-D_Level` moves from `+8.1171 A` at 15 min to `-10.7252 A` at 240 min. By month it is `+0.3039` Jan, `-10.4143` Apr, `-2.4247` Jul, `+14.1236` Oct.
+## 3. Frozen R4-D2
 
-Interpretation boundary: geometry trade-off is **mechanistically present but insufficient as a complete explanation**. Do not claim causality and do not alter R4-I0 MIXED.
-
-## 3. R4-D2 frozen question
-
-R4-D2 asks whether a target-free issue-time geometry-conflict score can stratify M3-vs-Level future advantage.
-
-Frozen primary score:
+Primary target-free score:
 
 ```text
 S_current = (C_M3-C_Level)/(C_M3+C_Level+1e-12)
@@ -46,41 +40,36 @@ S_session = (QE_Level-QE_M3)/(QE_Level+QE_M3+1e-12)
 B         = S_session-S_current
 ```
 
-Diagnostic outcome only:
+Outcome only: `A=D_Level-D_M3`; positive A means M3 is better.
+
+Pooled B quartiles use NumPy `method="higher"`; identical cutpoints are reused for every horizon/month/cell. No target-based score/cutpoint tuning, no new analog, no month gating input, and no model fit.
+
+## 4. R4-D2 implementation
 
 ```text
-A = D_Level-D_M3
+protocol merge                  61f00f9293d012d599d4c2f8417fc9ea7a53a58e
+reviewed executable head        599982eadbf1c1ea9868ea20ad5ed0a87d19b74d
+implementation merge            f5b0a2aa0576e40dcbe6b335dc206f0b7c2dce94
+PR                              #86
+full CI                         PASS
+launcher SHA256                 a038412e716cab5fffbe8c1d557c955780b4085c943d3a2fe38d1ed4c45e481a
 ```
 
-Positive `A` means M3 has less future divergence.
-
-Pooled B quartiles use NumPy `method="higher"` and geometry only. The same cutpoints must be reused for every horizon/month/cell. No target-based cutpoint tuning is allowed.
-
-## 4. R4-D2 requirements
-
-Before any D2 result is accepted:
-
-- exact replay D1 aggregates at atol `1e-12`;
-- same supported rows and original analog identities;
-- no new data, no new matching, no metric learning;
-- no classifier/regressor/gate/forecast model fit;
-- no calendar month as gating input;
-- no final holdout access.
-
-Required reports: pooled + 5 horizons + 4 months + all 20 cells, fixed B quartiles, mean/median A, M3-win fraction, Spearman(B,A), and Q4-Q1 differences.
+Implementation passively captures the exact D1 pooled records during the unchanged D1 run, restores the original D1 aggregator, verifies the accepted aggregate digest, then computes only the frozen D2 descriptive statistics. It reports pooled + 5 horizons + 4 months + 20 cells, B quartile bins, Spearman(B,A), M3-advantage fractions and Q4-Q1 differences.
 
 ## 5. Current execution order
 
 ```text
-R4-D1 outcome archive          current docs PR
-R4-D2 protocol freeze          current docs PR
-R4-D2 implementation           AFTER docs merge
-R4-D2 local run                NOT AUTHORIZED
+R4-D1 outcome                  ARCHIVED
+R4-D2 protocol                 FROZEN / MERGED
+R4-D2 implementation           CI PASS / MERGED
+R4-D2 pinned launcher          READY
+R4-D2 local run                NOT RUN YET
 Final holdout                  SEALED
 ```
 
-There is currently no user-side command. After the docs PR is green and merged, create a separate zero-fit implementation PR, run full CI, then release a pinned development-only launcher for exactly one D2 run.
+Next and only user-side action: run the pinned development-only R4-D2 launcher once and upload only the newest `evcf_r4_d2_status_*.json`. Do not begin an adaptive Level/M3 forecast model until D2 is interpreted and archived.
 
 ## 6. Asset protection
 
-Preserve all worktrees, status files, private caches and historical outputs. Do not reset/clean/stash/force-push. Any future PowerShell instruction must be one line. Do not convert D1/D2 descriptive results into a post-hoc R4 PASS/STOP.
+Preserve all worktrees, status files, private caches and historical outputs. Do not reset/clean/stash/force-push. PowerShell instructions must remain one line. Any D2 result is descriptive and cannot modify formal R4-I0 `MIXED_STATE_ALIASING_SIGNAL`.

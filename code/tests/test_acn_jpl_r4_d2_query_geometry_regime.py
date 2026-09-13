@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 
 import evcf.forecasting.acn_jpl_r4_d2_query_geometry_regime as d2
-import numpy as np
 import pytest
 
 

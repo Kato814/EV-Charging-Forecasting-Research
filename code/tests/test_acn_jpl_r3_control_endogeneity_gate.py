@@ -51,7 +51,7 @@ def test_control_state_uses_only_actual_and_pilot_and_does_not_clip_utilization(
         (_row(8.0, 10.0), _row(4.0, 10.0)),
         (_row(20.0, 10.0), _row(8.0, 10.0)),
         (_row(3.0, None), _row(2.0, 4.0)),
-        tuple(),
+        (),
     )
     station = np.asarray([12.0, 28.0, 5.0, 0.0])
     state = r3.build_control_state(groups, station)
@@ -201,7 +201,7 @@ def test_decision_stops_for_opposite_pooled_directions():
         pooled=pooled,
         by_horizon=horizons,
         by_month=months,
-        cells=tuple(),
+        cells=(),
     )
     assert decision == "STOP_CONTROL_ENDOGENEITY_ROUTE"
     assert support["stop_reason"] == "POOLED_DIRECTION_UNSTABLE"
@@ -221,7 +221,7 @@ def test_decision_stops_for_insufficient_support_before_effect_size():
         pooled=pooled,
         by_horizon=horizons,
         by_month=months,
-        cells=tuple(),
+        cells=(),
     )
     assert decision == "STOP_CONTROL_ENDOGENEITY_ROUTE"
     assert support["stop_reason"] == "INSUFFICIENT_CONTROL_STATE_SUPPORT"
@@ -240,10 +240,10 @@ def test_protocol_constants_and_zero_fit_publication_are_frozen():
         decision="STOP_CONTROL_ENDOGENEITY_ROUTE",
         decision_support=MappingProxyType({}),
         pooled=MappingProxyType({}),
-        by_horizon=tuple(),
-        by_month=tuple(),
-        cells=tuple(),
-        month_support=tuple(),
+        by_horizon=(),
+        by_month=(),
+        cells=(),
+        month_support=(),
         overall_valid_issue_fraction=0.0,
     ).to_public_dict()
     assert result["fit_count"] == 0

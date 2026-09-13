@@ -1,75 +1,98 @@
 # 主控交付说明｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-13。接管时先读 [CURRENT_STATUS](CURRENT_STATUS.md)、[R4-I0 outcome](docs/JPL_R4_I0_INFORMATION_SUFFICIENCY_OUTCOME_20260913.md)、[R4-D1 outcome](docs/JPL_R4_D1_STATE_GEOMETRY_DIAGNOSTIC_OUTCOME_20260913.md) 和 [R4-D2 protocol](docs/JPL_R4_D2_QUERY_GEOMETRY_REGIME_PROTOCOL_20260913.md)。
+更新：2026-09-13。接管时先读 [CURRENT_STATUS](CURRENT_STATUS.md)、[R4-I0 outcome](docs/JPL_R4_I0_INFORMATION_SUFFICIENCY_OUTCOME_20260913.md)、[R4-D1 outcome](docs/JPL_R4_D1_STATE_GEOMETRY_DIAGNOSTIC_OUTCOME_20260913.md)、[R4-D2 outcome](docs/JPL_R4_D2_QUERY_GEOMETRY_REGIME_OUTCOME_20260913.md) 和 [R5 FTAR protocol](docs/JPL_R5_FUTURE_TRANSITION_ALIGNED_REPRESENTATION_PROTOCOL_20260913.md)。
 
-## 1. 冻结科学状态
+## 1. Frozen scientific state
 
 ```text
-S1    = MIXED_STRUCTURED_SIGNAL
+S1    = MIXED_STRUCTURED_SIGNAL, CLOSED
 P1    = STOP_MECHANISM_ROUTE, CLOSED
 R1    = MIXED_JOINT_STATE_SIGNAL, CLOSED
 R2    = STOP_HIGHER_ORDER_SET_ROUTE, CLOSED
 R3-C0 = STOP_CONTROL_ENDOGENEITY_ROUTE, CLOSED
 R4-I0 = MIXED_STATE_ALIASING_SIGNAL
-R4-D1 = COMPLETE diagnostic; no decision change
+R4-D1 = COMPLETE diagnostic
+R4-D2 = COMPLETE diagnostic
 ```
 
-Final holdout `2019-03/06/09/12` 继续封存。
+Final holdout `2019-03/06/09/12` remains sealed. No current user-side command.
 
-## 2. Accepted R4-D1
+## 2. Accepted D2 evidence
 
 ```text
-D1 source status SHA256       522af0c71236ad3da7d8de006875394420f702aa650613660e619d8dd0048c94
-D1 reviewed executable        51048259f8d9c61f324db07e05ded0a3c2f9d48e
-runtime                       75.3963333 s
+D2 status SHA256               d04a5f185b193e7b2dd3bafbafe3e095a054de3c71e9a69143f7a8d58f84bdfa
+reviewed executable            599982eadbf1c1ea9868ea20ad5ed0a87d19b74d
 records                        23876
+runtime                        70.5320704 s
 fit_count                      0
-R4 replay verified             true
 holdout accessed               false
+pooled Spearman(B,A)           0.2324946715
+Q4-Q1 mean A                  +13.428887 A
+Q4-Q1 M3-win fraction          -0.087741
 ```
 
-D1 establishes that M3 selects substantially closer session-state histories while sacrificing current-level similarity relative to Level-Control, but this aggregate trade-off cannot explain horizon/month reversal by itself. Do not turn D1 into a causal claim or a post-hoc R4 PASS/STOP.
+The hand-built target-free geometry score has weak and horizon/month-inconsistent association with M3-vs-Level advantage. D2 had no formal PASS/MIXED/STOP code; the accepted project decision is simply not to advance a Level/M3 gate/router from this evidence.
 
-## 3. Frozen R4-D2
+Do not turn this into a claim that M3 lacks information. R4-I0 remains MIXED and showed stable M3 increment over M2.
 
-Primary target-free score:
+## 3. Historical no-rescue boundary
+
+Do not go backwards:
+
+- S1 has already run formally; do not rerun it.
+- P1 survival/count-mark escalation is closed.
+- R2 formally showed true higher-order same-session set alignment worse than its marginal-preserving control; do not rescue with larger Deep Sets, Set Transformer, attention or MoE.
+- D2 does not authorize a better gate, learned gate, horizon router or month router.
+
+## 4. Frozen R5 question
+
+R5-FTAR tests a different mechanism: **learn the predictive geometry itself**.
+
+Both arms receive the exact same canonical M3 issue-time input and use the exact same single MLP. Both predict a five-horizon future-transition vector. FTAR alone adds a training-fold-only loss that aligns pairwise latent distance with pairwise future-transition distance.
 
 ```text
-S_current = (C_M3-C_Level)/(C_M3+C_Level+1e-12)
-S_session = (QE_Level-QE_M3)/(QE_Level+QE_M3+1e-12)
-B         = S_session-S_current
+Direct: L = L_pred
+FTAR:   L = L_pred + 0.25 * L_geo
 ```
 
-Outcome only: `A=D_Level-D_M3`; positive A means M3 is better.
+Inference uses issue-time M3 only. No target-aware retrieval or matching occurs at test time.
 
-Pooled B quartiles use NumPy `method="higher"`; identical cutpoints are reused for every horizon/month/cell. No target-based score/cutpoint tuning, no new analog, no month gating input, and no model fit.
-
-## 4. R4-D2 implementation
+## 5. Frozen model/training contract
 
 ```text
-protocol merge                  61f00f9293d012d599d4c2f8417fc9ea7a53a58e
-reviewed executable head        599982eadbf1c1ea9868ea20ad5ed0a87d19b74d
-implementation merge            f5b0a2aa0576e40dcbe6b335dc206f0b7c2dce94
-PR                              #86
-full CI                         PASS
-launcher SHA256                 a038412e716cab5fffbe8c1d557c955780b4085c943d3a2fe38d1ed4c45e481a
+M3 encoding       391 dimensions
+encoder           Linear(391,128)-GELU-Linear(128,32)
+head              Linear(32,64)-GELU-Linear(64,5)
+optimizer         AdamW(lr=1e-3, weight_decay=1e-4)
+epochs            80
+batch size        256
+seed              20260913
+formal env        Python 3.11.16 / PyTorch 2.14.0+cu132
+formal device     NVIDIA GeForce RTX 5080 / cuda:0
 ```
 
-Implementation passively captures the exact D1 pooled records during the unchanged D1 run, restores the original D1 aggregator, verifies the accepted aggregate digest, then computes only the frozen D2 descriptive statistics. It reports pooled + 5 horizons + 4 months + 20 cells, B quartile bins, Spearman(B,A), M3-advantage fractions and Q4-Q1 differences.
+No early stopping, scheduler, hyperparameter search, mixed precision or CPU fallback in the formal run.
 
-## 5. Current execution order
+Strong frozen references: M3, Equal 0.5, S1. Primary mechanism comparison: FTAR vs Direct.
+
+## 6. Frozen R5 decision
+
+`PASS_FUTURE_TRANSITION_GEOMETRY` requires FTAR pooled MAE below Direct, Equal and S1; >=3/5 horizon wins vs Direct; >=3/4 month wins; no >5% horizon degradation vs Direct; and better held-out latent/future-transition Spearman than Direct.
+
+`MIXED_FUTURE_TRANSITION_GEOMETRY`: pooled improvement over Direct and at least one strong baseline but stability/mechanism incomplete.
+
+`STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE`: FTAR not better than Direct pooled, or wins <=1 horizon, or wins <=1 month. No architecture rescue after STOP.
+
+## 7. Execution order
 
 ```text
-R4-D1 outcome                  ARCHIVED
-R4-D2 protocol                 FROZEN / MERGED
-R4-D2 implementation           CI PASS / MERGED
-R4-D2 pinned launcher          READY
-R4-D2 local run                NOT RUN YET
-Final holdout                  SEALED
+D2 outcome archive + R5 protocol   current docs PR
+R5 implementation                  ONLY AFTER docs merge
+R5 full CI                         required
+R5 CUDA preflight                  required
+R5 pinned launcher                 only after reviewed CI-passed head exists
+R5 local run                       NOT AUTHORIZED
+Final holdout                      SEALED
 ```
 
-Next and only user-side action: run the pinned development-only R4-D2 launcher once and upload only the newest `evcf_r4_d2_status_*.json`. Do not begin an adaptive Level/M3 forecast model until D2 is interpreted and archived.
-
-## 6. Asset protection
-
-Preserve all worktrees, status files, private caches and historical outputs. Do not reset/clean/stash/force-push. PowerShell instructions must remain one line. Any D2 result is descriptive and cannot modify formal R4-I0 `MIXED_STATE_ALIASING_SIGNAL`.
+Preserve all worktrees, status files, private caches and historical outputs. Do not reset/clean/stash/force-push. Any future PowerShell command must be one line.

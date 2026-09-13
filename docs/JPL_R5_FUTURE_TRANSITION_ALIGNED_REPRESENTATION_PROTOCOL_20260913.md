@@ -77,7 +77,7 @@ The preprocessor is fitted only on the R5 training rows of that refit. No featur
 The canonical shared M2/M3 `station_current_a` feature is nullable. For each daily refit, define the legal issue-time current used in target re-expression and output reconstruction as
 
 ```text
-p_i = raw station_current_a                         if finite
+p_i = raw station_current_a                             if finite
 p_i = training-only Ridge median of station_current_a  if raw value is missing
 ```
 
@@ -262,19 +262,23 @@ All must hold:
 
 A PASS only authorizes a later robustness/ablation stage. It does not authorize final holdout.
 
-### `MIXED_FUTURE_TRANSITION_GEOMETRY`
-
-FTAR improves pooled MAE over Direct and at least one frozen strong baseline but misses one or more stability/mechanism conditions. Only failure-source analysis is allowed; no larger backbone rescue.
-
 ### `STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE`
 
-Trigger if either:
+Trigger if any of the following holds:
 
-- FTAR pooled MAE is not lower than Direct; or
-- FTAR beats Direct in at most 1/5 horizons; or
+- FTAR pooled MAE is not lower than Direct;
+- FTAR beats Direct in at most 1/5 horizons;
 - FTAR beats Direct in at most 1/4 months.
 
 The route closes without attention/MoE/Set-Transformer enlargement.
+
+### `MIXED_FUTURE_TRANSITION_GEOMETRY`
+
+If FTAR pooled MAE is lower than Direct and neither low-win STOP condition triggers, but one or more PASS conditions is not satisfied, the result is MIXED. This includes cases where the mechanism improves Direct but does not beat the frozen Equal/S1 baselines, does not meet the 3/5 or 3/4 PASS stability levels, exceeds the 5% horizon guardrail, or fails to improve the held-out geometry audit.
+
+Only failure-source analysis is allowed after MIXED; no larger backbone rescue or post-hoc gate is allowed.
+
+These definitions are exhaustive: evaluate STOP first, then PASS, otherwise MIXED.
 
 ## 14. Explicit prohibitions
 
@@ -298,7 +302,7 @@ R5 must not:
 
 1. archive accepted D2 and merge this protocol;
 2. implement Direct/FTAR in a separate PR;
-3. add unit tests for causal rows, nullable issue-current handling, centered transition scaling/reconstruction, pairwise geometry loss, matched architecture, deterministic no-singleton batching, same-refit geometry audit, decision logic and holdout blocking;
+3. add unit tests for causal rows, nullable issue-current handling, centered transition scaling/reconstruction, pairwise geometry loss, matched architecture, deterministic no-singleton batching, same-refit geometry audit, exhaustive decision logic and holdout blocking;
 4. full pytest/compileall/Ruff plus CUDA-environment launcher checks;
 5. release one pinned development-only launcher;
 6. run exactly one formal R5 development experiment;

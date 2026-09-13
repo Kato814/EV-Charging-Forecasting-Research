@@ -63,7 +63,7 @@ Thus every R5 training row has all five frozen future labels available before th
 
 No test or future-holdout label may influence preprocessing, training, pair construction or optimization.
 
-## 4. Input state
+## 4. Input state and issue-time current
 
 Both matched R5 arms use the exact canonical M3 issue-time feature block:
 
@@ -74,7 +74,14 @@ Both matched R5 arms use the exact canonical M3 issue-time feature block:
 
 The preprocessor is fitted only on the R5 training rows of that refit. No feature selection, PCA, individual-session set encoder, added weather/price data, future session identity or realized future composition is allowed.
 
-The raw issue-time station current `p_t` is read from the canonical M2/M3 shared `station_current_a` coordinate only for target re-expression and output reconstruction.
+The canonical shared M2/M3 `station_current_a` feature is nullable. For each daily refit, define the legal issue-time current used in target re-expression and output reconstruction as
+
+```text
+p_i = raw station_current_a                         if finite
+p_i = training-only Ridge median of station_current_a  if raw value is missing
+```
+
+The same refit-local historical median is used for missing training and test rows. No future/test label or global/month-wide statistic may be used to fill `p_i`.
 
 ## 5. Future-transition target
 
@@ -104,7 +111,7 @@ Both R5 arms predict the same centered and scaled five-dimensional transition ve
 yhat_i,h = p_i + m_h + s_h * qhat_i,h
 ```
 
-The location and scale are fitted only from the historical training rows of the corresponding daily refit. No clipping or nonnegative projection is applied to the primary result.
+The issue-time current fill, location and scale are fitted only from historical training rows of the corresponding daily refit. No clipping or nonnegative projection is applied to the primary result.
 
 ## 6. Matched network architecture
 
@@ -191,7 +198,7 @@ seed             20260913
 
 No early stopping, scheduler, hyperparameter search, mixed precision or CPU fallback is allowed in the formal run. The launcher must fail before fitting if the approved CUDA device/environment is unavailable.
 
-The two arms must receive the same deterministic row order and mini-batch partition for every refit.
+The two arms must receive the same deterministic row order and mini-batch partition for every refit. Every FTAR batch must contain at least two rows so pairwise geometry is defined. If the deterministic terminal batch would contain exactly one row, that row is appended to the preceding batch, giving a maximum batch size of 257. Direct uses the identical partition.
 
 ## 10. Required strong baselines
 
@@ -211,7 +218,7 @@ The latent coordinate system changes after every daily refit, so latent distance
 
 For OOS rows with all five future labels available, compute an offline diagnostic only:
 
-1. For each daily refit separately, normalize transition vectors with that refit's training-only `m_h` and `s_h`.
+1. For each daily refit separately, normalize transition vectors with that refit's training-only `m_h` and `s_h` and the same legal issue-time current definition from Section 4.
 2. Form unordered OOS row pairs **only within that same daily test block/refit**.
 3. For each valid pair, compute Direct latent RMS distance, FTAR latent RMS distance and normalized future-transition RMS distance.
 4. Within each development month, concatenate the valid same-refit pair records across its daily refits. Never form a cross-refit latent pair.
@@ -284,13 +291,14 @@ R5 must not:
 - revive P1 survival/TPP or R2 set routes;
 - add clipping/calibration/post-hoc residual correction;
 - select favorable hours/days/cells for the formal decision;
-- compare latent vectors produced by different daily refits as if they occupied one shared coordinate system.
+- compare latent vectors produced by different daily refits as if they occupied one shared coordinate system;
+- impute missing issue-time current using test/future labels or any statistic fitted beyond the current refit cutoff.
 
 ## 15. Execution sequence
 
 1. archive accepted D2 and merge this protocol;
 2. implement Direct/FTAR in a separate PR;
-3. add unit tests for causal rows, centered transition scaling/reconstruction, pairwise geometry loss, matched architecture, same-refit geometry audit, decision logic and holdout blocking;
+3. add unit tests for causal rows, nullable issue-current handling, centered transition scaling/reconstruction, pairwise geometry loss, matched architecture, deterministic no-singleton batching, same-refit geometry audit, decision logic and holdout blocking;
 4. full pytest/compileall/Ruff plus CUDA-environment launcher checks;
 5. release one pinned development-only launcher;
 6. run exactly one formal R5 development experiment;

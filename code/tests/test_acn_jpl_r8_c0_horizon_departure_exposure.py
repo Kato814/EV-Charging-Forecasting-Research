@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from evcf.forecasting.acn_jpl_gate1_features import FeatureBlock, canonical_feature_schema
 from evcf.forecasting.acn_jpl_r8_c0_horizon_departure_exposure import (
     HORIZON_EXPOSURE_ENCODED_WIDTH,

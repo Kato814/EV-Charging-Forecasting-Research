@@ -523,6 +523,16 @@ def decide(
         < float(item["arrival"]["BaseM2"]["mae_a"])
         for item in by_month
     )
+    full_total_horizon_wins = sum(
+        float(item["total"]["TotalFullM3"]["mae_a"])
+        < float(item["total"]["S1"]["mae_a"])
+        for item in by_horizon
+    )
+    full_total_month_wins = sum(
+        float(item["total"]["TotalFullM3"]["mae_a"])
+        < float(item["total"]["S1"]["mae_a"])
+        for item in by_month
+    )
     secondary = (
         "FULL_M3_INCREMENTAL_SIGNAL"
         if (
@@ -554,6 +564,8 @@ def decide(
         "max_total_horizon_degradation": float(total_max_degradation),
         "full_m3_component_horizon_wins": int(full_horizon_wins),
         "full_m3_component_month_wins": int(full_month_wins),
+        "full_m3_total_horizon_wins_vs_S1": int(full_total_horizon_wins),
+        "full_m3_total_month_wins_vs_S1": int(full_total_month_wins),
         "pooled_full_m3_arrival_improvement_fraction": (
             None
             if base_arrival == 0
@@ -626,6 +638,11 @@ def run_r7_c0(
         or tuple(contract.month for contract in structured_protocol.months)
         != DEVELOPMENT_MONTHS
         or source_protocol.test_start_local_day != 18
+        or any(
+            source_protocol.selected_parameter_sha256["M2"][horizon]
+            != SELECTED_M2_PARAMETER_SHA256[horizon]
+            for horizon in HORIZONS_MINUTES
+        )
     ):
         raise R7C0Error("PROTOCOL_INVALID")
 
@@ -754,6 +771,13 @@ def run_r7_c0(
                 name, digest = _write_private_task(stage, record)
                 private_entries.append({"name": name, "sha256": digest})
                 records.append(record)
+                if progress is not None:
+                    completed = departure_fit_count + full_m3_fit_count
+                    progress(
+                        "R7_STAGE=HORIZON_COMPLETE; "
+                        f"MONTH={month}; HORIZON={horizon}; "
+                        f"FITS={completed}/{EXPECTED_FIT_COUNT}"
+                    )
             if progress is not None:
                 progress(f"R7_STAGE=MONTH_COMPLETE; MONTH={month}")
 

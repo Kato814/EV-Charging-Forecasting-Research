@@ -41,5 +41,6 @@ target-version = "py310"
 "code/src/evcf/forecasting/acn_jpl_structured_mechanism_probe.py" = ["RUF046", "RUF100"]
 "code/src/evcf/forecasting/acn_jpl_joint_state_probe.py" = ["RUF046"]
 "code/src/evcf/forecasting/acn_jpl_r5_future_transition_representation.py" = ["RUF046", "RUF100"]
+"code/src/evcf/forecasting/acn_jpl_r10_r0_r7_robustness_readiness.py" = ["RUF046"]
 "code/tests/test_acn_jpl_structured_mechanism_probe.py" = ["I001"]
 "scripts/run_jpl_structured_mechanism_probe.py" = ["I001"]

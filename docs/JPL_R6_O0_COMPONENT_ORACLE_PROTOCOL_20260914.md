@@ -62,7 +62,18 @@ evcf-jpl-structured-s1-private-cache/v1
 
 Expected files are exactly the 20 month-horizon files for horizons `15/30/60/120/240` min plus `private_manifest.json`.
 
-R6-O0 does not read raw ACN/JPL data, processed feature arrays, metadata, R5 predictions or final-holdout files.
+Accepted OOS row counts are also frozen:
+
+```text
+2019-01: 1305 rows per horizon
+2019-04: 1180 rows per horizon
+2019-07: 1294 rows per horizon
+2019-10: 1296 rows per horizon
+pooled per horizon: 5075 rows
+pooled origin-horizon records: 25375
+```
+
+Any count drift fails closed. R6-O0 does not read raw ACN/JPL data, processed feature arrays, metadata, R5 predictions or final-holdout files.
 
 ## 3. Required row-level identities
 
@@ -79,7 +90,7 @@ arrival_predictions
 structured_predictions
 ```
 
-For every task file, all arrays must be one-dimensional, equal-length and finite, with strictly increasing `issue_times`.
+For every task file, all arrays must be one-dimensional, equal-length and finite, with strictly increasing `issue_times` and the exact month-specific row count from Section 2.
 
 The following identities must hold within absolute tolerance `1e-6 A`:
 

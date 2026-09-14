@@ -1,6 +1,6 @@
 # 主控交付说明｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-14。接管时先读 [CURRENT_STATUS](CURRENT_STATUS.md)、R4-I0/R4-D1/R4-D2 outcome、[R5 protocol](docs/JPL_R5_FUTURE_TRANSITION_ALIGNED_REPRESENTATION_PROTOCOL_20260913.md)、[R5 geometry audit repair](docs/JPL_R5_GEOMETRY_AUDIT_SCALE_REPAIR_20260913.md) 和 [R5 outcome](docs/JPL_R5_FUTURE_TRANSITION_ALIGNED_REPRESENTATION_OUTCOME_20260914.md)。
+更新：2026-09-14。接管时先读 [CURRENT_STATUS](CURRENT_STATUS.md)、R4-I0/R4-D1/R4-D2 outcome、[R5 protocol](docs/JPL_R5_FUTURE_TRANSITION_ALIGNED_REPRESENTATION_PROTOCOL_20260913.md)、[R5 geometry audit repair](docs/JPL_R5_GEOMETRY_AUDIT_SCALE_REPAIR_20260913.md)、[R5 outcome](docs/JPL_R5_FUTURE_TRANSITION_ALIGNED_REPRESENTATION_OUTCOME_20260914.md) 和 [Post-R5 screening](docs/JPL_POST_R5_METHOD_SCREENING_20260914.md)。
 
 ## 1. Frozen scientific state
 
@@ -84,17 +84,27 @@ Do not revive or enlarge the following after R5:
 
 The very large October Direct/FTAR RMSE relative to MAE may be investigated only as read-only failure analysis if needed; it must not be used to discard October or change the formal R5 decision.
 
-## 6. Next research step
+## 6. Selected post-R5 next step: R6-O0
 
-Return to candidate-direction selection using the complete S1–R5 evidence. The next mechanism must solve a remaining problem not already closed by prior experiments. Before any new model fit:
+Do **not** start another forecasting model yet. Post-R5 screening selects a zero-fit, read-only component oracle-gap diagnostic using the accepted S1 private OOS cache.
 
-1. state one precise scientific question;
-2. define a matched control that isolates the claimed mechanism;
-3. freeze development-only causal/OOS evaluation and PASS/MIXED/STOP rules;
-4. keep final holdout sealed;
-5. only then implement and run.
+For each OOS row:
 
-No current user-side rerun is authorized.
+```text
+S1              = E_hat   + A_hat
+PerfectExisting = E_truth + A_hat
+PerfectArrival  = E_hat   + A_truth
+```
+
+R6-O0 asks how much total error would disappear if perfect information were available for the future contribution of already-connected sessions versus future-arrival sessions. It must report component value-of-perfect-information, error cancellation/reinforcement, 5 horizons, 4 months and all 20 month×horizon cells.
+
+Scientific use:
+
+- stable large `PerfectArrival` gain -> long-horizon ceiling is dominated by future information not available at issue time; do not keep enlarging issue-time session encoders;
+- stable large `PerfectExisting` gain -> current-session evolution retains headroom, but any later mechanism must differ from closed P1/R2 routes;
+- mixed/cancellation-dominated -> S1 decomposition is not a stable basis for another branchwise model and the point-forecast task may be near its practical information limit under current inputs.
+
+R6-O0 is not a forecasting algorithm and has no novelty claim by itself. No local execution is authorized until its exact read-only protocol, cache identity, formulas and descriptive decision categories are frozen and CI-reviewed.
 
 ## 7. Asset protection
 

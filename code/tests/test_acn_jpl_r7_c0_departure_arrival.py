@@ -187,7 +187,7 @@ def test_decision_stop_when_neither_pooled_component_nor_total_improves() -> Non
 
 
 def test_record_recombines_candidate_arrival_with_frozen_s1_existing(monkeypatch) -> None:
-    monkeypatch.setitem(r7.EXPECTED_ROWS_BY_MONTH, "2019-01", 3)
+    monkeypatch.setattr(r7, "EXPECTED_ROWS_BY_MONTH", {"2019-01": 3})
     issue = np.asarray([900, 1800, 2700], dtype=np.int64)
     days = np.zeros(3, dtype=np.int64)
     existing_truth = np.asarray([10.0, 20.0, 30.0])

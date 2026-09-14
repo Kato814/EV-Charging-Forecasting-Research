@@ -1,12 +1,12 @@
 # 当前状态｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-14。当前入口为本文件与 [HANDOFF](HANDOFF.md)。R10-R0 正式结果见 [R10-R0 outcome](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_OUTCOME_20260914.md)，论文可行性判断见 [Post-R10 paper-viability synthesis](docs/JPL_POST_R10_PAPER_VIABILITY_NOVELTY_SYNTHESIS_20260914.md)，最新算法方向筛选见 [R11 algorithm-direction screening](docs/JPL_R11_STATION_LEVEL_DEEP_METHOD_SCREENING_20260914.md)。
+更新：2026-09-14。当前入口为本文件与 [HANDOFF](HANDOFF.md)。R10-R0 正式结果见 [R10-R0 outcome](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_OUTCOME_20260914.md)，论文可行性判断见 [Post-R10 paper-viability synthesis](docs/JPL_POST_R10_PAPER_VIABILITY_NOVELTY_SYNTHESIS_20260914.md)，R11 算法方向筛选见 [R11 direction screening](docs/JPL_R11_STATION_LEVEL_DEEP_METHOD_SCREENING_20260914.md)，最新冻结协议见 [R11-S0 protocol](docs/JPL_R11_S0_STATION_LEVEL_DEEP_BACKBONE_SCREENING_PROTOCOL_20260914.md)。
 
-**S1=`MIXED_STRUCTURED_SIGNAL`；P1/R1/R2/R3-C0 已关闭；R4-I0=`MIXED_STATE_ALIASING_SIGNAL`；R5=`STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE`；R6-O0=`MIXED_COMPONENT_ORACLE_SIGNAL`；R7-C0=`PASS_DEPARTURE_STATE_ARRIVAL_SIGNAL`；R7-D1=`TIMING_DISTRIBUTION_INCREMENTAL_SIGNAL`；R8-C0=`NO_STABLE_HORIZON_ALIGNED_ADVANTAGE`；R9-C0=`STOP_DEPARTURE_REPRESENTATION_REFINEMENT`；R10-R0=`MIXED_DEVELOPMENT_ROBUSTNESS`, COMPLETE；Post-R10 paper viability=`CONDITIONAL_MECHANISM_PAPER_VIABILITY`。用户已明确要求继续算法探索且核心方法应适用于站点级数据。R11 方向筛选已完成，下一阶段为 `R11-S0` 站点级深度 backbone 筛选协议设计；当前尚未授权模型运行。final holdout 2019-03/06/09/12 继续封存。**
+**S1=`MIXED_STRUCTURED_SIGNAL`；P1/R1/R2/R3-C0 已关闭；R4-I0=`MIXED_STATE_ALIASING_SIGNAL`；R5=`STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE`；R6-O0=`MIXED_COMPONENT_ORACLE_SIGNAL`；R7-C0=`PASS_DEPARTURE_STATE_ARRIVAL_SIGNAL`；R7-D1=`TIMING_DISTRIBUTION_INCREMENTAL_SIGNAL`；R8-C0=`NO_STABLE_HORIZON_ALIGNED_ADVANTAGE`；R9-C0=`STOP_DEPARTURE_REPRESENTATION_REFINEMENT`；R10-R0=`MIXED_DEVELOPMENT_ROBUSTNESS`, COMPLETE；Post-R10 paper viability=`CONDITIONAL_MECHANISM_PAPER_VIABILITY`。用户已明确要求继续算法探索且核心方法应适用于站点级数据。`R11-S0` 站点级深度 backbone 筛选协议已冻结；当前下一步为实现、测试、参数量/CUDA preflight、代码审查与 pinned launcher，尚未授权真实模型拟合。final holdout 2019-03/06/09/12 继续封存。**
 
 ## 1. Accepted development candidate
 
-Departure-representation refinement remains closed. Retain R7 `Departure-Aug / TotalDeparture` as the accepted development-stage candidate:
+Departure-representation refinement remains closed. Retain R7 `Departure-Aug / TotalDeparture` as the accepted development-stage candidate of the old structured line:
 
 ```text
 Arrival MAE        22.7486906628 A
@@ -36,7 +36,7 @@ R7 private cache unchanged     true
 
 Exact pooled replay passed.
 
-## 3. Frozen decision support
+## 3. Frozen R10 decision support
 
 ```text
                                         vs S1          vs Equal
@@ -71,7 +71,7 @@ median daily delta vs S1     +0.05723 A
 top-5 gain share vs S1        60.66%
 ```
 
-## 5. Paper viability and revised algorithm objective
+## 5. Revised algorithm objective
 
 Post-R10 synthesis remains:
 
@@ -79,94 +79,136 @@ Post-R10 synthesis remains:
 CONDITIONAL_MECHANISM_PAPER_VIABILITY
 ```
 
-R7 is not strong enough to be positioned as a major new forecasting algorithm. The mechanism evidence remains useful, but the user has clarified that the project should continue toward a **portable deep forecasting method**, not stop at mechanism replication.
+R7 is not strong enough to be positioned as a major new forecasting algorithm. The mechanism evidence remains useful, but the project now continues toward a **portable station-level deep forecasting method**.
 
-The new minimum design contract is:
+The minimum deployment contract is:
 
-> the deployed model must operate from ordinary station-level load/history; session-resolved information may support training or mechanism analysis but must not be required at inference.
+> the deployed model must operate from ordinary station-level load/history and timestamp context; session-resolved information may support source-side training or mechanism analysis but must not be required at inference.
 
-A fresh literature collision review shows that generic `multi-scale + multi-horizon` modeling is already crowded in EV charging forecasting (MFT, ATF-PatchTST, TCN-LSTM, multiple-time-scale expert systems, multi-step Autoformer variants). Generic knowledge distillation is also occupied, including `PhysDistill-EV` (IEEE Access, 2026). Therefore neither multi-scale encoding, Transformer/PatchTST/TCN choice, horizon conditioning nor knowledge distillation can be claimed as the contribution by itself.
+Generic `multi-scale + multi-horizon`, Transformer/PatchTST/TCN choice, horizon conditioning and generic knowledge distillation are treated as prior-art/backbone tools rather than novelty claims.
 
-The selected research direction is instead:
+The selected research direction remains:
 
 > **station-level multi-horizon core + session-resolved training-only auxiliary supervision**.
 
-This uses standard Learning Using Privileged Information / multi-task principles to bridge data granularity: the model receives station-level inputs, while ACN session-resolved existing/arrival component truths may be used only as auxiliary training labels. The same model must run without session fields on station-level-only datasets.
+The later scientific test is whether fine-grained ACN component labels can improve an aggregate-only forecaster while the inference feature contract stays station-level.
 
-## 6. Selected R11 structure
+## 6. R11-S0 protocol now frozen
 
-### R11-S0 — station-level deep-backbone screening
+`R11-S0` = station-level deep-backbone screening.
 
-Purpose: choose a stable carrier architecture using only station-level predictors.
-
-Candidate families for the protocol:
+Frozen station-only input contract:
 
 ```text
-GRU
-TCN
-N-HiTS
-PatchTST   (strong modern control, not presumed final backbone)
+24 h history = 96 x 15-min bins
+history channels = standardized aggregate station current + validity mask
+issue/target timestamp calendar context only
+no session-derived predictor
 ```
 
-Backbone choice is not a novelty claim. The protocol must match inputs, target rows, chronology and training budget as far as practical.
-
-### R11-M1 — privileged auxiliary-supervision test
-
-Only after R11-S0 identifies a stable core:
+Frozen horizons:
 
 ```text
-Arm 1: total-load supervision only
-Arm 2: same station-level inputs/backbone + training-only existing/arrival auxiliary supervision
+15 / 30 / 60 / 120 / 240 min
 ```
 
-The source-side auxiliary labels may be:
+Frozen candidate families:
 
 ```text
-E(t,h)  existing-session contribution
-A(t,h)  future-arrival contribution
-Y(t,h)  total station current
+GRU      2 layers, hidden 96
+TCN      5 causal residual blocks, dilations 1/2/4/8/16
+N-HiTS   3 hierarchical stacks, pooling 1/4/16
+PatchTST compact control, patch 16 / stride 8 / d_model 64 / 2 layers
 ```
 
-but `E/A`, requested departure, per-session current/pilot and other session fields are not required deployment inputs.
+Common deep training policy:
 
-The scientific question is whether privileged fine-grained supervision improves the aggregate station-level representation and remains useful when inference sees aggregate data only.
+```text
+AdamW, lr=1e-3, weight_decay=1e-4
+batch=256
+max_epochs=120
+patience=12
+SmoothL1 five-horizon loss
+3 frozen seeds
+float32 / RTX 5080 / no AMP
+```
 
-## 7. Evidence and portability boundary
+Chronology is month-wise expanding and causal: earlier development months plus current-month days 1–14 train; current days 15–17 validate; current day >=18 is the exact frozen formal test set.
 
-The four JPL development months remain method-development data. The final JPL holdout `2019-03/06/09/12` remains sealed.
+Formal ceiling:
 
-A later portability test, if R11-M1 passes, must evaluate the same station-level model in a deployment setting where session information is hidden or unavailable. Do not select a target dataset after seeing favorable model results.
+```text
+48 deep fits + 20 Station-HGB fits = 68 fits
+```
 
-The current direction deliberately avoids tying the final algorithm to ACN session inputs.
+No formal fit is authorized until implementation/code review/CI/pinned-launcher freeze is complete.
 
-## 8. Current prohibitions
+## 7. R11-S0 selection rule
+
+`Station-HGB` uses the same station-only information as a non-deep anchor with frozen per-horizon HGB parameters.
+
+A deep candidate is eligible to carry R11-M1 only if, on median-of-three-seed metrics:
+
+```text
+pooled MAE <= 1.02 * Station-HGB pooled MAE
+worst horizon degradation <= 10%
+worst month degradation   <= 10%
+pooled seed spread        <= 3%
+all four chronological folds complete
+```
+
+Decisions:
+
+```text
+SELECT_STATION_BACKBONE
+MIXED_STATION_BACKBONE
+STOP_DEEP_CORE_ROUTE
+```
+
+If multiple candidates are eligible, choose the lowest pooled median MAE; if top two differ by <0.25%, choose the smaller trainable-parameter count. No fifth architecture may be added after seeing R11-S0 results.
+
+Frozen S1/Equal/R7 may be reported only as richer-information context, not as the station-only S0 selection threshold.
+
+## 8. Planned R11-M1
+
+Only after `SELECT_STATION_BACKBONE` may a separate protocol compare:
+
+```text
+Arm 1: selected station-level backbone + total-load supervision
+Arm 2: identical station-level inputs/backbone + training-only E/A auxiliary supervision
+```
+
+Session-resolved component truths are labels only. They never become deployment inputs.
+
+If the auxiliary-supervision effect is absent or unstable, the route closes; do not respond by adding session predictors or changing the backbone after seeing the result.
+
+## 9. Current prohibitions
 
 Do not:
 
 - open or prepare the JPL final holdout;
+- run R11-S0 before executable/launcher freeze;
 - rerun/tune R7 to repair R10;
 - return to requested-departure feature/bin engineering as the prediction method;
-- use future/session-resolved information as inference input;
-- claim generic multi-scale modeling, Transformer, TCN, PatchTST, multi-horizon forecasting or knowledge distillation as novel by themselves;
+- use session/future information as inference input;
+- tune R11 depth, patch length, dilation pattern, learning rate or dropout after observing results;
+- add Mamba/SSM/a fifth backbone after R11-S0;
+- ensemble/select seeds;
 - select favorable months/horizons/datasets after observing results;
-- start R11 model fits before the R11-S0 protocol freezes common inputs, chronology, model budgets, metrics and selection/STOP rules.
+- claim generic backbone/multi-scale/multi-horizon/KD concepts as new.
 
 R9 and R10 outcomes remain unchanged.
 
-## 9. Immediate next action
+## 10. Immediate next action
 
-The only authorized next task is **R11-S0 protocol design**. No local training command is authorized yet.
+The R11-S0 scientific protocol is frozen. The next authorized work is **implementation only, without real-data fitting**:
 
-The protocol must freeze:
-
-1. station-level-only feature contract;
-2. history window and five fixed horizons;
-3. development chronology and validation rule;
-4. candidate backbone definitions;
-5. comparable model/training budgets;
-6. optimizer/seed/early-stopping policy;
-7. headline accuracy and stability metrics;
-8. backbone-selection and STOP rules;
-9. exact prohibition on final-holdout access.
-
-Once R11-S0 is frozen, implementation and one controlled development screening can be considered.
+1. create an isolated R11 code branch;
+2. implement station-only dataset construction, Station-HGB and four deep candidates;
+3. add chronology/no-session/row-identity/output-shape unit tests;
+4. run shape-only parameter-count preflight and freeze any width-only correction needed to stay within 50k–250k parameters;
+5. add CUDA/RTX 5080 preflight with no CPU fallback for the formal run;
+6. review the code and freeze the reviewed executable;
+7. conserve GitHub Actions and run full CI once on the final candidate;
+8. create one pinned launcher;
+9. only after those steps may the user run the one formal 68-fit R11-S0 screen.

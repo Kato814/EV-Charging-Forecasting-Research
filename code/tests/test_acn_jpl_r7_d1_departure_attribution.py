@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from evcf.forecasting.acn_jpl_gate1_features import FeatureBlock
 from evcf.forecasting.acn_jpl_r7_d1_departure_attribution import (
     AVAILABILITY_ENCODED_WIDTH,

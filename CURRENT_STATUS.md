@@ -1,6 +1,6 @@
 # 当前状态｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-14。当前入口为本文件与 [HANDOFF](HANDOFF.md)。正式 R4-I0 结果见 [R4-I0 outcome](docs/JPL_R4_I0_INFORMATION_SUFFICIENCY_OUTCOME_20260913.md)；R4-D1、R4-D2 已完成并归档；R5 协议见 [R5 FTAR protocol](docs/JPL_R5_FUTURE_TRANSITION_ALIGNED_REPRESENTATION_PROTOCOL_20260913.md)，训练前几何审计尺度修补见 [R5 geometry audit repair](docs/JPL_R5_GEOMETRY_AUDIT_SCALE_REPAIR_20260913.md)，正式结果见 [R5 outcome](docs/JPL_R5_FUTURE_TRANSITION_ALIGNED_REPRESENTATION_OUTCOME_20260914.md)。
+更新：2026-09-14。当前入口为本文件与 [HANDOFF](HANDOFF.md)。正式 R4-I0 结果见 [R4-I0 outcome](docs/JPL_R4_I0_INFORMATION_SUFFICIENCY_OUTCOME_20260913.md)；R4-D1、R4-D2 已完成并归档；R5 协议见 [R5 FTAR protocol](docs/JPL_R5_FUTURE_TRANSITION_ALIGNED_REPRESENTATION_PROTOCOL_20260913.md)，训练前几何审计尺度修补见 [R5 geometry audit repair](docs/JPL_R5_GEOMETRY_AUDIT_SCALE_REPAIR_20260913.md)，正式结果见 [R5 outcome](docs/JPL_R5_FUTURE_TRANSITION_ALIGNED_REPRESENTATION_OUTCOME_20260914.md)。Post-R5 方法筛选见 [Post-R5 screening](docs/JPL_POST_R5_METHOD_SCREENING_20260914.md)。
 
 **S1=`MIXED_STRUCTURED_SIGNAL`；P1/R1/R2/R3-C0 均已关闭；R4-I0=`MIXED_STATE_ALIASING_SIGNAL`；R4-D1、R4-D2 COMPLETE；R5=`STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE`。Level/M3 gate、higher-order set rescue 和 FTAR geometry route 均不推进。final holdout 2019-03/06/09/12 继续封存。**
 
@@ -76,7 +76,23 @@ formal env                       Python 3.11.16 / PyTorch 2.14.0+cu132 / CUDA 13
 
 Preserve all worktrees, status files and private caches. Do not reset/clean/stash/delete or rerun R5.
 
-## 5. Current execution state
+## 5. Post-R5 selected diagnostic direction
+
+The next step is **not another model**. Post-R5 screening selects a zero-fit, read-only `R6-O0` component oracle-gap diagnostic.
+
+Using accepted S1 OOS component caches only:
+
+```text
+S1              = E_hat   + A_hat
+PerfectExisting = E_truth + A_hat
+PerfectArrival  = E_hat   + A_truth
+```
+
+R6-O0 will measure how much total forecast error would disappear under perfect information about currently connected-session contribution versus future-arrival contribution. This is needed before deciding whether more issue-time modeling is scientifically justified or whether the dominant long-horizon uncertainty is information unavailable at forecast issue time.
+
+No R6-O0 execution is authorized until its exact read-only protocol and decision categories are frozen and CI-reviewed.
+
+## 6. Current execution state
 
 | 项目 | 状态 |
 | --- | --- |
@@ -86,7 +102,8 @@ Preserve all worktrees, status files and private caches. Do not reset/clean/stas
 | R5 protocol / implementation | **FROZEN / MERGED** |
 | R5 formal run | **COMPLETE** |
 | R5 decision | **STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE** |
-| R5 outcome archive | **CURRENT DOCS PR** |
+| Post-R5 method screening | **R6-O0 SELECTED / ZERO-FIT** |
+| R6-O0 execution | **NOT AUTHORIZED YET** |
 | Final holdout | **SEALED** |
 
-下一步不再修改 R5。必须基于 S1–R5 的完整证据重新筛选候选方法方向；任何新模型都需先形成新的科学问题和预注册协议，再允许实现和训练。
+下一步仅允许先冻结 R6-O0 只读协议、实现与测试；不训练新模型，不重跑 R5，不访问 final holdout。

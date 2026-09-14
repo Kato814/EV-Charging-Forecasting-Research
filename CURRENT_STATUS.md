@@ -1,8 +1,8 @@
 # 当前状态｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-14。当前入口为本文件与 [HANDOFF](HANDOFF.md)。R10-R0 正式结果见 [R10-R0 outcome](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_OUTCOME_20260914.md)，冻结协议见 [R10-R0 protocol](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_PROTOCOL_20260914.md)，R10 后科学路线筛选见 [Post-R10 screening](docs/JPL_POST_R10_METHOD_SCREENING_20260914.md)。
+更新：2026-09-14。当前入口为本文件与 [HANDOFF](HANDOFF.md)。R10-R0 正式结果见 [R10-R0 outcome](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_OUTCOME_20260914.md)，冻结协议见 [R10-R0 protocol](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_PROTOCOL_20260914.md)，R10 后科学路线筛选见 [Post-R10 screening](docs/JPL_POST_R10_METHOD_SCREENING_20260914.md)，论文可行性与创新性综合判断见 [Post-R10 paper-viability synthesis](docs/JPL_POST_R10_PAPER_VIABILITY_NOVELTY_SYNTHESIS_20260914.md)。
 
-**S1=`MIXED_STRUCTURED_SIGNAL`；P1/R1/R2/R3-C0 已关闭；R4-I0=`MIXED_STATE_ALIASING_SIGNAL`；R5=`STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE`；R6-O0=`MIXED_COMPONENT_ORACLE_SIGNAL`；R7-C0=`PASS_DEPARTURE_STATE_ARRIVAL_SIGNAL`；R7-D1=`TIMING_DISTRIBUTION_INCREMENTAL_SIGNAL`；R8-C0=`NO_STABLE_HORIZON_ALIGNED_ADVANTAGE`；R9-C0=`STOP_DEPARTURE_REPRESENTATION_REFINEMENT`；R10-R0=`MIXED_DEVELOPMENT_ROBUSTNESS`, COMPLETE。Post-R10 screening 已完成：当前方法线冻结，不授权新的模型实验；final holdout 2019-03/06/09/12 继续封存。**
+**S1=`MIXED_STRUCTURED_SIGNAL`；P1/R1/R2/R3-C0 已关闭；R4-I0=`MIXED_STATE_ALIASING_SIGNAL`；R5=`STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE`；R6-O0=`MIXED_COMPONENT_ORACLE_SIGNAL`；R7-C0=`PASS_DEPARTURE_STATE_ARRIVAL_SIGNAL`；R7-D1=`TIMING_DISTRIBUTION_INCREMENTAL_SIGNAL`；R8-C0=`NO_STABLE_HORIZON_ALIGNED_ADVANTAGE`；R9-C0=`STOP_DEPARTURE_REPRESENTATION_REFINEMENT`；R10-R0=`MIXED_DEVELOPMENT_ROBUSTNESS`, COMPLETE；Post-R10 paper viability=`CONDITIONAL_MECHANISM_PAPER_VIABILITY`。当前方法线冻结，不授权新的预测模型实验；final holdout 2019-03/06/09/12 继续封存。**
 
 ## 1. Accepted development candidate
 
@@ -52,7 +52,7 @@ worst original-month degradation        1.004%         1.675%
 
 FRAGILE does not apply. READY fails only the frozen `>=50%` local-day win-rate requirement versus S1: observed `26/55 = 47.27%`. Therefore the exhaustive preregistered decision is `MIXED_DEVELOPMENT_ROBUSTNESS`.
 
-## 4. Stability interpretation
+## 4. Scientific result retained after R10
 
 The pooled gain is not driven by a single development month or horizon: the candidate wins all 4/4 leave-one-month-out and all 5/5 leave-one-horizon-out aggregates against both references.
 
@@ -66,47 +66,81 @@ top-5 gain share vs S1        60.66%
 
 Per-month daily win rate vs S1 is 35.71% / 76.92% / 57.14% / 21.43% for 2019-01/04/07/10 respectively.
 
-The deterministic result therefore supports a small, reproducible development-stage average gain, but not sufficiently broad day-level improvement for holdout readiness.
+The accepted scientific chain is now:
 
-## 5. Post-R10 route screening
+1. future load composition shifts from issue-time connected sessions toward future arrivals as horizon increases;
+2. R4 shows richer legal issue-time state is informative but does not remove substantial future-state ambiguity;
+3. R6 shows the larger removable error source changes from existing-session evolution at 15–30 min to future-arrival error at 60–240 min;
+4. R7/R7-D1 show requested-departure timing of current sessions provides incremental predictive information for the future-arrival component beyond declaration availability;
+5. R8/R9 close further departure representation engineering;
+6. R10 shows the resulting small total-load gain is reproducible in month/horizon deletion tests but not broad enough across days for holdout readiness.
 
-The R10 result must not be converted into a tuning target. Post-R10 screening rejects as immediate routes:
+## 5. Paper-viability / novelty decision
 
-- optimizing specifically to move the R10 day-win rate above 50%;
-- further requested-departure bins/ratios/weights/embeddings or horizon/month routing;
-- generic probabilistic EV-load forecasting as novelty by itself;
-- learned component fusion/reconciliation as a post-hoc rescue;
-- standard weather/traffic/tariff covariates as the central novelty;
-- gate/MoE/router or a larger backbone.
+Formal synthesis decision:
 
-Recent literature already covers probabilistic EV-load forecasting, component-specific decomposition/fusion, online probabilistic adaptation, and active/future-session probabilistic generation. SessionFlow is especially close to any attempt to claim existing/future-session decomposition plus probabilistic session generation as novelty.
+```text
+CONDITIONAL_MECHANISM_PAPER_VIABILITY
+```
 
-The current method line is therefore **frozen for contribution synthesis** rather than extended by another model experiment.
+The current evidence does **not** support positioning R7 as a major new forecasting algorithm. The ten-stat `Departure-Aug` representation is simple, total-load improvement over S1 is only `+0.5575%`, and R10 is MIXED.
 
-## 6. Holdout and route boundary
+The remaining publishable candidate is instead a bounded forecasting-problem result:
 
-Final holdout `2019-03/06/09/12` remains sealed.
+> the dominant station-current forecast-error source changes with horizon under a fixed issue-time information boundary; existing-session evolution is the larger removable source at 15–30 min, future arrivals at 60–240 min, while current-session requested-departure timing provides a measurable but bounded information channel for the arrival component.
+
+Nearest-neighbor review removes several broader novelty claims:
+
+- horizon-dependent accuracy is already established in EV charging forecasting;
+- present/future EV populations and their different uncertainty are established in scheduling;
+- active-session information in station forecasting is prior art;
+- SessionFlow already explicitly models origin-active and future served sessions probabilistically;
+- component decomposition plus learned fusion is already represented in recent EV-load forecasting;
+- requested departure is a standard ACN user-input field used in prior EV studies.
+
+Targeted review did **not** retrieve an exact match for the full JPL evidence chain above. This is negative search evidence, not proof of absence.
+
+## 6. Evidence limitation
+
+The four JPL development months have supported an adaptive sequence from S1 through R10. R10 is a strong zero-fit robustness audit on those same development data, but it is not an independent validation set.
+
+Therefore:
+
+```text
+algorithm superiority claim       NOT READY
+generalization claim              NOT ESTABLISHED
+mechanism/problem paper           CONDITIONAL
+```
+
+A development-only paper could be written only as a bounded case study. A stronger manuscript requires independent mechanism replication.
+
+## 7. Holdout and route boundary
+
+Final JPL holdout `2019-03/06/09/12` remains sealed.
 
 Do not:
 
-- create a single-shot final-holdout launcher;
+- create a final-holdout launcher;
 - access any final-holdout month;
-- return to departure bins/ratios/weights/embeddings;
 - tune/refit R7 or references;
 - optimize directly against the observed R10 day-win shortfall;
+- return to departure bins/ratios/weights/embeddings;
 - select favorable days/months/horizons;
 - add gate/MoE/router, learned reconciliation, probabilistic-model or deep-backbone rescue.
 
-R9 route closure remains binding.
+R9 and R10 route closures remain binding.
 
-## 7. Next action
+## 8. Selected next action
 
-The next authorized task is **paper-viability / novelty synthesis using frozen evidence and current literature only**. No model fitting or final-holdout access is authorized.
+The next selected stage is **R11-V0: independent mechanism-replication feasibility and protocol design**. No model run or data acquisition is authorized yet.
 
-The contribution to evaluate is the evidence chain around a **horizon-dependent observability transition**:
+The immediate task is an unused-source/site audit and protocol freeze. Repository-tracked formal configs are JPL-specific (`acn_jpl_*`); the current main tree contains no Caltech or Office1 configuration. The official ACN schema indicates that Caltech/JPL/Office1 expose the same session schema, including `requestedDeparture`, pilot and charging-current time series, but user-input coverage must be verified before any source is selected.
 
-> short horizons are governed mainly by evolution of sessions already connected at issue time; future-arrival uncertainty becomes the dominant removable error source from 60 min onward; issue-time requested-departure timing provides a measurable but bounded incremental signal for that future-arrival component.
+R11-V0 must first determine:
 
-The synthesis must determine whether this problem-level contribution is sufficiently distinct from SessionFlow and other recent EV forecasting work, whether R7 is more than a feature ablation when coupled to R4/R6 evidence, and whether the current development-only evidence is publishable without violating the sealed-holdout protocol.
+1. whether a candidate site/source is genuinely untouched by this research line;
+2. whether required issue-time fields have sufficient support without favorable filtering;
+3. whether the existing/future decomposition and fixed five horizons can be reproduced;
+4. whether a no-tuning replication protocol can be frozen before examining outcomes.
 
-If that synthesis is negative, archive the current line rather than rescue it with another architecture.
+The later decisive test, if authorized, is replication of the **mechanism evidence**, not reproduction of the exact `+0.5575%` JPL score. If independent replication materially contradicts the mechanism, archive this line rather than rescue it with another architecture.

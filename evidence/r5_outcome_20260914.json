@@ -1,0 +1,42 @@
+{
+  "schema_version": "evcf-jpl-r5-outcome-evidence/v1",
+  "status": "COMPLETE",
+  "decision": "STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE",
+  "source_status_sha256": "d3c820d90cb4d54a56f50bd9d1293aa1a3e53da50d3418ddb34abc6fa6a8a196",
+  "reviewed_code_commit": "4f2925cba92d606b929a25dc84468fcc16f1afc4",
+  "protocol_merge_commit": "3f964696606f05bdc01b6f0b217e821d0f1933bf",
+  "geometry_audit_scale_repair_merge_commit": "431e1fe2fede50216d36ab89a5e61a835a29e737",
+  "implementation_merge_commit": "efec1cce23daf64da20afd254d92d5eb79f9cf3e",
+  "launcher_sha256": "bde5df90397004304f3489afc633ed115492be8be3c9fb6a52f4bbe80dd2e975",
+  "fit_count": 110,
+  "holdout_accessed": false,
+  "development_data_unchanged": true,
+  "pooled_mae_a": {
+    "Direct": 35.01376175605356,
+    "FTAR": 35.00155325194598,
+    "M3": 29.1901878198961,
+    "Equal": 28.91728598859252,
+    "S1": 28.594881529741027
+  },
+  "decision_support": {
+    "pooled_improvement_vs_Direct": 0.0003486773055875192,
+    "horizon_wins_vs_Direct": 3,
+    "month_wins_vs_Direct": 1,
+    "max_horizon_degradation_vs_Direct": 0.010198538441066551,
+    "heldout_geometry_spearman_gain": 0.09140872785269827,
+    "pooled_improvement_vs_Equal": -0.21040243077284693,
+    "pooled_improvement_vs_S1": -0.22404959837100513
+  },
+  "heldout_geometry_pooled": {
+    "Direct_spearman": 0.37860547433515745,
+    "FTAR_spearman": 0.4700142021878557,
+    "retained_pairs": 80000
+  },
+  "private_manifest_sha256": "45382977a3fceecec2c88dabffeaae8a9b24bddc6dc18669ddc94e2890006eb4",
+  "scientific_decision_unchanged": true,
+  "notes": [
+    "Aggregate-only evidence transcribed from the user-returned formal R5 status JSON.",
+    "The frozen STOP decision is triggered by only 1/4 month wins versus Direct.",
+    "The final holdout remains sealed."
+  ]
+}

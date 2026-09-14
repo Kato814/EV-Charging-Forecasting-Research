@@ -6,6 +6,7 @@ from evcf.forecasting.acn_jpl_r10_r0_r7_robustness_readiness import (
     BOOTSTRAP_REPLICATES,
     BOOTSTRAP_SEED,
     DEVELOPMENT_MONTHS,
+    EXPECTED_ROWS_BY_MONTH,
     HORIZONS_MINUTES,
     R10R0Error,
     _bootstrap,
@@ -46,7 +47,35 @@ def _synthetic_records() -> list[dict[str, object]]:
     return records
 
 
-def _decision_inputs() -> tuple[dict[str, float], dict[str, float], dict[str, int], dict[str, int], dict[str, float]]:
+def _frozen_size_stability_records() -> list[dict[str, object]]:
+    records: list[dict[str, object]] = []
+    for month in DEVELOPMENT_MONTHS:
+        n = EXPECTED_ROWS_BY_MONTH[month]
+        truth = np.full(n, 10.0, dtype=np.float64)
+        candidate = np.full(n, 9.0, dtype=np.float64)
+        s1 = np.full(n, 8.0, dtype=np.float64)
+        equal = np.full(n, 7.0, dtype=np.float64)
+        for horizon in HORIZONS_MINUTES:
+            records.append(
+                {
+                    "month": month,
+                    "horizon": horizon,
+                    "truth": truth,
+                    "candidate": candidate,
+                    "s1": s1,
+                    "equal": equal,
+                }
+            )
+    return records
+
+
+def _decision_inputs() -> tuple[
+    dict[str, float],
+    dict[str, float],
+    dict[str, int],
+    dict[str, int],
+    dict[str, float],
+]:
     pooled = {"TotalDeparture_mae_a": 9.0, "S1_mae_a": 10.0, "Equal_mae_a": 11.0}
     daily = {"win_rate_vs_S1": 0.60, "win_rate_vs_Equal": 0.60}
     leave_month = {"wins_vs_S1": 4, "wins_vs_Equal": 4}
@@ -72,16 +101,21 @@ def test_daily_audit_pairs_complete_days_across_all_horizons() -> None:
     assert set(deltas) == set(DEVELOPMENT_MONTHS)
 
 
-def test_leave_one_and_original_stability_use_all_frozen_axes() -> None:
+def test_leave_one_uses_all_frozen_axes() -> None:
     records = _synthetic_records()
     leave_month = _leave_one(records, axis="month")
     leave_horizon = _leave_one(records, axis="horizon")
-    stability = _original_stability(records)
     assert leave_month["wins_vs_S1"] == 4
     assert leave_month["wins_vs_Equal"] == 4
     assert leave_horizon["wins_vs_S1"] == 5
     assert leave_horizon["wins_vs_Equal"] == 5
+
+
+def test_original_stability_uses_exact_frozen_horizon_row_count() -> None:
+    stability = _original_stability(_frozen_size_stability_records())
     assert stability["month_wins_vs_S1"] == 4
+    assert stability["month_wins_vs_Equal"] == 4
+    assert stability["horizon_wins_vs_S1"] == 5
     assert stability["horizon_wins_vs_Equal"] == 5
 
 

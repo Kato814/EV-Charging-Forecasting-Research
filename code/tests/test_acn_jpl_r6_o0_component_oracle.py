@@ -6,7 +6,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-
 from evcf.forecasting import acn_jpl_r6_o0_component_oracle as r6
 
 

@@ -1,6 +1,6 @@
 # 主控交付说明｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-14。接管时先读 [CURRENT_STATUS](CURRENT_STATUS.md)、[R10-R0 outcome](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_OUTCOME_20260914.md) 和 [R10-R0 protocol](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_PROTOCOL_20260914.md)。
+更新：2026-09-14。接管时先读 [CURRENT_STATUS](CURRENT_STATUS.md)、[R10-R0 outcome](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_OUTCOME_20260914.md)、[R10-R0 protocol](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_PROTOCOL_20260914.md) 和 [Post-R10 screening](docs/JPL_POST_R10_METHOD_SCREENING_20260914.md)。
 
 ## 1. Frozen scientific state
 
@@ -19,6 +19,7 @@ R7-D1 = TIMING_DISTRIBUTION_INCREMENTAL_SIGNAL, COMPLETE
 R8-C0 = NO_STABLE_HORIZON_ALIGNED_ADVANTAGE, COMPLETE
 R9-C0 = STOP_DEPARTURE_REPRESENTATION_REFINEMENT, COMPLETE
 R10-R0 = MIXED_DEVELOPMENT_ROBUSTNESS, COMPLETE
+Post-R10 = method line frozen for contribution synthesis; no model run authorized
 ```
 
 Final holdout `2019-03/06/09/12` remains sealed.
@@ -92,9 +93,33 @@ The weakness is day-level coverage versus S1. Mean daily delta is favorable (`-0
 
 Supported claim: requested-departure timing has reproducible incremental predictive information and a small pooled total-load development gain, but total-load improvement is not broad enough across development days for holdout readiness.
 
-## 6. Next action
+## 6. Post-R10 scientific-route decision
+
+Do **not** respond to the R10 shortfall by tuning toward the 50% threshold. The following immediate rescue classes remain closed or are rejected as novelty cores:
+
+- new departure features/bins/ratios/weights/embeddings;
+- month/horizon routing, gate or MoE;
+- robust/day-weighted loss chosen after R10;
+- generic probabilistic EV forecasting;
+- component-fusion/reconciliation added only to recover total-load MAE;
+- generic weather/traffic/tariff feature addition;
+- Transformer/Mamba/attention or another larger backbone.
+
+The closest 2026 literature already includes EV-specific probabilistic multi-horizon forecasting, component-specific decomposition/fusion, online probabilistic adaptation, and SessionFlow-style origin-active/future-session probabilistic generation. Those concepts cannot be promoted to novelty simply because the current point forecast is MIXED.
+
+The current method line is therefore frozen for contribution synthesis.
+
+## 7. Next action
 
 There is **no authorized model run** at this point.
+
+The next task is a **paper-viability / novelty synthesis** based only on frozen evidence plus current literature. It must evaluate whether the following problem-level contribution is sufficiently distinct and substantial:
+
+> short-horizon forecast error is governed mainly by evolution of sessions already connected at issue time; future-arrival uncertainty becomes the dominant removable error source from 60 min onward; requested-departure timing of currently connected sessions carries measurable but bounded issue-time information about that future-arrival component.
+
+The synthesis must explicitly compare this claim against SessionFlow and other current EV forecasting work, judge whether R7 is more than a feature ablation when tied to R4/R6, and judge whether the development-only evidence can support publication while final holdout remains sealed.
+
+If the synthesis is negative, archive this method line. Do not rescue it with another model.
 
 Do not:
 
@@ -102,12 +127,11 @@ Do not:
 - open final holdout;
 - create a holdout launcher;
 - tune/refit models;
+- optimize directly for the observed R10 day-win threshold;
 - add new departure representations;
-- add gate/MoE/router or deep-model rescue;
+- add gate/MoE/router/probabilistic/reconciliation/deep-model rescue;
 - delete/select favorable days, months or horizons.
 
-The next task is documentation/scientific-route review based only on the frozen R10 evidence. Before any future experiment, freeze a separate rationale and protocol. `MIXED` itself does not authorize another experiment.
-
-## 7. Hygiene
+## 8. Hygiene
 
 Preserve all worktrees, status files and private caches. No reset/clean/stash/force-push/automatic deletion. Pure documentation updates remain CI-free where repository workflow filters allow.

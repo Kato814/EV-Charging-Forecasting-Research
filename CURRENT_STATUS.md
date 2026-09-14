@@ -1,8 +1,8 @@
 # 当前状态｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-14。当前入口为本文件与 [HANDOFF](HANDOFF.md)。R10-R0 正式结果见 [R10-R0 outcome](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_OUTCOME_20260914.md)，冻结协议见 [R10-R0 protocol](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_PROTOCOL_20260914.md)。
+更新：2026-09-14。当前入口为本文件与 [HANDOFF](HANDOFF.md)。R10-R0 正式结果见 [R10-R0 outcome](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_OUTCOME_20260914.md)，冻结协议见 [R10-R0 protocol](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_PROTOCOL_20260914.md)，R10 后科学路线筛选见 [Post-R10 screening](docs/JPL_POST_R10_METHOD_SCREENING_20260914.md)。
 
-**S1=`MIXED_STRUCTURED_SIGNAL`；P1/R1/R2/R3-C0 已关闭；R4-I0=`MIXED_STATE_ALIASING_SIGNAL`；R5=`STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE`；R6-O0=`MIXED_COMPONENT_ORACLE_SIGNAL`；R7-C0=`PASS_DEPARTURE_STATE_ARRIVAL_SIGNAL`；R7-D1=`TIMING_DISTRIBUTION_INCREMENTAL_SIGNAL`；R8-C0=`NO_STABLE_HORIZON_ALIGNED_ADVANTAGE`；R9-C0=`STOP_DEPARTURE_REPRESENTATION_REFINEMENT`；R10-R0=`MIXED_DEVELOPMENT_ROBUSTNESS`, COMPLETE。final holdout 2019-03/06/09/12 继续封存。**
+**S1=`MIXED_STRUCTURED_SIGNAL`；P1/R1/R2/R3-C0 已关闭；R4-I0=`MIXED_STATE_ALIASING_SIGNAL`；R5=`STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE`；R6-O0=`MIXED_COMPONENT_ORACLE_SIGNAL`；R7-C0=`PASS_DEPARTURE_STATE_ARRIVAL_SIGNAL`；R7-D1=`TIMING_DISTRIBUTION_INCREMENTAL_SIGNAL`；R8-C0=`NO_STABLE_HORIZON_ALIGNED_ADVANTAGE`；R9-C0=`STOP_DEPARTURE_REPRESENTATION_REFINEMENT`；R10-R0=`MIXED_DEVELOPMENT_ROBUSTNESS`, COMPLETE。Post-R10 screening 已完成：当前方法线冻结，不授权新的模型实验；final holdout 2019-03/06/09/12 继续封存。**
 
 ## 1. Accepted development candidate
 
@@ -68,17 +68,20 @@ Per-month daily win rate vs S1 is 35.71% / 76.92% / 57.14% / 21.43% for 2019-01/
 
 The deterministic result therefore supports a small, reproducible development-stage average gain, but not sufficiently broad day-level improvement for holdout readiness.
 
-## 5. Bootstrap context
+## 5. Post-R10 route screening
 
-Frozen 10,000-replicate month-stratified complete-day bootstrap:
+The R10 result must not be converted into a tuning target. Post-R10 screening rejects as immediate routes:
 
-```text
-             q05          q50          q95          fraction(delta < 0)
-vs S1       -0.7507 A    -0.1543 A    +0.3878 A    0.6790
-vs Equal    -1.6314 A    -0.5442 A    +0.4399 A    0.8154
-```
+- optimizing specifically to move the R10 day-win rate above 50%;
+- further requested-departure bins/ratios/weights/embeddings or horizon/month routing;
+- generic probabilistic EV-load forecasting as novelty by itself;
+- learned component fusion/reconciliation as a post-hoc rescue;
+- standard weather/traffic/tariff covariates as the central novelty;
+- gate/MoE/router or a larger backbone.
 
-Descriptive only; it does not change the deterministic decision.
+Recent literature already covers probabilistic EV-load forecasting, component-specific decomposition/fusion, online probabilistic adaptation, and active/future-session probabilistic generation. SessionFlow is especially close to any attempt to claim existing/future-session decomposition plus probabilistic session generation as novelty.
+
+The current method line is therefore **frozen for contribution synthesis** rather than extended by another model experiment.
 
 ## 6. Holdout and route boundary
 
@@ -90,13 +93,20 @@ Do not:
 - access any final-holdout month;
 - return to departure bins/ratios/weights/embeddings;
 - tune/refit R7 or references;
+- optimize directly against the observed R10 day-win shortfall;
 - select favorable days/months/horizons;
-- add gate/MoE/router, survival/TPP, Transformer/Mamba/attention rescue.
+- add gate/MoE/router, learned reconciliation, probabilistic-model or deep-backbone rescue.
 
 R9 route closure remains binding.
 
 ## 7. Next action
 
-R10-R0 is closed. The next action is a **documentation and scientific-route review using the frozen evidence only**. No additional model experiment is authorized by R10-R0.
+The next authorized task is **paper-viability / novelty synthesis using frozen evidence and current literature only**. No model fitting or final-holdout access is authorized.
 
-The immediate question is no longer whether R7 has a pooled development gain; it does. The question is whether the paper/research contribution should retain R7 as a bounded development finding or whether a future, separately preregistered methodological route is scientifically justified. Until that decision is frozen, do not run another experiment.
+The contribution to evaluate is the evidence chain around a **horizon-dependent observability transition**:
+
+> short horizons are governed mainly by evolution of sessions already connected at issue time; future-arrival uncertainty becomes the dominant removable error source from 60 min onward; issue-time requested-departure timing provides a measurable but bounded incremental signal for that future-arrival component.
+
+The synthesis must determine whether this problem-level contribution is sufficiently distinct from SessionFlow and other recent EV forecasting work, whether R7 is more than a feature ablation when coupled to R4/R6 evidence, and whether the current development-only evidence is publishable without violating the sealed-holdout protocol.
+
+If that synthesis is negative, archive the current line rather than rescue it with another architecture.

@@ -1,97 +1,116 @@
 # 当前状态｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-14。当前入口为本文件与 [HANDOFF](HANDOFF.md)。正式 R6-O0 结果见 [R6 outcome](docs/JPL_R6_O0_COMPONENT_ORACLE_OUTCOME_20260914.md)，R7-C0 协议见 [R7 protocol](docs/JPL_R7_C0_DEPARTURE_STATE_ARRIVAL_PROTOCOL_20260914.md)，正式 R7-C0 结果见 [R7 outcome](docs/JPL_R7_C0_DEPARTURE_STATE_ARRIVAL_OUTCOME_20260914.md)。
+更新：2026-09-14。当前入口为本文件与 [HANDOFF](HANDOFF.md)。正式 R7-C0 结果见 [R7 outcome](docs/JPL_R7_C0_DEPARTURE_STATE_ARRIVAL_OUTCOME_20260914.md)，R7-D1 冻结协议见 [R7-D1 protocol](docs/JPL_R7_D1_DEPARTURE_ATTRIBUTION_PROTOCOL_20260914.md)，正式 R7-D1 结果见 [R7-D1 outcome](docs/JPL_R7_D1_DEPARTURE_ATTRIBUTION_OUTCOME_20260914.md)。
 
-**S1=`MIXED_STRUCTURED_SIGNAL`；P1/R1/R2/R3-C0 已关闭；R4-I0=`MIXED_STATE_ALIASING_SIGNAL`；R5=`STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE`；R6-O0=`MIXED_COMPONENT_ORACLE_SIGNAL`；R7-C0=`PASS_DEPARTURE_STATE_ARRIVAL_SIGNAL`。final holdout 2019-03/06/09/12 继续封存。**
+**S1=`MIXED_STRUCTURED_SIGNAL`；P1/R1/R2/R3-C0 已关闭；R4-I0=`MIXED_STATE_ALIASING_SIGNAL`；R5=`STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE`；R6-O0=`MIXED_COMPONENT_ORACLE_SIGNAL`；R7-C0=`PASS_DEPARTURE_STATE_ARRIVAL_SIGNAL`；R7-D1=`TIMING_DISTRIBUTION_INCREMENTAL_SIGNAL`。final holdout 2019-03/06/09/12 继续封存。**
 
-## 1. R7-C0 formal result
+## 1. R7-D1 formal result
 
 ```text
 status                         COMPLETE
-decision                       PASS_DEPARTURE_STATE_ARRIVAL_SIGNAL
-source status SHA256           deb7fc1700fccd3eb53616bbe2e65de0941b6294d60aec58e4f63953b576bce0
-reviewed executable            24e9e69413cb4b224bd1c59cdd3725b352bd27ed
-implementation merge           78e51d98d476e30098a19b67121c0658a4c848b4
-launcher SHA256                f1dbaf035055038f337f0207baba8ae0ef884ca0118c16a87ef75d7178f822e9
-fit_count                      550
+decision                       TIMING_DISTRIBUTION_INCREMENTAL_SIGNAL
+R7-D1 status SHA256            48247f4ef47415c65b080584e667e9b2dba9227271ad24d93da51800756b406b
+reviewed executable            2a2384781eeccf122ef43116b604f319e5637bdc
+implementation merge           992a611d8c3223b895818df984fc6e4f6b4521af
+launcher SHA256                80242a597b5dd25b3eea5d36f1b26119ef4a7044589aca6e4fbe9b7e1573f2a4
+private manifest SHA256        0c816334d74173e16df6e58e55de90ca3ed5723a6775e0b6287749afa479e019
+fit_count                      275
 holdout accessed               false
 development data unchanged     true
 reference models retrained     false
+R7 Departure-Aug retrained     false
 ```
 
-Frozen PASS support:
+Frozen decision support:
 
 ```text
-pooled arrival improvement vs Base-M2      +1.542777%
-component horizon wins                      5/5
-component month wins                        3/4
-wins within {60,120,240}                    3/3
-pooled total improvement vs S1              +0.557538%
-pooled total improvement vs Equal           +1.666241%
-total horizon wins vs S1                    4/5
-total month wins vs S1                      3/4
-max total horizon degradation vs S1         +0.568377%
+Availability component wins vs Base-M2       4/5 horizons, 3/4 months
+Availability total wins vs S1                 5/5 horizons, 3/4 months
+Departure-Aug component wins vs Availability  3/5 horizons, 3/4 months
+Departure-Aug total wins vs Availability      3/5 horizons, 3/4 months
+max Departure component degradation           +0.3915%
+max Departure total degradation               +1.4584%
 ```
 
-All preregistered primary PASS conditions are satisfied.
+All preregistered conditions for `TIMING_DISTRIBUTION_INCREMENTAL_SIGNAL` are satisfied.
 
-## 2. Main R7 finding
+## 2. Main R7-D1 finding
 
 Arrival-component pooled MAE:
 
 ```text
-Base-M2        23.1051516907 A
-Departure-Aug  22.7486906628 A
-Full-M3        22.5561552852 A
+Base-M2                 23.1051516907 A
+Departure-Availability  23.0557563709 A
+Departure-Aug           22.7486906628 A
+```
+
+Relative improvement:
+
+```text
+Availability vs Base-M2        +0.213785%
+Departure-Aug vs Availability  +1.331840%
+Departure-Aug vs Base-M2       +1.542777%
 ```
 
 Total pooled MAE:
 
 ```text
-Equal           28.9172859886 A
-S1              28.5948815297 A
-TotalDeparture  28.4354542901 A
-TotalFullM3     28.2945240071 A
+Equal               28.9172859886 A
+S1                  28.5948815297 A
+TotalAvailability   28.4546589435 A
+TotalDeparture      28.4354542901 A
 ```
 
-Departure-Aug improves the arrival component at all 5 horizons. After recombination it beats S1 at 15/30/60/120 min and slightly worsens at 240 min (+0.568%). The strongest practical gain is around 60 min; the 240-min future-arrival bottleneck remains largely unresolved.
+Availability/missingness alone explains only a small part of the R7 component gain. The numerical requested-departure timing distribution contributes the larger incremental component improvement.
 
-Month stability is 3/4: January/April/July improve; October worsens.
+## 3. Horizon and month structure
 
-Secondary Full-M3 label is `FULL_M3_INCREMENTAL_SIGNAL`: current-session state beyond M2 contains additional arrival information, but Full-M3 total gain is less stable across horizons/months than Departure-Aug.
+Departure-Aug relative to Departure-Availability:
 
-## 3. Interpretation boundary
+```text
+horizon   arrival change   total change
+15 min       +2.4918%        +0.5303%
+30 min       -0.3915%        -0.5086%
+60 min       +4.5427%        +2.6429%
+120 min      +1.9216%        +0.4012%
+240 min      -0.2361%        -1.4584%
+```
+
+The timing signal is strongest at 60 min and is positive at 15 and 120 min; it reverses at 30 and 240 min.
+
+By month, Departure-Aug beats Availability in January, April and July and worsens in October. The month heterogeneity remains material.
+
+## 4. Interpretation boundary
 
 Accepted bounded claim:
 
-> Issue-time requested-departure state of currently connected sessions provides stable incremental predictive information for the future-arrival current component beyond frozen M2, and part of that gain survives recombination into total station-current forecasts.
+> Numerical requested-departure timing values of currently connected sessions contain stable incremental predictive information for future-arrival current beyond declaration availability/missingness alone, and part of that information survives recombination into total station-current forecasts.
 
-Do **not** yet claim:
+Do **not** claim:
 
-- actual departure time is known;
-- connector release causally drives the improvement;
-- requested-departure timing values alone explain the gain;
-- R7 solves the long-horizon arrival problem.
+- requested departure equals actual disconnect time;
+- connector release causally drives future arrivals;
+- the signal is uniformly beneficial at all horizons/months;
+- R7-D1 solves the 240-min arrival problem.
 
-The canonical ten-stat departure pool contains both timing statistics and declaration-availability information (`count`, `missing_count`).
+R7-D1 rules out only the narrow explanation that R7-C0 was driven merely by metadata presence.
 
-## 4. Next required attribution step: R7-D1
+## 5. Next permitted method step
 
-Before a horizon-aligned departure/release method is designed, isolate whether the R7 signal comes from actual requested-departure timing or mainly from declaration availability/missingness.
+Per the frozen R7-D1 protocol, the next permissible step is to design and preregister a **horizon-aligned scheduled-departure exposure representation** using only issue-time-known requested-departure information.
 
-Planned narrow ablation:
+The next design must remain narrow:
 
-```text
-Base-M2                 frozen S1 arrival, read-only
-Departure-Availability  M2 + requested-departure observed-count/missing-count only
-Departure-Aug           frozen R7 prediction, read-only
-```
+- preserve the accepted existing-session / future-arrival component decomposition;
+- align departure timing features explicitly to each forecast horizon;
+- keep development-only model selection and final holdout sealed;
+- compare against frozen Base-M2, Departure-Aug, S1 and Equal references;
+- do not add a gate, MoE, survival/TPP, attention, Set Transformer or generic larger backbone as a rescue mechanism;
+- do not claim causality.
 
-Use identical HGB class, frozen M2 parameters, rolling-origin rows, arrival truth and total recombination. Only the new Availability arm is fitted; expected new fits = 275.
+Before freezing that protocol, check current literature specifically for session-level requested-departure / departure-time use in aggregate EV charging forecasting so the method contribution is framed against existing work rather than model novelty alone.
 
-If full Departure-Aug stably beats Availability, actual timing-distribution information is supported. If Availability captures the gain, R7 must be interpreted as a declaration/missingness proxy rather than a departure-time mechanism. No holdout, retuning, gate or neural rescue is authorized.
-
-## 5. Closed routes remain closed
+## 6. Closed routes remain closed
 
 Do not return to:
 
@@ -101,8 +120,8 @@ Do not return to:
 - R3 control-endogeneity route;
 - R5 larger backbone or geometry-loss tuning.
 
-R7 PASS does not reopen any of them.
+R7-D1 does not reopen any of them.
 
-## 6. GitHub Actions policy
+## 7. GitHub Actions policy
 
-Full CI only runs on pull requests touching code/scripts/pyproject/workflow/MANIFEST. Pure documentation/result archival does not trigger full CI; duplicate push-triggered runs remain removed; `cancel-in-progress` remains enabled. New code should be statically/locally checked first and use Actions only for the final candidate.
+Full CI only runs on pull requests touching code/scripts/pyproject/workflow/MANIFEST. Pure documentation/result archival does not trigger full CI. New code should be statically/locally checked first and use Actions only for the final candidate.

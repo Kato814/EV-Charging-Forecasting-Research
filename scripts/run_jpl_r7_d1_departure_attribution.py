@@ -68,7 +68,11 @@ def main(argv: list[str] | None = None) -> int:
     except R7D1Error as exc:
         print(json.dumps(_failure(exc.reason_code), sort_keys=True))
         return 2
-    except (OSError, TypeError, ValueError, RuntimeError, FloatingPointError):
+    except RuntimeError as exc:
+        reason = getattr(exc, "reason_code", "UNEXPECTED_ERROR")
+        print(json.dumps(_failure(str(reason)), sort_keys=True))
+        return 2
+    except (OSError, TypeError, ValueError, FloatingPointError):
         print(json.dumps(_failure("UNEXPECTED_ERROR"), sort_keys=True))
         return 2
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))

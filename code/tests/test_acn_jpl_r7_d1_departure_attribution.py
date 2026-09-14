@@ -77,8 +77,15 @@ def test_availability_block_rejects_m2_prefix_drift() -> None:
         _availability_block(m2, drifted)
 
 
-def _summary(base: float, availability: float, departure: float, s1: float, equal: float,
-             availability_total: float, departure_total: float) -> dict[str, object]:
+def _summary(
+    base: float,
+    availability: float,
+    departure: float,
+    s1: float,
+    equal: float,
+    availability_total: float,
+    departure_total: float,
+) -> dict[str, object]:
     def metric(value: float) -> dict[str, float]:
         return {"mae_a": value}
 
@@ -148,7 +155,7 @@ def test_decision_timing_fails_when_one_horizon_degrades_more_than_five_percent(
 
 
 def test_decision_mixed_when_neither_attribution_is_stable() -> None:
-    pooled = _summary(10.0, 10.2, 10.1, 12.0, 13.0, 12.3, 12.2)
+    pooled = _summary(10.0, 10.2, 10.3, 12.0, 13.0, 12.3, 12.4)
     by_horizon, by_month = _axes(pooled)
     decision, _ = decide_attribution(pooled, by_horizon, by_month)
     assert decision == "MIXED_DEPARTURE_ATTRIBUTION_SIGNAL"

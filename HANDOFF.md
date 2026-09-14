@@ -18,36 +18,39 @@ R7-C0 = PASS_DEPARTURE_STATE_ARRIVAL_SIGNAL, COMPLETE
 R7-D1 = TIMING_DISTRIBUTION_INCREMENTAL_SIGNAL, COMPLETE
 R8-C0 = NO_STABLE_HORIZON_ALIGNED_ADVANTAGE, COMPLETE
 R9-C0 = STOP_DEPARTURE_REPRESENTATION_REFINEMENT, COMPLETE
-R10-R0 = robustness/holdout-readiness protocol FROZEN, NOT RUN
+R10-R0 = READY; formal zero-fit audit NOT RUN
 ```
 
 Final holdout `2019-03/06/09/12` remains sealed.
 
-## 2. R9-C0 closure
+## 2. Accepted development candidate
+
+R9 formally closed departure-representation refinement. The accepted candidate remains R7 `Departure-Aug` / `TotalDeparture`:
 
 ```text
-R9-C0 status SHA256             d3ce58b4272e0b3fea4f11c9774c7b61a11fae443cfbb4f09210e8e22bea6d98
-private manifest                a94de82891c821600f81adcaaa6c948a2bb90afc8e5c40ad2bfbcbdaabf744f1
-reviewed executable             c60ed89f522bc3f9df30f10093e1216a9a9f6b2f
-implementation merge            b7e2da489db13523c8d7fe46bff4799a63a64ba7
-fit_count                       275
-holdout_accessed                false
-development_data_unchanged      true
+Arrival MAE        22.7486906628 A
+Total MAE          28.4354542901 A
+S1 total           28.5948815297 A
+Equal total        28.9172859886 A
 ```
 
-R9 formal decision is `STOP_DEPARTURE_REPRESENTATION_REFINEMENT`. ForecastGridProfile beats Departure-Aug in 3/5 component horizons but only 1/4 months. STOP condition is therefore met before PASS is considered. The slightly better pooled recombined total does not change the route decision.
+No further engineered departure representation is authorized.
 
-Accepted development candidate remains R7 `Departure-Aug` with TotalDeparture MAE `28.4354542901 A`, about 0.5576% better than S1 and 1.6662% better than Equal.
-
-No further departure bins/weights/ratios/embeddings/feature search are allowed.
-
-## 3. R10-R0 protocol identity
+## 3. R10-R0 frozen identity
 
 ```text
-protocol commit  05dc342d376425c13f09ee68356583223203aae3
+protocol commit                 05dc342d376425c13f09ee68356583223203aae3
+reviewed executable             753f9adc5c5bd28022d6c1ce3e4c54fb3f76c3e0
+implementation merge            062fb6cee5a14a0cd5a09bf3a4e41f80cc797f9f
+final CI                        1241 passed, 2 skipped
+compileall                      PASS
+Ruff                            PASS
+launcher filename               evcf_r10_r0_launcher_v1.py
+launcher SHA256                 e4d247424274c926a07dcdee9e99eab0f3f88f5cdd1e7efec06de231ac0c6949
+fit_count                       0
 ```
 
-R10-R0 is a zero-fit, read-only audit of accepted R7 predictions. It uses the exact R7-D1 private cache:
+Exact accepted R7-D1 cache:
 
 ```text
 status SHA256       48247f4ef47415c65b080584e667e9b2dba9227271ad24d93da51800756b406b
@@ -55,21 +58,21 @@ private manifest    0c816334d74173e16df6e58e55de90ca3ed5723a6775e0b6287749afa479
 reviewed executable 2a2384781eeccf122ef43116b604f319e5637bdc
 ```
 
-Primary candidate = `TotalDeparture`; primary references = `S1` and `Equal`.
+## 4. R10-R0 audit contents
 
-Required checks:
+R10 does not train/refit any model and creates no new prediction cache. It reads only the exact R7-D1 private cache and reports:
 
-- exact pooled replay;
-- paired local-day pooled-over-horizon MAE and win rate;
+- pooled replay of TotalDeparture, S1 and Equal;
+- paired local-day pooled-over-horizon MAE deltas and win rates;
 - per-month daily stability;
-- leave-one-month-out row-pooled comparisons;
-- leave-one-horizon-out row-pooled comparisons;
-- original month/horizon wins and worst-month degradation;
-- 10,000-replicate deterministic PCG64 month-stratified day bootstrap for descriptive uncertainty only.
+- leave-one-month-out robustness;
+- leave-one-horizon-out robustness;
+- original 4-month / 5-horizon stability and worst-month degradation;
+- deterministic 10,000-replicate PCG64 month-stratified complete-day bootstrap, descriptive only.
 
-No model fit/refit is allowed: `fit_count=0`.
+The external launcher verifies the exact reviewed worktree, frozen protocol blob, exact R7-D1 private manifest and every declared private task hash, then verifies the cache is unchanged after execution. It skips all final-holdout month directories during source discovery.
 
-## 4. Frozen R10 decisions
+## 5. Frozen decision
 
 ```text
 FRAGILE_DEVELOPMENT_SIGNAL
@@ -77,12 +80,14 @@ READY_FOR_SINGLE_SHOT_HOLDOUT_PROTOCOL
 MIXED_DEVELOPMENT_ROBUSTNESS
 ```
 
-FRAGILE is evaluated first; READY next; otherwise MIXED. READY requires pooled superiority over S1/Equal, stable original month/horizon wins, >=50% local-day win rates vs both, 4/4 leave-one-month-out wins vs both, >=4/5 leave-one-horizon-out wins vs both, and <=5% worst-month degradation.
+FRAGILE is evaluated first. READY requires pooled superiority over S1 and Equal, >=3/4 original month wins vs both, >=3/5 original horizon wins vs both, >=50% local-day win rate vs both, 4/4 leave-one-month-out wins vs both, >=4/5 leave-one-horizon-out wins vs both, and <=5% worst-month degradation vs both.
 
-READY still does not authorize final holdout. Any holdout access requires a separate frozen protocol, explicit user authorization and a new pinned launcher.
+READY does not itself authorize final holdout. If READY occurs, freeze a separate single-shot holdout protocol first and obtain explicit user authorization before any holdout access.
 
-## 5. Closed routes and hygiene
+## 6. Next action
 
-Do not return to departure feature engineering, gate/MoE, survival/TPP, Deep Sets/attention, control-endogeneity rescue, FTAR enlargement, Transformer/Mamba or post-hoc feature search. Preserve all worktrees/status/private caches; no reset/clean/stash/force-push/automatic deletion.
+Run the pinned R10-R0 launcher exactly once on the user machine and upload only the newest `evcf_r10_r0_status_*.json`, whether COMPLETE or INCOMPLETE. Do not debug or rerun before inspecting that status.
 
-Pure docs remain CI-free. If R10 needs code, complete and statically review it before one final PR/CI where possible.
+## 7. Hygiene
+
+Preserve all worktrees/status/private caches; no reset/clean/stash/force-push/automatic deletion. Do not return to closed model/feature routes. Pure docs remain CI-free; no GitHub Actions are required for the formal R10 audit.

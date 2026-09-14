@@ -33,10 +33,7 @@ from evcf.forecasting.acn_jpl_r7_c0_departure_arrival import (
     SELECTED_M2_PARAMETER_SHA256,
     _predict_custom_arm,
 )
-from evcf.forecasting.acn_jpl_r7_d1_departure_attribution import (
-    D1_PROTOCOL_COMMIT,
-    R7_REVIEWED_EXECUTABLE,
-)
+from evcf.forecasting.acn_jpl_r7_d1_departure_attribution import D1_PROTOCOL_COMMIT
 from evcf.forecasting.acn_jpl_structured_baseline import (
     _component_label_matrices,
     _load_cleaned_current_sessions,
@@ -219,7 +216,11 @@ def _verified_m3_path(processed: Path) -> Path:
     artifacts = document.get("artifacts") if isinstance(document, dict) else None
     if not isinstance(artifacts, list):
         raise R8C0Error("M3_SOURCE_INVALID")
-    matches = [item for item in artifacts if isinstance(item, dict) and item.get("name") == "processed/m3.jsonl.gz"]
+    matches = [
+        item
+        for item in artifacts
+        if isinstance(item, dict) and item.get("name") == "processed/m3.jsonl.gz"
+    ]
     if len(matches) != 1 or set(matches[0]) != {"name", "sha256", "size"}:
         raise R8C0Error("M3_SOURCE_INVALID")
     item = matches[0]
@@ -236,7 +237,9 @@ def _verified_m3_path(processed: Path) -> Path:
     return path
 
 
-def _load_m3_groups(processed: Path, issue_times: np.ndarray) -> tuple[tuple[Mapping[str, Any], ...], ...]:
+def _load_m3_groups(
+    processed: Path, issue_times: np.ndarray
+) -> tuple[tuple[Mapping[str, Any], ...], ...]:
     path = _verified_m3_path(processed)
     rows: list[Mapping[str, Any]] = []
     try:

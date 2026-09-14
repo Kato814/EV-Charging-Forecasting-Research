@@ -1,6 +1,6 @@
 # 主控交付说明｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-13。接管时先读 [CURRENT_STATUS](CURRENT_STATUS.md)、[R4-I0 outcome](docs/JPL_R4_I0_INFORMATION_SUFFICIENCY_OUTCOME_20260913.md)、[R4-D1 outcome](docs/JPL_R4_D1_STATE_GEOMETRY_DIAGNOSTIC_OUTCOME_20260913.md)、[R4-D2 outcome](docs/JPL_R4_D2_QUERY_GEOMETRY_REGIME_OUTCOME_20260913.md) 和 [R5 FTAR protocol](docs/JPL_R5_FUTURE_TRANSITION_ALIGNED_REPRESENTATION_PROTOCOL_20260913.md)。
+更新：2026-09-14。接管时先读 [CURRENT_STATUS](CURRENT_STATUS.md)、R4-I0/R4-D1/R4-D2 outcome、[R5 protocol](docs/JPL_R5_FUTURE_TRANSITION_ALIGNED_REPRESENTATION_PROTOCOL_20260913.md)、[R5 geometry audit repair](docs/JPL_R5_GEOMETRY_AUDIT_SCALE_REPAIR_20260913.md)、[R5 outcome](docs/JPL_R5_FUTURE_TRANSITION_ALIGNED_REPRESENTATION_OUTCOME_20260914.md) 和 [Post-R5 screening](docs/JPL_POST_R5_METHOD_SCREENING_20260914.md)。
 
 ## 1. Frozen scientific state
 
@@ -13,86 +13,99 @@ R3-C0 = STOP_CONTROL_ENDOGENEITY_ROUTE, CLOSED
 R4-I0 = MIXED_STATE_ALIASING_SIGNAL
 R4-D1 = COMPLETE diagnostic
 R4-D2 = COMPLETE diagnostic
+R5    = STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE, CLOSED
 ```
 
-Final holdout `2019-03/06/09/12` remains sealed. No current user-side command.
+Final holdout `2019-03/06/09/12` remains sealed. Do not rerun S1/P1/R1/R2/R3/R4/R5 unless a separate frozen repair protocol explicitly requires replay.
 
-## 2. Accepted D2 evidence
+## 2. Formal R5 identity and validity
+
+Single authorized R5 development run:
 
 ```text
-D2 status SHA256               d04a5f185b193e7b2dd3bafbafe3e095a054de3c71e9a69143f7a8d58f84bdfa
-reviewed executable            599982eadbf1c1ea9868ea20ad5ed0a87d19b74d
-records                        23876
-runtime                        70.5320704 s
-fit_count                      0
-holdout accessed               false
-pooled Spearman(B,A)           0.2324946715
-Q4-Q1 mean A                  +13.428887 A
-Q4-Q1 M3-win fraction          -0.087741
+source status SHA256            d3c820d90cb4d54a56f50bd9d1293aa1a3e53da50d3418ddb34abc6fa6a8a196
+launcher SHA256                 bde5df90397004304f3489afc633ed115492be8be3c9fb6a52f4bbe80dd2e975
+protocol merge                  3f964696606f05bdc01b6f0b217e821d0f1933bf
+geometry repair merge           431e1fe2fede50216d36ab89a5e61a835a29e737
+reviewed executable             4f2925cba92d606b929a25dc84468fcc16f1afc4
+implementation merge            efec1cce23daf64da20afd254d92d5eb79f9cf3e
+fit_count                       110
+holdout_accessed                false
+development_data_unchanged      true
+reference_models_retrained      false
 ```
 
-The hand-built target-free geometry score has weak and horizon/month-inconsistent association with M3-vs-Level advantage. D2 had no formal PASS/MIXED/STOP code; the accepted project decision is simply not to advance a Level/M3 gate/router from this evidence.
+Environment matched the frozen contract: Python 3.11.16 / PyTorch 2.14.0+cu132 / CUDA 13.2 / NVIDIA GeForce RTX 5080.
 
-Do not turn this into a claim that M3 lacks information. R4-I0 remains MIXED and showed stable M3 increment over M2.
-
-## 3. Historical no-rescue boundary
-
-Do not go backwards:
-
-- S1 has already run formally; do not rerun it.
-- P1 survival/count-mark escalation is closed.
-- R2 formally showed true higher-order same-session set alignment worse than its marginal-preserving control; do not rescue with larger Deep Sets, Set Transformer, attention or MoE.
-- D2 does not authorize a better gate, learned gate, horizon router or month router.
-
-## 4. Frozen R5 question
-
-R5-FTAR tests a different mechanism: **learn the predictive geometry itself**.
-
-Both arms receive the exact same canonical M3 issue-time input and use the exact same single MLP. Both predict a five-horizon future-transition vector. FTAR alone adds a training-fold-only loss that aligns pairwise latent distance with pairwise future-transition distance.
+## 3. Formal R5 result
 
 ```text
-Direct: L = L_pred
-FTAR:   L = L_pred + 0.25 * L_geo
+decision                         STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE
+Direct pooled MAE                35.013762 A
+FTAR pooled MAE                  35.001553 A
+M3 pooled MAE                    29.190188 A
+Equal pooled MAE                 28.917286 A
+S1 pooled MAE                    28.594882 A
+FTAR vs Direct improvement       +0.0348677%
+horizon wins                     3/5
+month wins                       1/4
+max horizon degradation          1.01985%
+geometry Spearman Direct         0.378605
+geometry Spearman FTAR           0.470014
 ```
 
-Inference uses issue-time M3 only. No target-aware retrieval or matching occurs at test time.
+STOP is triggered by the pre-registered month-stability rule (`1/4` month wins). FTAR remains about 21.0% worse than Equal and 22.4% worse than S1 in pooled MAE.
 
-## 5. Frozen model/training contract
+Horizon direction is small and mixed: FTAR improves Direct at 15/30/60 min, worsens 120/240 min. Month direction is unstable: January/April/July worsen; only October improves.
+
+## 4. Scientific interpretation
+
+R5 succeeds at the narrow representation objective but fails as a forecasting route:
+
+- held-out same-refit latent/future-transition Spearman improves in all four development months;
+- that improved latent geometry produces essentially no pooled MAE gain;
+- strong frozen baselines remain substantially better.
+
+Therefore the accepted conclusion is:
+
+> Future-transition-aligned pairwise latent geometry can be learned, but geometry alignment alone is not sufficient to deliver stable or competitive station-load point forecasts under the frozen R5 contract.
+
+Do not reinterpret this as evidence that all representation learning fails. It closes only the frozen FTAR mechanism.
+
+## 5. No-rescue boundary
+
+Do not revive or enlarge the following after R5:
+
+- Level/M3 hard or neural gate, horizon/month router, MoE;
+- P1 survival/TPP/count-mark escalation;
+- R2 Deep Sets / Set Transformer / attention higher-order-set rescue;
+- R3 control-endogeneity route;
+- R5 larger MLP, Transformer/Mamba/Neural ODE, geometry-loss-weight tuning, clipping/calibration or post-hoc residual rescue.
+
+The very large October Direct/FTAR RMSE relative to MAE may be investigated only as read-only failure analysis if needed; it must not be used to discard October or change the formal R5 decision.
+
+## 6. Selected post-R5 next step: R6-O0
+
+Do **not** start another forecasting model yet. Post-R5 screening selects a zero-fit, read-only component oracle-gap diagnostic using the accepted S1 private OOS cache.
+
+For each OOS row:
 
 ```text
-M3 encoding       391 dimensions
-encoder           Linear(391,128)-GELU-Linear(128,32)
-head              Linear(32,64)-GELU-Linear(64,5)
-optimizer         AdamW(lr=1e-3, weight_decay=1e-4)
-epochs            80
-batch size        256
-seed              20260913
-formal env        Python 3.11.16 / PyTorch 2.14.0+cu132
-formal device     NVIDIA GeForce RTX 5080 / cuda:0
+S1              = E_hat   + A_hat
+PerfectExisting = E_truth + A_hat
+PerfectArrival  = E_hat   + A_truth
 ```
 
-No early stopping, scheduler, hyperparameter search, mixed precision or CPU fallback in the formal run.
+R6-O0 asks how much total error would disappear if perfect information were available for the future contribution of already-connected sessions versus future-arrival sessions. It must report component value-of-perfect-information, error cancellation/reinforcement, 5 horizons, 4 months and all 20 month×horizon cells.
 
-Strong frozen references: M3, Equal 0.5, S1. Primary mechanism comparison: FTAR vs Direct.
+Scientific use:
 
-## 6. Frozen R5 decision
+- stable large `PerfectArrival` gain -> long-horizon ceiling is dominated by future information not available at issue time; do not keep enlarging issue-time session encoders;
+- stable large `PerfectExisting` gain -> current-session evolution retains headroom, but any later mechanism must differ from closed P1/R2 routes;
+- mixed/cancellation-dominated -> S1 decomposition is not a stable basis for another branchwise model and the point-forecast task may be near its practical information limit under current inputs.
 
-`PASS_FUTURE_TRANSITION_GEOMETRY` requires FTAR pooled MAE below Direct, Equal and S1; >=3/5 horizon wins vs Direct; >=3/4 month wins; no >5% horizon degradation vs Direct; and better held-out latent/future-transition Spearman than Direct.
+R6-O0 is not a forecasting algorithm and has no novelty claim by itself. No local execution is authorized until its exact read-only protocol, cache identity, formulas and descriptive decision categories are frozen and CI-reviewed.
 
-`MIXED_FUTURE_TRANSITION_GEOMETRY`: pooled improvement over Direct and at least one strong baseline but stability/mechanism incomplete.
+## 7. Asset protection
 
-`STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE`: FTAR not better than Direct pooled, or wins <=1 horizon, or wins <=1 month. No architecture rescue after STOP.
-
-## 7. Execution order
-
-```text
-D2 outcome archive + R5 protocol   current docs PR
-R5 implementation                  ONLY AFTER docs merge
-R5 full CI                         required
-R5 CUDA preflight                  required
-R5 pinned launcher                 only after reviewed CI-passed head exists
-R5 local run                       NOT AUTHORIZED
-Final holdout                      SEALED
-```
-
-Preserve all worktrees, status files, private caches and historical outputs. Do not reset/clean/stash/force-push. Any future PowerShell command must be one line.
+Preserve all detached worktrees, status JSONs, R5 private cache (`private_manifest_sha256=45382977a3fceecec2c88dabffeaae8a9b24bddc6dc18669ddc94e2890006eb4`) and historical outputs. Do not reset/clean/stash/force-push or automatically delete worktrees. Any future PowerShell instruction to the user must be one line.

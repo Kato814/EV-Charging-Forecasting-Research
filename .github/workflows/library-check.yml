@@ -1,8 +1,13 @@
 name: library-check
 
 on:
-  push:
   pull_request:
+    paths:
+      - 'code/**'
+      - 'scripts/**'
+      - 'pyproject.toml'
+      - 'MANIFEST.json'
+      - '.github/workflows/**'
 
 permissions:
   contents: read

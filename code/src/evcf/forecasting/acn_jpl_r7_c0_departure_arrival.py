@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import shutil
 import subprocess
 import tempfile
@@ -321,7 +320,7 @@ def _predict_custom_arm(
             with threadpool_limits(limits=native_thread_limit):
                 estimator.fit(x_train, labels[fit_rows])
                 prediction = np.asarray(estimator.predict(x_test), dtype=np.float64)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise R7C0Error("MODEL_FIT_FAILED") from exc
         if prediction.shape != (len(test_rows),) or not np.isfinite(prediction).all():
             raise R7C0Error("MODEL_OUTPUT_INVALID")
@@ -659,7 +658,7 @@ def run_r7_c0(
             schema_version="evcf-jpl-structured-s1-private-cache/v1",
             entries_key="entries",
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise R7C0Error("PRIVATE_CACHE_IDENTITY_INVALID") from exc
     if (
         baseline_manifest.get("protocol_sha256")
@@ -711,7 +710,7 @@ def run_r7_c0(
                     issue_times=data.issue_times,
                     total_labels=data.labels,
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 reason = getattr(exc, "reason_code", "SOURCE_DATA_INVALID")
                 raise R7C0Error(reason) from exc
 

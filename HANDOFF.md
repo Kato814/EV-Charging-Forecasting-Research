@@ -17,7 +17,7 @@ R6-O0 = MIXED_COMPONENT_ORACLE_SIGNAL, COMPLETE
 R7-C0 = PASS_DEPARTURE_STATE_ARRIVAL_SIGNAL, COMPLETE
 R7-D1 = TIMING_DISTRIBUTION_INCREMENTAL_SIGNAL, COMPLETE
 R8-C0 = NO_STABLE_HORIZON_ALIGNED_ADVANTAGE, COMPLETE
-R9-C0 = protocol FROZEN, implementation/run NOT STARTED
+R9-C0 = READY; formal run NOT RUN
 ```
 
 Final holdout `2019-03/06/09/12` remains sealed.
@@ -36,7 +36,7 @@ development_data_unchanged      true
 
 R8 Horizon-Exposure arrival MAE = 23.1408646361 A versus Departure-Aug = 22.7486906628 A; component wins vs Departure-Aug = 0/5 horizons and 1/4 months. The single target-window count representation is rejected.
 
-## 3. R9-C0 frozen identity and question
+## 3. R9-C0 frozen question and protocol
 
 Protocol merge:
 
@@ -48,9 +48,7 @@ Question:
 
 > Does retaining the full issue-time requested-departure distribution shape over the fixed canonical forecast grid improve future-arrival prediction relative to Departure-Aug?
 
-## 4. Exact R9-C0 new feature block
-
-Append exactly nine nonnullable counts to canonical M2:
+Exact nine nonnullable counts appended to canonical M2:
 
 ```text
 requested_departure_observed_count
@@ -64,43 +62,11 @@ requested_departure_bin_120_240_count
 requested_departure_beyond_240_count
 ```
 
-Intervals are fixed exactly by canonical forecast horizons. Required row identities:
+Exact width = `210 raw / 213 encoded`. Bins are fixed by canonical forecast horizons; no data-driven bins, moments/quantiles, ratios, current/pilot/energy weighting, embedding or feature search.
 
-```text
-observed = overdue + bin_0_15 + bin_15_30 + bin_30_60
-           + bin_60_120 + bin_120_240 + beyond_240
-connected = observed + missing
-```
+Only `ForecastGridProfile` is newly fitted with HGB and exact frozen horizon-specific M2 parameters. Same rolling-origin rows/arrival target; expected new fits = 275. R8 references remain read-only.
 
-Exact width:
-
-```text
-210 raw / 213 encoded
-```
-
-No data-driven bins, departure moments/quantiles, ratio/proximity features, current/pilot/energy weighting, embedding or feature search.
-
-## 5. Training and references
-
-Only `ForecastGridProfile` is newly fitted:
-
-```text
-learner             HistGradientBoostingRegressor
-parameters          exact frozen horizon-specific M2 params
-rolling protocol    same-month daily rolling-origin
-arrival target      unchanged
-new fits            275
-```
-
-Replay accepted R8 cache read-only for Base-M2, Departure-Availability, Departure-Aug, Horizon-Exposure, S1, Equal, TotalAvailability, TotalDeparture and TotalHorizonExposure.
-
-Recombination:
-
-```text
-TotalForecastGridProfile = frozen E_hat_S1 + A_hat_ForecastGridProfile
-```
-
-## 6. Frozen decisions and final route boundary
+## 4. Frozen decisions and route closure
 
 ```text
 STOP_DEPARTURE_REPRESENTATION_REFINEMENT
@@ -115,8 +81,22 @@ This is the final engineered departure-representation probe:
 - PASS: ForecastGridProfile advances to robustness/holdout-readiness review; no holdout access yet.
 - STOP or MIXED: close departure-representation refinement and retain R7 Departure-Aug as the accepted development candidate. No further departure feature-engineering rescue.
 
-## 7. Closed routes and hygiene
+## 5. R9-C0 executable identity
+
+```text
+reviewed executable             c60ed89f522bc3f9df30f10093e1216a9a9f6b2f
+implementation merge            b7e2da489db13523c8d7fe46bff4799a63a64ba7
+final CI                        1233 passed, 2 skipped
+compileall                      PASS
+Ruff                            PASS
+launcher SHA256                 0efb11b2e2484ccae8c0af3ea0664ec5aaf771402621000b643894cebb143c6c
+formal run                      NOT RUN
+```
+
+Pinned launcher audits exact R8 cache identity, four development snapshot identities, pre/post development-data digest, 275 fits, 20 private tasks, 25375 records, 5 horizons, 4 months, 20 cells, frozen decision label and all forbidden-action flags. It preserves worktrees/private outputs and performs no automatic cleanup or network data acquisition.
+
+## 6. Closed routes and hygiene
 
 Do not return to gate/MoE, survival/TPP, Deep Sets/attention, control-endogeneity rescue, FTAR enlargement, Transformer/Mamba or post-hoc feature search. Preserve all worktrees/status/private caches; no reset/clean/stash/force-push/automatic deletion.
 
-Use GitHub Actions only after R9 implementation is complete and statically reviewed.
+No further GitHub Actions are required for the R9 formal run.

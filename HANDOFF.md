@@ -1,6 +1,6 @@
 # 主控交付说明｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-14。接管时先读 [CURRENT_STATUS](CURRENT_STATUS.md)、[R7-D1 outcome](docs/JPL_R7_D1_DEPARTURE_ATTRIBUTION_OUTCOME_20260914.md) 和 [R8-C0 protocol](docs/JPL_R8_C0_HORIZON_ALIGNED_DEPARTURE_EXPOSURE_PROTOCOL_20260914.md)。
+更新：2026-09-14。接管时先读 [CURRENT_STATUS](CURRENT_STATUS.md)、[R7-D1 outcome](docs/JPL_R7_D1_DEPARTURE_ATTRIBUTION_OUTCOME_20260914.md)、[R8-C0 protocol](docs/JPL_R8_C0_HORIZON_ALIGNED_DEPARTURE_EXPOSURE_PROTOCOL_20260914.md) 和 [R8-C0 outcome](docs/JPL_R8_C0_HORIZON_ALIGNED_DEPARTURE_EXPOSURE_OUTCOME_20260914.md)。
 
 ## 1. Frozen scientific state
 
@@ -16,157 +16,95 @@ R5    = STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE, CLOSED
 R6-O0 = MIXED_COMPONENT_ORACLE_SIGNAL, COMPLETE
 R7-C0 = PASS_DEPARTURE_STATE_ARRIVAL_SIGNAL, COMPLETE
 R7-D1 = TIMING_DISTRIBUTION_INCREMENTAL_SIGNAL, COMPLETE
-R8-C0 = READY; formal run NOT RUN
+R8-C0 = NO_STABLE_HORIZON_ALIGNED_ADVANTAGE, COMPLETE
 ```
 
-Final holdout `2019-03/06/09/12` remains sealed. Do not rerun closed stages unless a separately frozen repair protocol explicitly requires it.
+Final holdout `2019-03/06/09/12` remains sealed. Closed stages must not be rerun unless a separately frozen repair protocol requires it.
 
-## 2. R7-D1 accepted evidence
+## 2. R8-C0 formal identity
 
 ```text
-R7-D1 status SHA256              48247f4ef47415c65b080584e667e9b2dba9227271ad24d93da51800756b406b
-R7-D1 decision                   TIMING_DISTRIBUTION_INCREMENTAL_SIGNAL
-reviewed executable              2a2384781eeccf122ef43116b604f319e5637bdc
-implementation merge             992a611d8c3223b895818df984fc6e4f6b4521af
-private manifest SHA256          0c816334d74173e16df6e58e55de90ca3ed5723a6775e0b6287749afa479e019
+R8-C0 status SHA256              5f69386c62bff1314cc16de94d1667421e872aada739194e41ab41c5f5e2a6fe
+protocol merge                   de2ca2a0be462a85d61adb48f6b32c0ae9996c6d
+reviewed executable              91ab4a18f776b33e00a439ab10c74fd42a04f9b5
+implementation merge             e67dbac395a89155042dead07b441714b4ec4f12
+launcher SHA256                  afa29c162dac6b8132dd6081a9a0cba9f64235362cba946a660f3d0190777777
+source R7-D1 status SHA256       48247f4ef47415c65b080584e667e9b2dba9227271ad24d93da51800756b406b
+source R7-D1 private manifest    0c816334d74173e16df6e58e55de90ca3ed5723a6775e0b6287749afa479e019
+private manifest SHA256          ec11e3555727259960e355b12ac1867d14adef876fedf2d7580daaa3366ff2d2
 fit_count                        275
 holdout_accessed                 false
 development_data_unchanged       true
 reference_models_retrained       false
+r7_d1_references_retrained       false
 ```
 
-Main result:
+## 3. R8-C0 formal result
 
 ```text
 Arrival MAE:
 Base-M2                 23.1051516907 A
 Departure-Availability  23.0557563709 A
 Departure-Aug           22.7486906628 A
+Horizon-Exposure        23.1408646361 A
 
 Total MAE:
-S1                  28.5948815297 A
-Equal               28.9172859886 A
-TotalAvailability   28.4546589435 A
-TotalDeparture      28.4354542901 A
+S1                      28.5948815297 A
+Equal                   28.9172859886 A
+TotalAvailability       28.4546589435 A
+TotalDeparture          28.4354542901 A
+TotalHorizonExposure    28.6358770531 A
 ```
 
-R7-D1 proves numerical requested-departure timing adds stable information beyond declaration availability/missingness, while remaining horizon/month dependent.
-
-## 3. R8-C0 frozen identity
+Frozen support:
 
 ```text
-protocol merge       de2ca2a0be462a85d61adb48f6b32c0ae9996c6d
-reviewed executable  91ab4a18f776b33e00a439ab10c74fd42a04f9b5
-implementation merge e67dbac395a89155042dead07b441714b4ec4f12
-launcher filename    evcf_r8_c0_launcher_v1.py
-launcher SHA256      afa29c162dac6b8132dd6081a9a0cba9f64235362cba946a660f3d0190777777
-final code CI        1226 passed, 2 skipped; compileall PASS; Ruff PASS
+component horizon wins vs Departure-Aug   0/5
+component month wins vs Departure-Aug     1/4
+component wins in {60,120,240}            0/3
+total horizon wins vs TotalDeparture      2/5
+total month wins vs TotalDeparture        1/4
+component horizon wins vs Availability    2/5
+total horizon wins vs Availability        0/5
+max component degradation                 +5.288667%
+max total degradation                     +2.986383%
 ```
 
-Formal R8-C0 has not yet run.
+Formal decision is `NO_STABLE_HORIZON_ALIGNED_ADVANTAGE`.
 
-## 4. R8-C0 scientific question
+## 4. Interpretation boundary
 
-> Does an explicit forecast-horizon-aligned requested-departure exposure representation outperform the accepted generic ten-stat Departure-Aug representation for future-arrival current and recombined station current?
-
-## 5. Exact R8-C0 feature block
-
-For each issue time and forecast horizon `h`, use only issue-time-known current-session `requested_departure_minutes_from_issue` and append exactly four nonnullable station-level values to canonical M2:
+R8 rejects only the compressed horizon-local count representation:
 
 ```text
-requested_departure_observed_count
-requested_departure_missing_count
-requested_departure_overdue_count
-requested_departure_due_within_horizon_count
+observed_count
+missing_count
+overdue_count
+due_within_current_horizon_count
 ```
 
-Definitions:
+It does not overturn R7-D1. Numerical requested-departure timing still carries stable incremental information beyond metadata availability, but that information is not preserved by the single `0 < d_i <= h` count.
 
-```text
-observed_count = finite d_i count
-missing_count  = missing d_i count
-overdue_count  = finite d_i <= 0
-due_within_horizon_count = finite 0 < d_i <= h
-```
+Do not claim horizon alignment in general is useless, and do not rescue R8 by adding current/pilot/energy weights, ratios, gates, routers, feature search, attention, Transformer/Mamba or survival/TPP.
 
-Audit-only:
+## 5. Only justified next representation question
 
-```text
-due_after_horizon_count = observed_count - overdue_count - due_within_horizon_count
-```
+A final narrow distribution-shape probe may be preregistered:
 
-must be a nonnegative integer. `observed_count` and `missing_count` must exactly reproduce accepted R7-D1 canonical availability fields on common rows.
+- use a fixed requested-departure histogram/CDF whose cut points are exactly the canonical forecast horizons `15/30/60/120/240 min`;
+- preserve missing and overdue counts;
+- no data-driven bins, no feature search, no weights;
+- same HGB and exact frozen M2 horizon parameters;
+- same rolling-origin rows and future-arrival target;
+- reuse R7-D1 references read-only;
+- final holdout stays sealed.
 
-Exact width:
+Scientific question:
 
-```text
-205 raw / 208 encoded
-```
+> Does retaining the **full forecast-grid shape** of the issue-time requested-departure distribution recover the R7-D1 timing signal more faithfully than the failed single-horizon exposure count?
 
-No other departure statistics, ratios, proximity scores, current/pilot/energy weighting, embeddings or feature search are authorized.
+If this final distribution-shape probe fails, close departure-representation refinement and retain R7 Departure-Aug as the accepted development candidate. Do not continue feature-engineering rescues.
 
-## 6. R8-C0 arms and training budget
+## 6. Repository and Actions hygiene
 
-Read-only accepted references from exact R7-D1 private cache:
-
-```text
-Base-M2
-Departure-Availability
-Departure-Aug
-S1
-Equal
-TotalAvailability
-TotalDeparture
-```
-
-Only `Horizon-Exposure` is newly fitted using exact frozen horizon-specific M2 HGB parameters, same future-arrival target and identical daily rolling OOS rows.
-
-```text
-expected new fits = 275
-TotalHorizonExposure = frozen E_hat_S1 + A_hat_HorizonExposure
-```
-
-## 7. Frozen decisions
-
-```text
-PASS_HORIZON_ALIGNED_DEPARTURE_EXPOSURE
-NO_STABLE_HORIZON_ALIGNED_ADVANTAGE
-MIXED_HORIZON_ALIGNED_DEPARTURE_EXPOSURE_SIGNAL
-```
-
-PASS requires all conditions in the frozen protocol: pooled component and total improvement over Departure-Aug/TotalDeparture, >=3/5 horizon wins and >=3/4 month wins for both, >=2/3 component wins in `{60,120,240}`, total below S1 and Equal, and <=5% max horizon degradation.
-
-Do not change thresholds after observing results.
-
-## 8. Launcher behavior
-
-The pinned launcher:
-
-- verifies Python/scientific package versions;
-- verifies repository identity and fetches only PR #98 head if the reviewed commit is absent;
-- creates/reuses a detached reviewed-head worktree without reset/clean/stash/delete;
-- verifies the protocol blob equals the frozen protocol merge;
-- locates the exact four development snapshot manifests and verifies processed/interim artifacts;
-- locates the exact R7-D1 private manifest `0c816334...`;
-- checks development-data integrity before and after formal execution;
-- runs only the reviewed R8 CLI;
-- audits 275 fits, 20 private task files, 25375 records, frozen references, allowed decision and all forbidden-action flags;
-- writes only aggregate status next to the launcher;
-- preserves all worktrees and private outputs and performs no automatic cleanup;
-- performs no data acquisition.
-
-## 9. Interpretation boundary
-
-Requested departure is user-declared intended timing, not actual disconnect. Actual disconnect/doneCharging, future arrivals/occupancy/share or future connector state are prohibited predictors.
-
-Do not claim first use of departure time, remaining parking duration, active-session state or session decomposition. Existing literature already covers those concepts. Current negative search evidence did not find the exact R8 station-level horizon-aligned exposure construction, but this is not proof of novelty.
-
-## 10. Next action
-
-Run the pinned R8-C0 launcher exactly once on the user machine. Upload only the newest `evcf_r8_c0_status_*.json`, whether COMPLETE or INCOMPLETE. Do not debug or rerun before inspecting that status.
-
-Final holdout remains sealed regardless of R8 development result.
-
-## 11. Closed routes and hygiene
-
-Do not return to gate/MoE, survival/TPP, higher-order set/attention, control-endogeneity rescue, FTAR enlargement, Transformer/Mamba or post-hoc feature search. Preserve detached worktrees, status JSONs, private caches and historical outputs. Do not reset/clean/stash/force-push or automatically delete worktrees.
+Preserve detached worktrees, status JSONs, private caches and historical outputs. Do not reset/clean/stash/force-push or automatically delete worktrees. Pure docs do not trigger full CI; code changes should be completed before one final PR/CI where possible.

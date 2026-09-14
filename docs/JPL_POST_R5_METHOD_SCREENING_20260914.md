@@ -57,7 +57,7 @@ prediction_S1 = E_hat + A_hat
 
 P1 showed that replacing those branches with simple explicit continuation/count-mark models does not work. R2/R3/R4/R5 show that richer issue-time representation, control state, analog geometry and supervised geometry alignment do not provide stable strong-baseline gains.
 
-Before designing any new model, quantify the value of perfect information for each S1 component.
+Before designing any new model, quantify the total-error effect of replacing either S1 component prediction by its offline truth.
 
 ## 4. Selected next diagnostic: R6-O0 component oracle-gap analysis
 
@@ -72,10 +72,16 @@ PerfectArrival  = E_hat   + A_truth
 Truth           = E_truth + A_truth
 ```
 
-Interpretation:
+Define component oracle replacement gains:
 
-- `MAE(S1) - MAE(PerfectExisting)` = value of perfect information about the future contribution of sessions already connected at issue time;
-- `MAE(S1) - MAE(PerfectArrival)` = value of perfect information about sessions arriving after issue time.
+```text
+G_existing = MAE(S1) - MAE(PerfectExisting)
+G_arrival  = MAE(S1) - MAE(PerfectArrival)
+```
+
+Positive gain means that replacing the corresponding component prediction by its truth lowers total MAE while leaving the other S1 component prediction fixed. Negative gain is possible and must not be re-labelled as “negative information value”: it means branch errors were partially cancelling, so replacing one component by truth exposes error in the remaining fixed component.
+
+These quantities are therefore **oracle replacement gains, not formal value-of-information measures**.
 
 This is an offline information diagnostic only. `E_truth` and `A_truth` are never legal predictors.
 
@@ -84,10 +90,10 @@ This is an offline information diagnostic only. `E_truth` and `A_truth` are neve
 A later frozen R6-O0 protocol should report, on the existing common OOS rows:
 
 1. MAE/RMSE/WAPE for S1, PerfectExisting and PerfectArrival;
-2. value-of-perfect-information (VPI) for each component pooled, by 5 horizons, by 4 months and 20 month×horizon cells;
-3. existing-branch error and arrival-branch error sign agreement;
+2. `G_existing` and `G_arrival` pooled, by 5 horizons, by 4 months and all 20 month×horizon cells;
+3. existing-branch error and arrival-branch error sign agreement/opposition;
 4. fraction and magnitude of error cancellation versus reinforcement in `e_total=e_existing+e_arrival`;
-5. horizon at which arrival VPI overtakes existing VPI, if any;
+5. horizon at which `G_arrival` overtakes `G_existing`, if any;
 6. cross-month stability of that ordering;
 7. no favorable cell selection.
 
@@ -97,21 +103,21 @@ Strong M3/Equal/S1 aggregates remain read-only context; no model is retrained.
 
 Possible outcomes have different consequences:
 
-### Future-arrival information dominates
+### Future-arrival replacement gain dominates
 
-If PerfectArrival yields large and cross-month-stable gains, especially at 120/240 min, then the remaining long-horizon ceiling is primarily associated with information not available at issue time. More elaborate issue-time session encoders become hard to justify. A later probabilistic or external-known-future-covariate formulation may be scientifically appropriate, but requires a separate novelty review.
+If `G_arrival` is positive, materially larger than `G_existing`, and cross-month stable—especially at 120/240 min—then the remaining long-horizon error is strongly associated with uncertainty in sessions that are not yet present at issue time. More elaborate issue-time session encoders become hard to justify. A later probabilistic or external-known-future-covariate formulation may be scientifically appropriate, but requires a separate novelty review.
 
-### Existing-session information dominates
+### Existing-session replacement gain dominates
 
-If PerfectExisting yields the larger stable gain, there is still meaningful headroom in forecasting the evolution of currently connected sessions. Any new mechanism must nevertheless differ from the already closed P1/R2 routes.
+If `G_existing` is the larger stable positive gain, there is still meaningful headroom in forecasting the evolution of currently connected sessions. Any new mechanism must nevertheless differ from the already closed P1/R2 routes.
 
 ### Mixed / cancellation-dominated
 
-If neither component has stable VPI or total error is dominated by cross-component cancellation/reinforcement, the problem is not separable in the S1 sense. Another branchwise model would be unjustified; the project should consider whether the current point-forecast objective has reached a practical information limit under the available issue-time data.
+If neither replacement gain is stable, one or both are negative, or total error is strongly shaped by cross-component cancellation/reinforcement, the problem is not separable in the S1 sense. Another branchwise model would be unjustified; the project should consider whether the current point-forecast objective has reached a practical information limit under the available issue-time data.
 
 ## 7. Novelty boundary
 
-R6-O0 itself is not claimed as a forecasting algorithm or a novel oracle technique. Its role is decision-theoretic: prevent another architecture search before establishing whether the remaining error is attributable to a learnable issue-time component or unavailable future information.
+R6-O0 itself is not claimed as a forecasting algorithm or a novel oracle technique. Its role is diagnostic: prevent another architecture search before establishing whether the remaining error is attributable to a currently observed component or to future information unavailable at forecast issue time.
 
 If a later paper uses the result, the contribution can only be the evidence chain about observability/information bottlenecks in online charging-station forecasting, not the generic concept of an oracle ablation.
 

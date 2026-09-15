@@ -1,8 +1,8 @@
 # 当前状态｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-15。当前入口为本文件与 [HANDOFF](HANDOFF.md)。R11-S0 正式结果见 `docs/JPL_R11_S0_BACKBONE_SCREEN_OUTCOME_20260915.md`；R11-P1 冻结协议见 `docs/JPL_R11_P1_HORIZON_TARGETED_PRIVILEGED_ARRIVAL_PROTOCOL_20260915.md`；R11-P1 结果见 `docs/JPL_R11_P1_PRIVILEGED_ARRIVAL_OUTCOME_20260915.md`。
+更新：2026-09-15。当前入口为本文件与 [HANDOFF](HANDOFF.md)。R11-S0 正式结果见 `docs/JPL_R11_S0_BACKBONE_SCREEN_OUTCOME_20260915.md`；R11-P1 冻结协议见 `docs/JPL_R11_P1_HORIZON_TARGETED_PRIVILEGED_ARRIVAL_PROTOCOL_20260915.md`；R11-P1 结果见 `docs/JPL_R11_P1_PRIVILEGED_ARRIVAL_OUTCOME_20260915.md`；独立复现实验协议见 `docs/JPL_R11_G0_CALTECH_INDEPENDENT_REPLICATION_PROTOCOL_20260915.md`。
 
-**当前科学状态：R11-P1 已 COMPLETE，44/44 fits 完成，冻结判定为 `MIXED_PRIVILEGED_ARRIVAL_SIGNAL`。未来到达 training-only 辅助监督在 3/3 长时距、4/4 开发月份、3/3 paired seeds 上均改善同一 station-only TCN，但 Arm C seed spread 为 4.8494%，超过冻结 3% 门槛。Final holdout 2019-03/06/09/12 仍未访问。**
+**当前科学状态：R11-P1 已 COMPLETE，44/44 fits 完成，冻结判定为 `MIXED_PRIVILEGED_ARRIVAL_SIGNAL`。Future-arrival training-only 辅助监督在 3/3 长时距、4/4 开发月份、3/3 paired seeds 上均改善同一 station-only TCN，但 Arm C seed spread 为 4.8494%，超过冻结 3% 门槛。新的 R11-G0 Caltech 独立站点复现协议已冻结，尚未采集正式 Caltech 数据、尚未拟合。JPL final holdout 2019-03/06/09/12 仍未访问。**
 
 ## 1. Closed stages
 
@@ -11,7 +11,8 @@ R10-R0      COMPLETE / MIXED_DEVELOPMENT_ROBUSTNESS
 R11-S0      COMPLETE / STOP_DEEP_CORE_ROUTE / 68 fits
 R11-M1      CANCELLED
 R11-P1      COMPLETE / MIXED_PRIVILEGED_ARRIVAL_SIGNAL / 44 fits
-final holdout  SEALED
+R11-G0      PROTOCOL FROZEN / NOT RUN
+JPL final holdout  SEALED
 ```
 
 R11-S0 不允许再加入第五模型、额外 seed、阈值放宽、clipping/calibration 或重跑。
@@ -121,20 +122,57 @@ Scientific interpretation:
 
 > training-only future-arrival supervision shows a consistent mechanism-aligned development signal, but algorithmic robustness is not yet strong enough for PASS.
 
-## 6. Next action
+## 6. Frozen R11-G0 independent replication
 
-Do **not** rescue R11-P1 inside the same development protocol.
-
-Preferred next stage is a separately frozen **independent-generalization experiment** that keeps the R11-P1 method unchanged and asks whether the C-B gain transfers to an independent session-rich source/site while deployment remains aggregate-only.
-
-Priority:
+Independent site:
 
 ```text
-1. identify suitable independent site/source;
-2. freeze data identity, chronology, exact Arm B/C method, seeds and decision rule before fitting;
-3. run paired B/C without tuning lambda or architecture;
-4. evaluate transfer and seed stability;
-5. keep JPL final holdout sealed until a final confirmation protocol is justified.
+ACN-Data site_id = caltech
+formal months = 2019-02 / 2019-05 / 2019-08 / 2019-11
+formal source = official ACN-Data /sessions/caltech/ts
 ```
 
-If no suitable independent session-rich source is available, stop at development-stage evidence rather than tune the current JPL result further.
+These months are fixed before formal Caltech acquisition/fitting. They are complementary to both JPL development months and the sealed JPL holdout months.
+
+R11-G0 copies the R11-P1 method unchanged:
+
+```text
+15/30 min       Station-HGB with frozen JPL-selected HGB hyperparameters
+60/120/240 min  same station-only TCN
+Arm B           L_total
+Arm C           L_total + 0.5 * L_future_arrival
+seeds           2026091401 / 02 / 03
+fit ceiling     24 deep + 20 HGB replay = 44
+```
+
+No Caltech-specific architecture tuning, lambda tuning, HGB retuning, extra seed, clipping, calibration, ensemble or horizon-boundary search is allowed.
+
+Before any model fit, acquisition/preprocessing must produce and freeze an aggregate-only Caltech data manifest with exact processed snapshot hashes and common formal row counts.
+
+Frozen outcomes:
+
+```text
+REPLICATE_PRIVILEGED_ARRIVAL_SIGNAL
+MIXED_INDEPENDENT_REPLICATION
+FAIL_INDEPENDENT_REPLICATION
+```
+
+The quantitative replication gates are identical to R11-P1, including the `<=3%` seed-spread requirement.
+
+## 7. Next action
+
+Next authorized work is **Caltech acquisition/preprocessing implementation and pre-fit row-manifest generation only**.
+
+Do not fit Arm B/C yet.
+
+Execution order:
+
+```text
+1. implement site-general Caltech acquisition/preprocessing without changing JPL evidence;
+2. locally acquire 2019-02/05/08/11 from official ACN-Data API;
+3. run pre-fit QA and freeze processed snapshot/common-row manifest;
+4. review the manifest for data-integrity completeness only;
+5. only then authorize the 44-fit R11-G0 model run.
+```
+
+JPL final holdout remains sealed throughout R11-G0.

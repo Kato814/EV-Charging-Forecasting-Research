@@ -73,16 +73,35 @@ def test_parameter_band_is_frozen():
         validate_parameter_count(PARAMETER_BAND[1] + 1)
 
 
-def test_chronology_uses_earlier_months_and_current_day_bands():
+def test_chronology_uses_full_history_earlier_months_and_current_day_bands():
     views = _views()
     fold = chronological_rows(views, "2019-07")
     train_months = [month for month, _row in fold.train]
-    assert train_months.count("2019-01") == 19
-    assert train_months.count("2019-04") == 19
-    assert train_months.count("2019-07") == 14
+    assert train_months.count("2019-01") == 18
+    assert train_months.count("2019-04") == 18
+    assert train_months.count("2019-07") == 13
     assert len(fold.validation) == 3
     assert len(fold.test) == 2
     assert all(month == "2019-07" for month, _row in fold.validation + fold.test)
+
+
+def test_current_month_complete_five_horizon_labels_are_required_before_cutoff():
+    views = _views()
+    july = views["2019-07"]
+    extra_issues = np.asarray(
+        [*_view("2019-07", range(1, 20)).issue_times, _issue("2019-07-14 23:00"), _issue("2019-07-17 23:00")],
+        dtype=np.int64,
+    )
+    extra_values = np.vstack([july.m2_values, july.m2_values[-1], july.m2_values[-1]])
+    extra_labels = np.vstack([july.labels, july.labels[-1], july.labels[-1]])
+    views["2019-07"] = MonthStationView("2019-07", extra_issues, extra_labels, extra_values)
+    fold = chronological_rows(views, "2019-07")
+    train_issues = {int(views[month].issue_times[row]) for month, row in fold.train if month == "2019-07"}
+    validation_issues = {
+        int(views[month].issue_times[row]) for month, row in fold.validation if month == "2019-07"
+    }
+    assert _issue("2019-07-14 23:00") not in train_issues
+    assert _issue("2019-07-17 23:00") not in validation_issues
 
 
 def test_calendar_context_has_frozen_shapes_and_horizon_code():

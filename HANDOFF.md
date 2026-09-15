@@ -1,175 +1,119 @@
 # 主控交付说明｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-15。接管时先读 [CURRENT_STATUS](CURRENT_STATUS.md)、`docs/JPL_R11_S0_BACKBONE_SCREEN_OUTCOME_20260915.md` 与 `docs/JPL_R11_P1_HORIZON_TARGETED_PRIVILEGED_ARRIVAL_PROTOCOL_20260915.md`。
+更新：2026-09-15。接管时先读 [CURRENT_STATUS](CURRENT_STATUS.md)、`docs/JPL_R11_S0_BACKBONE_SCREEN_OUTCOME_20260915.md`、`docs/JPL_R11_P1_HORIZON_TARGETED_PRIVILEGED_ARRIVAL_PROTOCOL_20260915.md` 与 `docs/JPL_R11_P1_PRIVILEGED_ARRIVAL_OUTCOME_20260915.md`。
 
 ## 1. Frozen scientific state
 
 ```text
-R10-R0 = MIXED_DEVELOPMENT_ROBUSTNESS, COMPLETE
-R11-S0 = COMPLETE / STOP_DEEP_CORE_ROUTE
-R11-S0 fits = 68 / 68
-selected_backbone = null
+R10-R0 = COMPLETE / MIXED_DEVELOPMENT_ROBUSTNESS
+R11-S0 = COMPLETE / STOP_DEEP_CORE_ROUTE / 68 fits
 original R11-M1 = CANCELLED
-R11-P1 protocol = FROZEN
-R11-P1 implementation = NOT YET DONE
-R11-P1 run = NOT RUN
+R11-P1 = COMPLETE / MIXED_PRIVILEGED_ARRIVAL_SIGNAL / 44 fits
 final holdout = SEALED
 ```
 
 Final JPL holdout remains `2019-03/06/09/12` and has not been accessed.
 
-## 2. Accepted S0 result
-
-Station-HGB pooled anchor:
+## 2. R11-P1 execution identity
 
 ```text
-MAE   25.8731522189 A
-RMSE  53.1466051439 A
-WAPE  0.1737126243
+PR                     #110
+candidate code commit  187c047596dffb74cef8a79fcc479edd55139d5f
+launcher SHA256         a9655dba0de6a54ea52c39171e392533d8b5c5e2c6ce52e9e1c5656435c33c31
+deep fits               24 / 24
+HGB replay              20 / 20
+total fits              44 / 44
+holdout accessed        false
+session predictors      false
 ```
 
-Deep candidates:
+Environment:
 
 ```text
-GRU      27.2072425618 A  (+5.16%)  ineligible
-TCN      26.9086600381 A  (+4.00%)  ineligible
-N-HiTS   34.8304657865 A (+34.62%)  ineligible
-PatchTST 32.3044344149 A (+24.86%)  ineligible
+RTX 5080
+PyTorch 2.14.0+cu132
+CUDA 13.2
+deterministic CUDA backward smoke PASS
 ```
 
-Do not reopen S0, add a fifth architecture, relax thresholds or rerun it.
+GitHub Actions monthly quota is exhausted. Repository-wide CI is unavailable until reset; do not interpret immediate no-run workflow failures as code failures. Use local targeted validation for active work and run archival full CI only after quota reset.
 
-## 3. Why R11-P1 exists
-
-Earlier R6 mechanism evidence and the S0 horizon diagnostic point to the same regime boundary:
-
-```text
-15–30 min   existing-session evolution dominates removable error
-60–240 min  future-arrival uncertainty dominates removable error
-
-TCN vs HGB:
-15 min   +49.36%
-30 min   +11.87%
-60 min    -2.22%
-120 min   -1.01%
-240 min   -3.35%
-```
-
-This does not rescue S0. It motivates a separately frozen method experiment.
-
-## 4. Methodological choice
-
-Do not implement direct HGB residual targets as the primary carrier. A leakage-free residual learner would require nested chronological HGB cross-fitting for training rows and would confound the privileged-supervision question.
-
-R11-P1 instead freezes a deterministic horizon-gated hybrid:
+## 3. Frozen R11-P1 method
 
 ```text
 15/30 min       Station-HGB
 60/120/240 min  station-only TCN
+
+Arm B  L = L_total
+Arm C  L = L_total + 0.5 * L_future_arrival
 ```
 
-The scientific object is not the hybrid itself. The object is whether a **future-arrival contribution label available only during training** improves the long-horizon station-only TCN representation.
+The future-arrival label is session-resolved but training-only. At inference, no session identifiers, requested departure/energy, per-session current/pilot or future-session fields are allowed.
 
-## 5. Arms
+## 4. R11-P1 result
 
 ```text
-Arm A  Station-HGB all five horizons
+Arm B long pooled MAE  33.2304292334 A
+Arm C long pooled MAE  32.6842326626 A
+C-B gain                1.6437%
 
-Arm B  HGB short + TCN long
-       L = L_total
+horizon wins            3/3
+month wins              4/4
+paired seed wins        3/3
 
-Arm C  HGB short + identical TCN long
-       L = L_total + 0.5 * L_arrival
+Station-HGB long        33.5592843062 A
+Arm C long               32.6842326626 A
+
+Station-HGB all-5        25.8731522189 A
+Arm C hybrid all-5       25.3481212328 A
 ```
 
-`L_arrival` uses offline session-resolved future-arrival contribution `A(t,h)` only as a label during training. The deployed model never receives session fields.
-
-The arrival head is discarded at inference.
-
-## 6. Data/training contract
-
-Reuse exact S0:
+Frozen PASS conditions all hold except seed spread:
 
 ```text
-development months  2019-01 / 2019-04 / 2019-07 / 2019-10
-train               earlier dev months + current days 1-14
-validation          current days 15-17
-test                day >=18 exact frozen origins
-history             96 x 15-min bins, aggregate current + validity mask
-seeds               2026091401 / 02 / 03
-optimizer           AdamW 1e-3, wd 1e-4
-batch               256
-max epochs          120
-patience            12
-AMP                 off
-deterministic CUDA  required
-CPU fallback        prohibited
+Arm B seed spread  4.8547%
+Arm C seed spread  4.8494%
+required           <= 3.0%
 ```
 
-Long-horizon task set is exactly `{60,120,240}`.
+Therefore the decision remains `MIXED_PRIVILEGED_ARRIVAL_SIGNAL`.
 
-Auxiliary weight is frozen at `0.5`; no search.
+Important interpretation: the instability is carrier-level rather than obviously caused by privileged supervision, because Arm B and C have nearly identical spread while C improves B under every frozen seed, long horizon and development month.
 
-Early stopping uses **total-load validation MAE only**.
+## 5. What must not be done
 
-## 7. Decision rule
-
-PASS requires all:
+Do not:
 
 ```text
-C vs B long-horizon pooled MAE gain >= 1.0%
-C wins >= 2/3 long horizons
-no horizon degradation > 1.0%
-C wins >= 3/4 months
-C wins >= 2/3 paired seeds
-C seed spread <= 3.0%
-C long pooled beats HGB long pooled
-full five-horizon C hybrid beats HGB pooled
-all folds complete / no test-row removal
+relax the 3% seed-spread gate
+relabel MIXED as PASS
+add more seeds inside R11-P1
+tune lambda=0.5 after seeing this result
+add an existing-session auxiliary head inside R11-P1
+change the 30/60 min split inside R11-P1
+add another backbone to rescue R11-P1
+open JPL final holdout now
 ```
 
-Exhaustive decisions:
+No reset/clean/stash/force-push/automatic deletion of evidence or worktrees.
+
+## 6. Next scientific direction
+
+Preferred next stage is **independent generalization**, not another JPL development rescue.
+
+Question:
+
+> Does the exact frozen R11-P1 privileged-arrival training signal transfer to an independent session-rich site/source while deployment remains aggregate-only?
+
+Before any new fit:
 
 ```text
-PASS_PRIVILEGED_ARRIVAL_SUPERVISION
-MIXED_PRIVILEGED_ARRIVAL_SIGNAL
-STOP_PRIVILEGED_SUPERVISION_ROUTE
+1. identify the independent source/site;
+2. freeze source identity and chronology;
+3. freeze the exact Arm B/C carrier and lambda=0.5;
+4. freeze seeds and decision rule;
+5. prohibit architecture/lambda/horizon-boundary search;
+6. keep JPL final holdout sealed.
 ```
 
-If MIXED or STOP, do not tune lambda, add an existing-session auxiliary head, add another backbone or move the 30/60 boundary inside the same protocol.
-
-## 8. Fit ceiling
-
-```text
-Arm B  12 deep fits
-Arm C  12 deep fits
-total  24 deep fits
-```
-
-Station-HGB deterministic replay is allowed only for the frozen anchor when row-level local predictions are needed.
-
-## 9. Novelty boundary
-
-Do not claim novelty for:
-
-```text
-LUPI generally
-multi-task learning generally
-TCN
-hybrid boosting + DL
-decomposition
-residual correction
-existing/future-session split
-```
-
-Candidate contribution, subject to evidence:
-
-> cross-granularity future-arrival supervision: session-resolved future-arrival contribution labels are used only during training to improve a station-level aggregate-only forecaster, with no session information needed at inference.
-
-Targeted literature search has not located an exact match; this is negative search evidence, not proof of priority.
-
-## 10. Execution policy
-
-Next step is implementation of R11-P1. Favor fast local preflight and user-machine execution because the frozen experiment is small and the RTX 5080 run is fast. Do not make every small implementation repair wait for full GitHub CI. Preserve branch/PR/code identity and run a full CI pass when the local candidate is stable enough for archival.
-
-Preserve worktrees/status files; no reset/clean/stash/force-push/automatic deletion. Final holdout remains sealed.
+If no suitable independent session-rich source exists, freeze the current result as development-stage mechanism evidence and do not tune further.

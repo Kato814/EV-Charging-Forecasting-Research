@@ -1,0 +1,69 @@
+schema_version: acn-caltech-r11-g0-prefit/v1
+site_id: caltech
+timezone: America/Los_Angeles
+months:
+  - "2019-02"
+  - "2019-05"
+  - "2019-08"
+  - "2019-11"
+source:
+  api_base_url: https://ev.caltech.edu/api/v1/
+  endpoint: sessions/caltech/ts
+  token_environment_variable: ACN_API_TOKEN
+  overlap_query: 'connectionTime < month_end and disconnectTime > month_start'
+target:
+  name: station_current_mean_a
+  unit: A
+cleaning:
+  sampling_derivation: mode_of_positive_raw_timestamp_differences
+  locf_mode_multiplier: 3
+  locf_cap_seconds: 60
+  boundary_sensitivity_seconds: 60
+aggregation:
+  bin_minutes: 15
+  grid_policy: continuous_physical_utc
+  coverage_thresholds: [0.8, 0.9, 0.95]
+  main_valid_bin_field: valid_bin_90
+  minimum_valid_bin_rate: 0.8
+  main_active_threshold_a: 0.1
+  comparison_active_threshold_a: 1.0
+missing_trajectory:
+  preserve_structural_interval: true
+  branchwise_availability: true
+  whole_current_unobservable_overlap_rejects_target: true
+  pilot_only_missing_rejects_current_target: false
+  impute_future_labels: false
+  coverage_rescale_current: false
+  final_energy_reconstruction: false
+trajectory_quarantine:
+  detector: synchronized_current_pilot_raw_order_utc_nonmonotonic
+  preserve_raw: true
+  sort_repair: false
+  timestamp_shift_seconds: 0
+  interpolation: false
+  trajectory_unobservable: true
+  coverage_denominator_includes_quarantined: true
+  maximum_session_fraction: 0.001
+snapshots:
+  lookback_minutes: 1440
+  horizons_minutes: [15, 30, 60, 120, 240]
+  issue_step_minutes: 15
+  tier: M1
+privileged_label:
+  name: future_arrival_current
+  arrival_rule: connection_time_utc_s > issue_time_utc_s
+  target_window: "[issue+h-15min, issue+h)"
+  reconstruction_absolute_tolerance_a: 0.000001
+chronology:
+  train_current_month_last_day: 14
+  validation_first_day: 15
+  validation_last_day: 17
+  test_first_day: 18
+publication:
+  aggregate_status_only: true
+  row_level_data_local_only: true
+  session_identifiers_public: false
+  absolute_paths_public: false
+jpl_final_holdout:
+  months: ["2019-03", "2019-06", "2019-09", "2019-12"]
+  access_allowed: false

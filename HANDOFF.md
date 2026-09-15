@@ -1,42 +1,24 @@
 # 主控交付说明｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-15。接管时先读 [CURRENT_STATUS](CURRENT_STATUS.md)、`docs/JPL_R11_S0_STATION_LEVEL_DEEP_BACKBONE_SCREENING_PROTOCOL_20260914.md` 与 `docs/JPL_R11_S0_BACKBONE_SCREEN_OUTCOME_20260915.md`。
+更新：2026-09-15。接管时先读 [CURRENT_STATUS](CURRENT_STATUS.md)、`docs/JPL_R11_S0_BACKBONE_SCREEN_OUTCOME_20260915.md` 与 `docs/JPL_R11_P1_HORIZON_TARGETED_PRIVILEGED_ARRIVAL_PROTOCOL_20260915.md`。
 
 ## 1. Frozen scientific state
 
 ```text
 R10-R0 = MIXED_DEVELOPMENT_ROBUSTNESS, COMPLETE
-R11-S0 protocol = FROZEN
-R11-S0 formal run = COMPLETE
+R11-S0 = COMPLETE / STOP_DEEP_CORE_ROUTE
 R11-S0 fits = 68 / 68
-R11-S0 decision = STOP_DEEP_CORE_ROUTE
 selected_backbone = null
-R11-M1 as originally defined = NOT AUTHORIZED
+original R11-M1 = CANCELLED
+R11-P1 protocol = FROZEN
+R11-P1 implementation = NOT YET DONE
+R11-P1 run = NOT RUN
 final holdout = SEALED
 ```
 
 Final JPL holdout remains `2019-03/06/09/12` and has not been accessed.
 
-## 2. Accepted execution identity
-
-```text
-launcher schema      evcf-r11-s0-launcher/v1.4.1
-launcher SHA256      c6caaaf1a00aa41f8778aeb24ab0c55f1fee02a847e93c205439735aac987f42
-reviewed executable  a7dceaabab7a27cf6a6323a4630ea38494ffed71
-implementation merge bebe0ebcb94f1ce8a9bafd35156be0a94dcfbd87
-status SHA256        2706d5ed65e2d2c0e6ed5d2aace4fd9f95ccc23f61833a9d41f5184361e77f70
-```
-
-Formal environment:
-
-```text
-RTX 5080
-PyTorch 2.14.0+cu132
-CUDA 13.2
-deterministic forward/backward smoke PASS for GRU/TCN/N-HiTS/PatchTST
-```
-
-## 3. Core result
+## 2. Accepted S0 result
 
 Station-HGB pooled anchor:
 
@@ -55,13 +37,17 @@ N-HiTS   34.8304657865 A (+34.62%)  ineligible
 PatchTST 32.3044344149 A (+24.86%)  ineligible
 ```
 
-TCN is closest but still fails the frozen pooled, worst-horizon, worst-month and seed-spread gates. No rescue, fifth architecture, extra seed, clipping, calibration or threshold relaxation is allowed inside R11-S0.
+Do not reopen S0, add a fifth architecture, relax thresholds or rerun it.
 
-## 4. Diagnostic signal
+## 3. Why R11-P1 exists
 
-TCN horizon MAE relative to Station-HGB:
+Earlier R6 mechanism evidence and the S0 horizon diagnostic point to the same regime boundary:
 
 ```text
+15–30 min   existing-session evolution dominates removable error
+60–240 min  future-arrival uncertainty dominates removable error
+
+TCN vs HGB:
 15 min   +49.36%
 30 min   +11.87%
 60 min    -2.22%
@@ -69,30 +55,121 @@ TCN horizon MAE relative to Station-HGB:
 240 min   -3.35%
 ```
 
-This does not overturn STOP. It is only motivation for a future separately frozen hypothesis.
+This does not rescue S0. It motivates a separately frozen method experiment.
 
-Earlier mechanism evidence should be read together with this result:
+## 4. Methodological choice
+
+Do not implement direct HGB residual targets as the primary carrier. A leakage-free residual learner would require nested chronological HGB cross-fitting for training rows and would confound the privileged-supervision question.
+
+R11-P1 instead freezes a deterministic horizon-gated hybrid:
 
 ```text
-R6: existing-session error dominates 15–30 min; arrival error dominates 60–240 min
-R7: requested-departure timing gives small incremental arrival-component information
-R10: MIXED_DEVELOPMENT_ROBUSTNESS; old method line frozen
+15/30 min       Station-HGB
+60/120/240 min  station-only TCN
 ```
 
-The convergence around a ~60 min regime boundary is scientifically interesting, but generic horizon dependence is already known and must not be sold as novelty by itself.
+The scientific object is not the hybrid itself. The object is whether a **future-arrival contribution label available only during training** improves the long-horizon station-only TCN representation.
 
-## 5. Current research boundary
+## 5. Arms
 
-The failed object is the **single deep station-level carrier**, not the broader idea of using session-resolved information only during training.
+```text
+Arm A  Station-HGB all five horizons
 
-Do not run the originally planned R11-M1. A new route, if pursued, must be independently specified and frozen before fitting.
+Arm B  HGB short + TCN long
+       L = L_total
 
-Preferred next design question:
+Arm C  HGB short + identical TCN long
+       L = L_total + 0.5 * L_arrival
+```
 
-> Can session-resolved existing/arrival labels be used as training-only supervision for a station-only residual/component forecaster that keeps the strong Station-HGB anchor, especially at arrival-dominated 60–240 min horizons, without requiring session information at inference?
+`L_arrival` uses offline session-resolved future-arrival contribution `A(t,h)` only as a label during training. The deployed model never receives session fields.
 
-This is a design question only; no new real-data fit has been authorized after S0.
+The arrival head is discarded at inference.
 
-## 6. Hygiene
+## 6. Data/training contract
 
-Preserve all worktrees, status files and caches. No reset/clean/stash/force-push/automatic deletion. Do not access final holdout. Avoid unnecessary GitHub Actions while the next protocol is being designed.
+Reuse exact S0:
+
+```text
+development months  2019-01 / 2019-04 / 2019-07 / 2019-10
+train               earlier dev months + current days 1-14
+validation          current days 15-17
+test                day >=18 exact frozen origins
+history             96 x 15-min bins, aggregate current + validity mask
+seeds               2026091401 / 02 / 03
+optimizer           AdamW 1e-3, wd 1e-4
+batch               256
+max epochs          120
+patience            12
+AMP                 off
+deterministic CUDA  required
+CPU fallback        prohibited
+```
+
+Long-horizon task set is exactly `{60,120,240}`.
+
+Auxiliary weight is frozen at `0.5`; no search.
+
+Early stopping uses **total-load validation MAE only**.
+
+## 7. Decision rule
+
+PASS requires all:
+
+```text
+C vs B long-horizon pooled MAE gain >= 1.0%
+C wins >= 2/3 long horizons
+no horizon degradation > 1.0%
+C wins >= 3/4 months
+C wins >= 2/3 paired seeds
+C seed spread <= 3.0%
+C long pooled beats HGB long pooled
+full five-horizon C hybrid beats HGB pooled
+all folds complete / no test-row removal
+```
+
+Exhaustive decisions:
+
+```text
+PASS_PRIVILEGED_ARRIVAL_SUPERVISION
+MIXED_PRIVILEGED_ARRIVAL_SIGNAL
+STOP_PRIVILEGED_SUPERVISION_ROUTE
+```
+
+If MIXED or STOP, do not tune lambda, add an existing-session auxiliary head, add another backbone or move the 30/60 boundary inside the same protocol.
+
+## 8. Fit ceiling
+
+```text
+Arm B  12 deep fits
+Arm C  12 deep fits
+total  24 deep fits
+```
+
+Station-HGB deterministic replay is allowed only for the frozen anchor when row-level local predictions are needed.
+
+## 9. Novelty boundary
+
+Do not claim novelty for:
+
+```text
+LUPI generally
+multi-task learning generally
+TCN
+hybrid boosting + DL
+decomposition
+residual correction
+existing/future-session split
+```
+
+Candidate contribution, subject to evidence:
+
+> cross-granularity future-arrival supervision: session-resolved future-arrival contribution labels are used only during training to improve a station-level aggregate-only forecaster, with no session information needed at inference.
+
+Targeted literature search has not located an exact match; this is negative search evidence, not proof of priority.
+
+## 10. Execution policy
+
+Next step is implementation of R11-P1. Favor fast local preflight and user-machine execution because the frozen experiment is small and the RTX 5080 run is fast. Do not make every small implementation repair wait for full GitHub CI. Preserve branch/PR/code identity and run a full CI pass when the local candidate is stable enough for archival.
+
+Preserve worktrees/status files; no reset/clean/stash/force-push/automatic deletion. Final holdout remains sealed.

@@ -21,6 +21,7 @@ from evcf.forecasting.r11_s0_contracts import (
 _ZONE = ZoneInfo("America/Los_Angeles")
 _HISTORY_VALUE_SLICE = slice(0, CONTEXT_LENGTH)
 _HISTORY_MASK_SLICE = slice(CONTEXT_LENGTH, 2 * CONTEXT_LENGTH)
+_MAX_HORIZON_SECONDS = max(HORIZONS_MINUTES) * 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +90,15 @@ def _local_datetime(issue_time_utc_s: int, horizon_minutes: int = 0) -> datetime
     ).astimezone(_ZONE)
 
 
+def _month_local_midnight_epoch(month: str, day: int) -> int:
+    try:
+        year_text, month_text = month.split("-")
+        value = datetime(int(year_text), int(month_text), day, tzinfo=_ZONE)
+    except (TypeError, ValueError) as exc:
+        raise R11S0ContractError("INVALID_MONTH_BOUNDARY") from exc
+    return int(value.timestamp())
+
+
 def _cyclic(index: float, period: float) -> tuple[float, float]:
     phase = 2.0 * np.pi * index / period
     return float(np.sin(phase)), float(np.cos(phase))
@@ -130,6 +140,8 @@ def chronological_rows(views: dict[str, MonthStationView], target_month: str) ->
         raise R11S0ContractError("DEVELOPMENT_MONTH_ORDER_INVALID")
     assert_authorized_month(target_month)
     target_position = DEVELOPMENT_MONTHS.index(target_month)
+    train_cutoff = _month_local_midnight_epoch(target_month, 15)
+    validation_cutoff = _month_local_midnight_epoch(target_month, 18)
     train: list[tuple[str, int]] = []
     validation: list[tuple[str, int]] = []
     test: list[tuple[str, int]] = []
@@ -138,19 +150,33 @@ def chronological_rows(views: dict[str, MonthStationView], target_month: str) ->
         view.validate()
         if position > target_position:
             continue
-        for index, issue in enumerate(view.issue_times):
+        for index, issue_value in enumerate(view.issue_times):
+            issue = int(issue_value)
             if position < target_position:
                 train.append((month, index))
                 continue
-            day = _local_datetime(int(issue)).day
+            day = _local_datetime(issue).day
             if day <= 14:
-                train.append((month, index))
+                if issue + _MAX_HORIZON_SECONDS <= train_cutoff:
+                    train.append((month, index))
             elif day <= 17:
-                validation.append((month, index))
+                if issue + _MAX_HORIZON_SECONDS <= validation_cutoff:
+                    validation.append((month, index))
             else:
                 test.append((month, index))
     if not train or not validation or not test:
         raise R11S0ContractError("EMPTY_CHRONOLOGICAL_PARTITION")
+    if any(
+        int(views[month].issue_times[row]) + _MAX_HORIZON_SECONDS > train_cutoff
+        for month, row in train
+        if month == target_month
+    ):
+        raise R11S0ContractError("TRAIN_LABEL_LEAKAGE")
+    if any(
+        int(views[month].issue_times[row]) + _MAX_HORIZON_SECONDS > validation_cutoff
+        for month, row in validation
+    ):
+        raise R11S0ContractError("VALIDATION_LABEL_LEAKAGE")
     return FoldRows(tuple(train), tuple(validation), tuple(test))
 
 
@@ -214,7 +240,8 @@ def _encode_rows(
     for month, row in rows:
         view = views[month]
         values, mask = _raw_history(view, row)
-        standardized = history_standardizer.transform(values)
+        safe_values = np.where(mask == 1.0, values, history_standardizer.mean)
+        standardized = history_standardizer.transform(safe_values)
         standardized[mask == 0.0] = 0.0
         histories.append(np.stack((standardized, mask), axis=1).astype(np.float32))
         issue = int(view.issue_times[row])

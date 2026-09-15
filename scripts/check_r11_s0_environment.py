@@ -5,9 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 
-from evcf.forecasting.acn_jpl_r11_s0_backbone import (
-    R11S0Error,
-    _import_torch,
+from evcf.forecasting.acn_jpl_r11_s0_common import R11S0Error
+from evcf.forecasting.acn_jpl_r11_s0_models import (
+    import_torch,
     parameter_count_report,
     validate_formal_device,
 )
@@ -22,7 +22,7 @@ def main() -> int:
     )
     args = parser.parse_args()
     try:
-        torch = _import_torch()
+        torch = import_torch()
         counts = dict(parameter_count_report(torch))
         result: dict[str, object] = {
             "status": "PASS",

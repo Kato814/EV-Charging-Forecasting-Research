@@ -3,9 +3,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import pytest
-
 import evcf.forecasting.r11_s0_models as models
+import pytest
 from evcf.forecasting.r11_s0_contracts import PARAMETER_BAND
 
 

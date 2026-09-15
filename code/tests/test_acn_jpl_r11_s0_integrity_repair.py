@@ -3,9 +3,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-import pytest
-
 import evcf.forecasting.acn_jpl_r11_s0_backbone as controller
+import pytest
 from evcf.forecasting.acn_jpl_r11_s0_backbone import R11S0Error
 from scripts import run_jpl_r11_s0_backbone as runner
 

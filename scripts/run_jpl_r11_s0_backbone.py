@@ -11,9 +11,11 @@ from pathlib import Path, PurePosixPath
 
 import evcf.forecasting.acn_jpl_r11_s0_backbone as controller
 from evcf.forecasting import acn_jpl_development_experts_compat as expert_compat
+from evcf.forecasting import acn_jpl_r11_s0_determinism_compat as determinism_compat
 from evcf.forecasting.acn_jpl_r11_s0_backbone import R11S0Error
 
 COMPAT_RUNTIME_PATH = "code/src/evcf/forecasting/acn_jpl_development_experts_compat.py"
+DETERMINISM_RUNTIME_PATH = "code/src/evcf/forecasting/acn_jpl_r11_s0_determinism_compat.py"
 
 
 def _failure(reason_code: str) -> dict[str, object]:
@@ -92,15 +94,18 @@ def _portable_verify_r11_s0_implementation_commit(
             raise R11S0Error("IMPLEMENTATION_DRIFT")
 
 
-def _install_development_snapshot_compat() -> None:
-    """Install the accepted order-insensitive frozen-label reader for R11-S0."""
+def _install_runtime_compatibility() -> None:
+    """Install accepted label-reader and deterministic N-HiTS compatibility."""
 
     controller.load_month_data = expert_compat.load_month_data
-    if COMPAT_RUNTIME_PATH not in controller.IMPLEMENTATION_PATHS:
-        controller.IMPLEMENTATION_PATHS = (
-            *controller.IMPLEMENTATION_PATHS,
-            COMPAT_RUNTIME_PATH,
-        )
+    determinism_compat.install_deterministic_nhits_compat()
+    runtime_paths = (COMPAT_RUNTIME_PATH, DETERMINISM_RUNTIME_PATH)
+    for relative in runtime_paths:
+        if relative not in controller.IMPLEMENTATION_PATHS:
+            controller.IMPLEMENTATION_PATHS = (
+                *controller.IMPLEMENTATION_PATHS,
+                relative,
+            )
 
 
 def main() -> int:
@@ -115,7 +120,7 @@ def main() -> int:
         print(json.dumps(_failure("R11_S0_NOT_AUTHORIZED"), sort_keys=True))
         return 2
     try:
-        _install_development_snapshot_compat()
+        _install_runtime_compatibility()
         controller.verify_r11_s0_implementation_commit = (
             _portable_verify_r11_s0_implementation_commit
         )

@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 import numpy as np
-
 from evcf.forecasting.r11_s0_contracts import DEVELOPMENT_MONTHS, HORIZONS_MINUTES
 from evcf.forecasting.r11_s0_training import _aggregate_single_prediction_set
 

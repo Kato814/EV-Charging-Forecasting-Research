@@ -1,0 +1,148 @@
+schema_version: acn-jpl-structured-mechanism-p1-protocol/v1
+protocol_id: JPL_DEVELOPMENT_STRUCTURED_MECHANISM_P1_20260911_V1
+target:
+  name: station_current_mean_a
+  unit: A
+development_months:
+  "2019-01":
+    formal_issue_times: 2836
+    cleaned_session_count: 1372
+    processed_snapshot_sha256: e4f49d92c7c95e8b4bf8069f14729f5262ac58761bccff5fd2fabef8acabda12
+  "2019-04":
+    formal_issue_times: 2552
+    cleaned_session_count: 1524
+    processed_snapshot_sha256: f05e4892f4583c24ffe7d7da54c4cf929bd31714343c906c703b505043ccb299
+  "2019-07":
+    formal_issue_times: 2742
+    cleaned_session_count: 1489
+    processed_snapshot_sha256: 9eea83e13ea6fbe5fef694c5de93b5bc4c4a82f7efe00e90e4fadd6d0b9e9ff2
+  "2019-10":
+    formal_issue_times: 2742
+    cleaned_session_count: 1673
+    processed_snapshot_sha256: e9d321a47a05baee829d2692f9ca491fd9e20563d477e6385fb2296834825296
+final_holdout:
+  months: ["2019-03", "2019-06", "2019-09", "2019-12"]
+  access_allowed: false
+source_identities:
+  source_expert_protocol_sha256: 02c7809f1113aeaf20723030c96006ee0831b20ff219106da7d6968df535d71a
+  source_model_selection_sha256: a43ac609629d0dfa1568ce19d8e51666cbeb8392d96cbe976927f9397f19cb0d
+  baseline_private_manifest_sha256: 2c2ff4f05081b5227f948165a1b7b78eee80430f2c9be590510d0acf8c34f8dd
+  s1_private_manifest_sha256: 562035b678b75865a54c7f68794b5f4907ea9696100c531498720eb943e570f1
+  s1_protocol_sha256: 74af85044d12f3c68fe4156e6ad1ae67b6e5486b47aecd5637cd67d6539c1902
+horizons_minutes: [15, 30, 60, 120, 240]
+rolling_origin:
+  timezone: America/Los_Angeles
+  test_start_local_day: 18
+  refit_frequency: local_midnight_daily
+  use_same_month_history_only: true
+  fit_issue_rule: issue_time_utc_s < refit_cutoff_utc_s
+  fit_label_rule: issue_time_utc_s + horizon_minutes * 60 <= refit_cutoff_utc_s
+  test_rule: all_formal_rows_on_local_test_day
+component_targets:
+  target_window: "[issue+h-15min, issue+h)"
+  positive_contribution_rule: contribution_a > 0
+  existing_rule: connection_time_utc_s <= issue_time_utc_s
+  arrival_rule: connection_time_utc_s > issue_time_utc_s
+  reconstruction_absolute_tolerance_a: 0.000001
+probe_e:
+  predictors:
+    session_fields:
+      - elapsed_connection_s
+      - elapsed_charging_time_proxy_s
+      - current_current_a
+      - recent_current_mean_a
+      - recent_current_peak_a
+      - recent_current_observed_ratio
+      - cumulative_current_ah
+      - cumulative_current_observed_ratio
+      - current_pilot_a
+      - requested_departure_minutes_from_issue
+      - known_kwh_requested
+    calendar_fields: [quarter_hour_index, day_of_week, is_weekend]
+    fixed_missing_indicator_fields:
+      - elapsed_connection_s
+      - elapsed_charging_time_proxy_s
+      - current_current_a
+      - recent_current_mean_a
+      - recent_current_peak_a
+      - recent_current_observed_ratio
+      - cumulative_current_ah
+      - cumulative_current_observed_ratio
+      - current_pilot_a
+      - requested_departure_minutes_from_issue
+      - known_kwh_requested
+  continuation_model:
+    family: logistic_regression
+    penalty: l2
+    C: 1.0
+    solver: lbfgs
+    max_iter: 1000
+    class_weight: null
+  positive_mark_model:
+    family: gamma_regressor
+    alpha: 1.0
+    max_iter: 1000
+probe_a:
+  input_tier: M2
+  count_model:
+    family: poisson_regressor
+    alpha: 1.0
+    max_iter: 1000
+  positive_mark_model:
+    family: gamma_regressor
+    alpha: 1.0
+    max_iter: 1000
+preprocessing:
+  imputer: median
+  keep_empty_features: true
+  scaler: standard
+  fit_on_training_fold_only: true
+  probe_e_raw_dimension: 14
+  probe_e_missing_indicator_count: 11
+  probe_a_raw_dimension: 201
+  probe_a_missing_indicator_count: 3
+degenerate_folds:
+  continuation_one_class: predict_training_class_probability
+  count_all_zero: predict_zero
+  positive_mark_zero_rows: predict_zero
+  positive_mark_one_row: predict_single_training_mark
+prediction:
+  clipping: false
+  calibration: false
+  hyperparameter_search: false
+  reliability_gate: false
+  composition_gate: false
+  formal_survival_hazard: false
+  neural_tpp: false
+  native_thread_limit: 1
+variants:
+  primary: P1-EA
+  attribution_only: [P1-Eonly, P1-Aonly]
+evaluation:
+  primary_metric: MAE
+  secondary_metrics: [RMSE, WAPE]
+  continuation_metrics: [Brier, log_loss, calibration_deciles]
+  arrival_metrics: [count_MAE, mean_poisson_deviance, positive_mark_MAE]
+  common_rows_required: true
+  public_aggregate_only: true
+decision:
+  branch_stable:
+    pooled_component_mae_better_than_s1_branch: true
+    min_horizons_better_than_s1_branch: 3
+    min_months_better_than_s1_branch: 3
+  pass:
+    pooled_mae_better_than_equal: true
+    pooled_mae_better_than_s1: true
+    min_horizons_better_than_equal: 3
+    min_months_better_than_equal: 3
+    max_horizon_mae_degradation_vs_equal_fraction: 0.05
+    require_60min_better_than_equal: true
+  stop:
+    require_no_pooled_component_improvement: true
+    require_primary_not_better_than_equal: true
+    require_primary_not_better_than_s1: true
+publication:
+  aggregate_only: true
+  private_row_predictions_local_only: true
+  model_objects_public: false
+  absolute_paths_public: false

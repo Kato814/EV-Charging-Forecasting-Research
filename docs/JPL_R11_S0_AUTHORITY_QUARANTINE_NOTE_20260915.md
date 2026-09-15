@@ -3,6 +3,8 @@
 Date: 2026-09-15  
 Status: **authority clarification only; no scientific protocol or result changed**.
 
+> Launcher identity was subsequently corrected by `docs/JPL_R11_S0_LAUNCHER_RECOVERY_20260915.md`. The unavailable v1 launcher is retired; formal execution now requires `evcf_r11_s0_launcher_v1_1.py` with SHA-256 `fce2ac327ca13af530faf0d2a70a1443b010218b1b3a0abb8826f5f640d6cc00`.
+
 ## 1. Why this note exists
 
 R11-S0 had already completed its frozen implementation/review/CI path through PR #103 before a second, independently developed R11-S0 implementation path was merged through PR #104.
@@ -21,11 +23,16 @@ reviewed executable       04b4d0ad5d7c09e84841f438725abb4b25b6f91c
 implementation merge      726ffe8f8c7239152e09f056d0c256e0d1f46cf5
 PR                        #103
 final CI workflow run     34930090477
-pinned launcher           evcf_r11_s0_launcher_v1.py
-launcher SHA256           c732aac69e8dee1ca6c7d6e76138a78821f7f491c59bf7ee627fcf8cf534e2f4
 ```
 
-The launcher intentionally checks out the reviewed executable itself in a detached preserved worktree. The current `main` head is **not** the formal executable identity.
+The current authorized launcher is:
+
+```text
+filename                  evcf_r11_s0_launcher_v1_1.py
+SHA256                    fce2ac327ca13af530faf0d2a70a1443b010218b1b3a0abb8826f5f640d6cc00
+```
+
+The launcher checks out the reviewed executable itself in a detached preserved worktree. The current `main` head is **not** the formal executable identity.
 
 ## 3. Quarantined parallel path
 
@@ -74,6 +81,4 @@ Final JPL holdout remains sealed:
 2019-03 / 2019-06 / 2019-09 / 2019-12
 ```
 
-The next authorized scientific action remains one formal local R11-S0 execution using the exact pinned launcher and the PR #103 reviewed executable only.
-
-If the exact launcher file is unavailable locally, do **not** hand-write or substitute another launcher. Recover the exact frozen launcher and verify its SHA-256 before execution.
+The next authorized scientific action remains one formal local R11-S0 execution using the PR #103 reviewed executable through the exact recovered v1.1 launcher only.

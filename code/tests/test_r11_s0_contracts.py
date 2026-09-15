@@ -88,17 +88,27 @@ def test_chronology_uses_full_history_earlier_months_and_current_day_bands():
 def test_current_month_complete_five_horizon_labels_are_required_before_cutoff():
     views = _views()
     july = views["2019-07"]
-    extra_issues = np.asarray(
-        [*_view("2019-07", range(1, 20)).issue_times, _issue("2019-07-14 23:00"), _issue("2019-07-17 23:00")],
-        dtype=np.int64,
-    )
+    issue_values = [
+        *[_issue(f"2019-07-{day:02d} 12:00") for day in range(1, 15)],
+        _issue("2019-07-14 23:00"),
+        *[_issue(f"2019-07-{day:02d} 12:00") for day in range(15, 18)],
+        _issue("2019-07-17 23:00"),
+        *[_issue(f"2019-07-{day:02d} 12:00") for day in range(18, 20)],
+    ]
+    extra_issues = np.asarray(issue_values, dtype=np.int64)
     extra_values = np.vstack([july.m2_values, july.m2_values[-1], july.m2_values[-1]])
     extra_labels = np.vstack([july.labels, july.labels[-1], july.labels[-1]])
     views["2019-07"] = MonthStationView("2019-07", extra_issues, extra_labels, extra_values)
     fold = chronological_rows(views, "2019-07")
-    train_issues = {int(views[month].issue_times[row]) for month, row in fold.train if month == "2019-07"}
+    train_issues = {
+        int(views[month].issue_times[row])
+        for month, row in fold.train
+        if month == "2019-07"
+    }
     validation_issues = {
-        int(views[month].issue_times[row]) for month, row in fold.validation if month == "2019-07"
+        int(views[month].issue_times[row])
+        for month, row in fold.validation
+        if month == "2019-07"
     }
     assert _issue("2019-07-14 23:00") not in train_issues
     assert _issue("2019-07-17 23:00") not in validation_issues

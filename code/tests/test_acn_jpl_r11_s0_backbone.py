@@ -4,13 +4,12 @@ import ast
 from pathlib import Path
 from types import SimpleNamespace
 
-import numpy as np
-import pytest
-
 import evcf.forecasting.acn_jpl_r11_s0_backbone as controller
 import evcf.forecasting.acn_jpl_r11_s0_common as common
 import evcf.forecasting.acn_jpl_r11_s0_data as data_module
 import evcf.forecasting.acn_jpl_r11_s0_models as models
+import numpy as np
+import pytest
 from evcf.forecasting.acn_jpl_gate1_features import canonical_feature_schema
 
 

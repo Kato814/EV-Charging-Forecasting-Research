@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import gzip
+import json
 import subprocess
 from pathlib import Path
 
 import evcf.forecasting.acn_jpl_r11_s0_backbone as controller
 import pytest
+from evcf.forecasting import acn_jpl_development_experts_compat as expert_compat
 from evcf.forecasting.acn_jpl_r11_s0_backbone import R11S0Error
 
 from scripts import run_jpl_r11_s0_backbone as runner
@@ -54,3 +57,29 @@ def test_portable_verifier_rejects_semantic_content_drift(tmp_path, monkeypatch)
 
     with pytest.raises(R11S0Error, match="IMPLEMENTATION_DRIFT"):
         runner._portable_verify_r11_s0_implementation_commit(commit, repo_root=tmp_path)
+
+
+def test_r11_runner_installs_accepted_snapshot_compat(monkeypatch):
+    sentinel = object()
+    monkeypatch.setattr(controller, "load_month_data", sentinel)
+    monkeypatch.setattr(controller, "IMPLEMENTATION_PATHS", ("probe.txt",))
+
+    runner._install_development_snapshot_compat()
+
+    assert controller.load_month_data is expert_compat.load_month_data
+    assert controller.IMPLEMENTATION_PATHS == ("probe.txt", runner.COMPAT_RUNTIME_PATH)
+
+
+def test_accepted_label_reader_handles_sorted_json_horizon_keys(tmp_path):
+    item = {
+        "issue_index": 0,
+        "issue_time_utc_s": 1_546_300_800,
+        "labels": {"15": 1.0, "30": 2.0, "60": 3.0, "120": 4.0, "240": 5.0},
+    }
+    with gzip.open(tmp_path / "labels.jsonl.gz", "wt", encoding="utf-8", newline="") as handle:
+        handle.write(json.dumps(item, sort_keys=True, separators=(",", ":")) + "\n")
+
+    issue_times, labels = expert_compat._load_labels_order_insensitive(tmp_path, row_count=1)
+
+    assert issue_times.tolist() == [1_546_300_800]
+    assert labels.tolist() == [[1.0, 2.0, 3.0, 4.0, 5.0]]

@@ -6,6 +6,7 @@ this module without requiring the formal R11 environment.
 
 from __future__ import annotations
 
+import importlib
 from typing import Any, Callable
 
 from evcf.forecasting.r11_s0_contracts import (
@@ -22,8 +23,8 @@ ModelFactory = Callable[[], Any]
 
 def _torch_modules() -> tuple[Any, Any]:
     try:
-        import torch
-        import torch.nn as nn
+        torch = importlib.import_module("torch")
+        nn = importlib.import_module("torch.nn")
     except ImportError as exc:  # pragma: no cover - environment-specific
         raise R11S0ContractError("TORCH_UNAVAILABLE") from exc
     return torch, nn

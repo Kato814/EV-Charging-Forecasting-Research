@@ -5,7 +5,6 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 import pytest
-
 from evcf.forecasting.r11_s0_contracts import (
     CONTEXT_LENGTH,
     EXPECTED_TEST_ORIGINS,

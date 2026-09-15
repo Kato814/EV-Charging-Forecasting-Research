@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import subprocess
 import time
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 from threadpoolctl import threadpool_limits
@@ -38,10 +39,12 @@ from evcf.forecasting.acn_jpl_r11_s0_data import (
 )
 from evcf.forecasting.acn_jpl_r11_s0_models import (
     FoldPrediction,
-    import_torch as _import_torch,
     parameter_count_report,
     train_deep_fold,
     validate_formal_device,
+)
+from evcf.forecasting.acn_jpl_r11_s0_models import (
+    import_torch as _import_torch,
 )
 
 IMPLEMENTATION_PATHS = (
@@ -133,7 +136,7 @@ def predict_station_hgb_fold(
             with threadpool_limits(limits=1):
                 estimator.fit(x_train, fold.train_labels[:, position])
                 values = np.asarray(estimator.predict(x_test), dtype=np.float64)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise R11S0Error("HGB_FIT_FAILED") from exc
         if values.shape != (len(x_test),) or not np.isfinite(values).all():
             raise R11S0Error("HGB_OUTPUT_INVALID")
@@ -158,7 +161,7 @@ def _metric(y: np.ndarray, pred: np.ndarray) -> dict[str, Any]:
     absolute = np.abs(error)
     denominator = float(np.sum(np.abs(y)))
     return {
-        "n": int(len(y)),
+        "n": len(y),
         "mae_a": float(np.mean(absolute)),
         "rmse_a": float(np.sqrt(np.mean(np.square(error)))),
         "wape_ratio": None if denominator <= 0 else float(np.sum(absolute) / denominator),

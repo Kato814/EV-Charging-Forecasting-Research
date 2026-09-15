@@ -1,8 +1,8 @@
 # 当前状态｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-15。当前入口为本文件与 [HANDOFF](HANDOFF.md)。R10-R0 正式结果见 [R10-R0 outcome](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_OUTCOME_20260914.md)，论文可行性判断见 [Post-R10 paper-viability synthesis](docs/JPL_POST_R10_PAPER_VIABILITY_NOVELTY_SYNTHESIS_20260914.md)，R11 算法方向见 [R11 direction screening](docs/JPL_R11_STATION_LEVEL_DEEP_METHOD_SCREENING_20260914.md)，冻结协议见 [R11-S0 protocol](docs/JPL_R11_S0_STATION_LEVEL_DEEP_BACKBONE_SCREENING_PROTOCOL_20260914.md)，实现交接见 [R11-S0 implementation handoff](docs/JPL_R11_S0_IMPLEMENTATION_HANDOFF_20260915.md)。
+更新：2026-09-15。当前入口为本文件与 [HANDOFF](HANDOFF.md)。R10-R0 正式结果见 [R10-R0 outcome](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_OUTCOME_20260914.md)，论文可行性判断见 [Post-R10 paper-viability synthesis](docs/JPL_POST_R10_PAPER_VIABILITY_NOVELTY_SYNTHESIS_20260914.md)，R11 算法方向见 [R11 direction screening](docs/JPL_R11_STATION_LEVEL_DEEP_METHOD_SCREENING_20260914.md)，冻结协议见 [R11-S0 protocol](docs/JPL_R11_S0_STATION_LEVEL_DEEP_BACKBONE_SCREENING_PROTOCOL_20260914.md)，实现交接见 [R11-S0 implementation handoff](docs/JPL_R11_S0_IMPLEMENTATION_HANDOFF_20260915.md)，并必须同时遵守 [R11-S0 authority/quarantine note](docs/JPL_R11_S0_AUTHORITY_QUARANTINE_NOTE_20260915.md)。
 
-**S1=`MIXED_STRUCTURED_SIGNAL`；P1/R1/R2/R3-C0 已关闭；R4-I0=`MIXED_STATE_ALIASING_SIGNAL`；R5=`STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE`；R6-O0=`MIXED_COMPONENT_ORACLE_SIGNAL`；R7-C0=`PASS_DEPARTURE_STATE_ARRIVAL_SIGNAL`；R7-D1=`TIMING_DISTRIBUTION_INCREMENTAL_SIGNAL`；R8-C0=`NO_STABLE_HORIZON_ALIGNED_ADVANTAGE`；R9-C0=`STOP_DEPARTURE_REPRESENTATION_REFINEMENT`；R10-R0=`MIXED_DEVELOPMENT_ROBUSTNESS`, COMPLETE。R11-S0 protocol / implementation / review / CI / pinned launcher 已冻结，正式 68-fit 本机运行尚未执行。final holdout 2019-03/06/09/12 继续封存。**
+**S1=`MIXED_STRUCTURED_SIGNAL`；P1/R1/R2/R3-C0 已关闭；R4-I0=`MIXED_STATE_ALIASING_SIGNAL`；R5=`STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE`；R6-O0=`MIXED_COMPONENT_ORACLE_SIGNAL`；R7-C0=`PASS_DEPARTURE_STATE_ARRIVAL_SIGNAL`；R7-D1=`TIMING_DISTRIBUTION_INCREMENTAL_SIGNAL`；R8-C0=`NO_STABLE_HORIZON_ALIGNED_ADVANTAGE`；R9-C0=`STOP_DEPARTURE_REPRESENTATION_REFINEMENT`；R10-R0=`MIXED_DEVELOPMENT_ROBUSTNESS`, COMPLETE。R11-S0 protocol / authoritative implementation / review / CI / pinned launcher 已冻结，正式 68-fit 本机运行尚未执行。PR #104 为后合并的平行实现，已隔离为 non-authoritative，不得用于正式运行。final holdout 2019-03/06/09/12 继续封存。**
 
 ## 1. Closed R7 line
 
@@ -97,7 +97,7 @@ Formal fit ceiling：
 48 deep fits + 20 Station-HGB fits = 68 fits
 ```
 
-## 5. R11-S0 implementation identity
+## 5. Sole authoritative R11-S0 implementation identity
 
 ```text
 protocol freeze commit    9dfeb7b1b99d7e99de1b653473742b6c5148be04
@@ -119,7 +119,20 @@ PatchTST   76,737
 
 全部位于 frozen `50k–250k` 参数带内，因此未发生 width correction。
 
-## 6. Pinned launcher
+## 6. Parallel implementation quarantine
+
+A second R11-S0 implementation was later merged through:
+
+```text
+PR #104 head    6688f9c631b9f03a8f1a995bab913141cedf9905
+merge to main   2433e76b0d1ab3f1d1bfa8feb2cae42bd782ae57
+```
+
+This parallel path is **non-authoritative for scientific execution**. Its unprefixed `r11_s0_*` modules/scripts must not be used for the formal R11-S0 run and must not alter the frozen model counts, status schema, thresholds, chronology, features, reviewed executable or launcher identity above. It is preserved as historical implementation evidence; do not reset/force-push/delete it to hide the collision.
+
+Formal R11-S0 must use reviewed executable `04b4d0ad5d7c09e84841f438725abb4b25b6f91c` through the exact pinned launcher below. The current `main` head is not the formal executable identity.
+
+## 7. Pinned launcher
 
 External pinned launcher：
 
@@ -141,7 +154,9 @@ CUBLAS_WORKSPACE_CONFIG=:4096:8
 
 launcher 会先 preflight，只有 PASS 后才进入任何 fit；无 CPU fallback。它固定 reviewed executable、protocol/config blob、merge ancestry，并在 detached preserved worktree 中运行，不自动清理。
 
-## 7. Frozen R11-S0 decision
+If the exact launcher is not available locally, do not create or run a substitute. Recover the exact frozen file and verify the SHA-256 first.
+
+## 8. Frozen R11-S0 decision
 
 Deep candidate 进入 R11-M1 的 eligibility：
 
@@ -163,7 +178,7 @@ STOP_DEEP_CORE_ROUTE
 
 若多个 eligible，按 pooled median MAE 最低选择；top-2 差异 `<0.25%` 时选参数更少者。不得看结果后添加第五模型、额外 seed、Mamba/SSM、ensemble、clipping 或 calibration。
 
-## 8. Current execution state
+## 9. Current execution state
 
 ```text
 R11-S0 formal run        NOT RUN
@@ -174,9 +189,16 @@ session predictors used  false
 
 实现、shape preflight、code review 与 CI 均没有进行 JPL real-label R11-S0 fitting。
 
-## 9. Immediate next action
+## 10. Immediate next action
 
-**现在唯一授权的下一步是用户本机使用 pinned launcher 执行一次正式 R11-S0。**
+**现在唯一授权的下一步是用户本机使用 exact pinned launcher 执行一次正式 R11-S0。**
+
+Before execution, verify the local file is exactly:
+
+```text
+evcf_r11_s0_launcher_v1.py
+SHA256 = c732aac69e8dee1ca6c7d6e76138a78821f7f491c59bf7ee627fcf8cf534e2f4
+```
 
 launcher 完成后，无论 `COMPLETE` 还是 `INCOMPLETE`，只上传最新：
 

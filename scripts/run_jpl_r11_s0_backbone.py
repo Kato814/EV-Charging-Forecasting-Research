@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -23,6 +24,14 @@ def _failure(reason_code: str) -> dict[str, object]:
         "prediction_calibration": False,
         "model_ensemble": False,
     }
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _progress(message: str) -> None:
@@ -48,13 +57,32 @@ def main() -> int:
             code_commit=args.code_commit,
             progress=_progress,
         )
+        public = result.to_public_dict()
+        public.update(
+            {
+                "code_commit": args.code_commit,
+                "r11_protocol_sha256": _sha256(
+                    args.repo_root
+                    / "docs/JPL_R11_S0_STATION_LEVEL_DEEP_BACKBONE_SCREENING_PROTOCOL_20260914.md"
+                ),
+                "source_expert_protocol_sha256": _sha256(
+                    args.repo_root / "code/configs/acn_jpl_development_experts_2019.yaml"
+                ),
+                "model_fit_attempted": True,
+                "hyperparameter_search": False,
+                "prediction_clipping": False,
+                "prediction_calibration": False,
+                "model_ensemble": False,
+                "development_data_written": False,
+            }
+        )
     except R11S0Error as exc:
         print(json.dumps(_failure(exc.reason_code), sort_keys=True))
         return 2
     except (OSError, TypeError, ValueError, RuntimeError, FloatingPointError):
         print(json.dumps(_failure("UNEXPECTED_ERROR"), sort_keys=True))
         return 2
-    print(json.dumps(result.to_public_dict(), sort_keys=True, separators=(",", ":")))
+    print(json.dumps(public, sort_keys=True, separators=(",", ":")))
     return 0
 
 

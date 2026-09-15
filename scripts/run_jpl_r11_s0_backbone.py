@@ -5,10 +5,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
-from evcf.forecasting.acn_jpl_r11_s0_backbone import R11S0Error, run_r11_s0
+import evcf.forecasting.acn_jpl_r11_s0_backbone as controller
+from evcf.forecasting.acn_jpl_r11_s0_backbone import R11S0Error
 
 
 def _failure(reason_code: str) -> dict[str, object]:
@@ -38,6 +40,55 @@ def _progress(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
 
 
+def _portable_verify_r11_s0_implementation_commit(
+    code_commit: str, *, repo_root: str | Path
+) -> None:
+    """Verify frozen Git content without raw working-tree byte assumptions.
+
+    Git checkout filters may normalize text bytes without changing tracked
+    content. The formal identity check therefore requires exact HEAD identity
+    plus a clean Git diff for every authoritative runtime path.
+    """
+
+    if not isinstance(code_commit, str) or len(code_commit) != 40:
+        raise R11S0Error("IMPLEMENTATION_DRIFT")
+    root = Path(repo_root).resolve(strict=True)
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if head.returncode != 0 or head.stdout.strip() != code_commit:
+        raise R11S0Error("IMPLEMENTATION_DRIFT")
+    for relative in controller.IMPLEMENTATION_PATHS:
+        path = root / PurePosixPath(relative)
+        if not path.is_file() or path.is_symlink():
+            raise R11S0Error("IMPLEMENTATION_DRIFT")
+        exists = subprocess.run(
+            ["git", "cat-file", "-e", f"{code_commit}:{relative}"],
+            cwd=root,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if exists.returncode != 0:
+            raise R11S0Error("IMPLEMENTATION_DRIFT")
+        clean = subprocess.run(
+            ["git", "diff", "--quiet", "--no-ext-diff", code_commit, "--", relative],
+            cwd=root,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if clean.returncode != 0:
+            raise R11S0Error("IMPLEMENTATION_DRIFT")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", type=Path, required=True)
@@ -50,7 +101,10 @@ def main() -> int:
         print(json.dumps(_failure("R11_S0_NOT_AUTHORIZED"), sort_keys=True))
         return 2
     try:
-        result = run_r11_s0(
+        controller.verify_r11_s0_implementation_commit = (
+            _portable_verify_r11_s0_implementation_commit
+        )
+        result = controller.run_r11_s0(
             repo_root=args.repo_root,
             interim_root=args.interim_root,
             processed_root=args.processed_root,

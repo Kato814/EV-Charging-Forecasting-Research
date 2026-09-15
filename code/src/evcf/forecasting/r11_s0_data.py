@@ -22,6 +22,7 @@ _ZONE = ZoneInfo("America/Los_Angeles")
 _HISTORY_VALUE_SLICE = slice(0, CONTEXT_LENGTH)
 _HISTORY_MASK_SLICE = slice(CONTEXT_LENGTH, 2 * CONTEXT_LENGTH)
 _MAX_HORIZON_SECONDS = max(HORIZONS_MINUTES) * 60
+_HISTORY_SECONDS = CONTEXT_LENGTH * 15 * 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +100,11 @@ def _month_local_midnight_epoch(month: str, day: int) -> int:
     return int(value.timestamp())
 
 
+def _has_full_month_history(month: str, issue_time_utc_s: int) -> bool:
+    month_start = _month_local_midnight_epoch(month, 1)
+    return int(issue_time_utc_s) - _HISTORY_SECONDS >= month_start
+
+
 def _cyclic(index: float, period: float) -> tuple[float, float]:
     phase = 2.0 * np.pi * index / period
     return float(np.sin(phase)), float(np.cos(phase))
@@ -152,17 +158,21 @@ def chronological_rows(views: dict[str, MonthStationView], target_month: str) ->
             continue
         for index, issue_value in enumerate(view.issue_times):
             issue = int(issue_value)
+            has_history = _has_full_month_history(month, issue)
             if position < target_position:
-                train.append((month, index))
+                if has_history:
+                    train.append((month, index))
                 continue
             day = _local_datetime(issue).day
             if day <= 14:
-                if issue + _MAX_HORIZON_SECONDS <= train_cutoff:
+                if has_history and issue + _MAX_HORIZON_SECONDS <= train_cutoff:
                     train.append((month, index))
             elif day <= 17:
-                if issue + _MAX_HORIZON_SECONDS <= validation_cutoff:
+                if has_history and issue + _MAX_HORIZON_SECONDS <= validation_cutoff:
                     validation.append((month, index))
             else:
+                if not has_history:
+                    raise R11S0ContractError("FORMAL_TEST_HISTORY_UNAVAILABLE")
                 test.append((month, index))
     if not train or not validation or not test:
         raise R11S0ContractError("EMPTY_CHRONOLOGICAL_PARTITION")

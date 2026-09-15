@@ -1,6 +1,6 @@
 # 主控交付说明｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-15。接管时先读 [CURRENT_STATUS](CURRENT_STATUS.md)、[R10-R0 outcome](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_OUTCOME_20260914.md)、[Post-R10 paper-viability synthesis](docs/JPL_POST_R10_PAPER_VIABILITY_NOVELTY_SYNTHESIS_20260914.md)、[R11 direction screening](docs/JPL_R11_STATION_LEVEL_DEEP_METHOD_SCREENING_20260914.md)、[R11-S0 protocol](docs/JPL_R11_S0_STATION_LEVEL_DEEP_BACKBONE_SCREENING_PROTOCOL_20260914.md)、[R11-S0 implementation handoff](docs/JPL_R11_S0_IMPLEMENTATION_HANDOFF_20260915.md) 和 [R11-S0 authority/quarantine note](docs/JPL_R11_S0_AUTHORITY_QUARANTINE_NOTE_20260915.md)。
+更新：2026-09-15。接管时先读 [CURRENT_STATUS](CURRENT_STATUS.md)、[R10-R0 outcome](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_OUTCOME_20260914.md)、[Post-R10 paper-viability synthesis](docs/JPL_POST_R10_PAPER_VIABILITY_NOVELTY_SYNTHESIS_20260914.md)、[R11 direction screening](docs/JPL_R11_STATION_LEVEL_DEEP_METHOD_SCREENING_20260914.md)、[R11-S0 protocol](docs/JPL_R11_S0_STATION_LEVEL_DEEP_BACKBONE_SCREENING_PROTOCOL_20260914.md)、[R11-S0 implementation handoff](docs/JPL_R11_S0_IMPLEMENTATION_HANDOFF_20260915.md)、[R11-S0 authority/quarantine note](docs/JPL_R11_S0_AUTHORITY_QUARANTINE_NOTE_20260915.md) 和最新 [R11-S0 launcher recovery/refreeze](docs/JPL_R11_S0_LAUNCHER_RECOVERY_20260915.md)。
 
 ## 1. Frozen scientific state
 
@@ -23,7 +23,8 @@ Post-R10 paper viability = CONDITIONAL_MECHANISM_PAPER_VIABILITY
 R11 direction = portable station-level deep method
 R11-S0 protocol = FROZEN
 R11-S0 authoritative implementation = REVIEWED / MERGED / CI PASS
-R11-S0 pinned launcher = FROZEN
+R11-S0 launcher v1 = RETIRED_MISSING_ARTIFACT
+R11-S0 launcher v1.1 = FROZEN / RECOVERABLE
 R11-S0 formal run = NOT RUN
 ```
 
@@ -166,8 +167,6 @@ PatchTST   76,737
 
 No width correction was required.
 
-The implementation extracts only the exact frozen history/current-mask fields from the canonical development artifacts, checks causality and frozen test identity, and reports aggregate-only results.
-
 ## 8. Parallel implementation quarantine
 
 PR #104 was merged after the authoritative PR #103 line had already been frozen:
@@ -179,9 +178,9 @@ merge to main   2433e76b0d1ab3f1d1bfa8feb2cae42bd782ae57
 
 Treat PR #104 as a **parallel non-authoritative implementation artifact**. Its unprefixed `r11_s0_*` modules, tests and scripts must not be used for the formal run, mixed with PR #103, or used to revise any frozen scientific choice. Keep the historical code/evidence; do not reset, force-push or delete it merely to erase the collision.
 
-The current `main` head is therefore not the formal executable identity. The only formal code identity remains reviewed executable `04b4d0ad5d7c09e84841f438725abb4b25b6f91c`, as checked out by the exact pinned launcher.
+The current `main` head is not the formal executable identity. The only formal code identity remains reviewed executable `04b4d0ad5d7c09e84841f438725abb4b25b6f91c`.
 
-## 9. Formal environment and pinned launcher
+## 9. Formal environment and recovered launcher
 
 Formal environment:
 
@@ -195,16 +194,17 @@ no CPU fallback
 CUBLAS_WORKSPACE_CONFIG=:4096:8
 ```
 
-Pinned external launcher:
+The old documented `evcf_r11_s0_launcher_v1.py` was found to be unavailable and not verifiably delivered. Since no R11-S0 fit had started, it was retired before any result was observed. This does not change the scientific protocol.
+
+Only this recovered launcher is authorized:
 
 ```text
-filename  evcf_r11_s0_launcher_v1.py
-SHA256    c732aac69e8dee1ca6c7d6e76138a78821f7f491c59bf7ee627fcf8cf534e2f4
+filename  evcf_r11_s0_launcher_v1_1.py
+SHA256    fce2ac327ca13af530faf0d2a70a1443b010218b1b3a0abb8826f5f640d6cc00
+schema    evcf-r11-s0-launcher/v1.1
 ```
 
-The launcher is external, not committed into the repository. It verifies reviewed commit, protocol/config Git blobs and merge ancestry; creates/reuses a preserved detached worktree; sets the deterministic CUDA workspace configuration before PyTorch starts; runs environment preflight; then invokes the reviewed formal runner only if preflight passes.
-
-If this exact file is unavailable locally, do not hand-write, regenerate, or substitute a different launcher. Recover the exact frozen launcher and verify the SHA-256 first.
+v1.1 verifies/fetches the PR #103 reviewed executable, checks frozen protocol/config Git blobs and implementation-merge ancestry, creates/reuses a preserved detached reviewed worktree, verifies the exact four development processed-manifest identities and absence of final-holdout paths, sets deterministic CUDA configuration, runs the formal PR #103 environment preflight, and only then invokes the formal PR #103 runner. It performs no automatic cleanup.
 
 ## 10. Frozen R11-S0 decisions
 
@@ -237,14 +237,14 @@ final holdout accessed  false
 session predictors used false
 ```
 
-No R11-S0 JPL real-label fit was performed during implementation, review or CI.
+No R11-S0 JPL real-label fit was performed during implementation, review, CI, launcher recovery, or documentation updates.
 
 ## 12. Next action
 
-Run the exact pinned R11-S0 external launcher **once** on the user machine, but only after its SHA-256 is verified as:
+Run the exact v1.1 R11-S0 launcher **once** on the user machine, but only after its SHA-256 is verified as:
 
 ```text
-c732aac69e8dee1ca6c7d6e76138a78821f7f491c59bf7ee627fcf8cf534e2f4
+fce2ac327ca13af530faf0d2a70a1443b010218b1b3a0abb8826f5f640d6cc00
 ```
 
 After it exits, upload only the newest:

@@ -1,8 +1,8 @@
 # 当前状态｜JPL/ACN 充电站结构化负荷预测研究
 
-更新：2026-09-15。当前入口为本文件与 [HANDOFF](HANDOFF.md)。R10-R0 正式结果见 [R10-R0 outcome](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_OUTCOME_20260914.md)，论文可行性判断见 [Post-R10 paper-viability synthesis](docs/JPL_POST_R10_PAPER_VIABILITY_NOVELTY_SYNTHESIS_20260914.md)，R11 算法方向见 [R11 direction screening](docs/JPL_R11_STATION_LEVEL_DEEP_METHOD_SCREENING_20260914.md)，冻结协议见 [R11-S0 protocol](docs/JPL_R11_S0_STATION_LEVEL_DEEP_BACKBONE_SCREENING_PROTOCOL_20260914.md)，实现交接见 [R11-S0 implementation handoff](docs/JPL_R11_S0_IMPLEMENTATION_HANDOFF_20260915.md)，并必须同时遵守 [R11-S0 authority/quarantine note](docs/JPL_R11_S0_AUTHORITY_QUARANTINE_NOTE_20260915.md) 与最新 [R11-S0 launcher recovery/refreeze](docs/JPL_R11_S0_LAUNCHER_RECOVERY_20260915.md)。
+更新：2026-09-15。当前入口为本文件与 [HANDOFF](HANDOFF.md)。R10-R0 正式结果见 [R10-R0 outcome](docs/JPL_R10_R0_R7_ROBUSTNESS_HOLDOUT_READINESS_OUTCOME_20260914.md)，论文可行性判断见 [Post-R10 paper-viability synthesis](docs/JPL_POST_R10_PAPER_VIABILITY_NOVELTY_SYNTHESIS_20260914.md)，R11 算法方向见 [R11 direction screening](docs/JPL_R11_STATION_LEVEL_DEEP_METHOD_SCREENING_20260914.md)，冻结协议见 [R11-S0 protocol](docs/JPL_R11_S0_STATION_LEVEL_DEEP_BACKBONE_SCREENING_PROTOCOL_20260914.md)，原实现交接见 [R11-S0 implementation handoff](docs/JPL_R11_S0_IMPLEMENTATION_HANDOFF_20260915.md)，平行实现边界见 [authority/quarantine note](docs/JPL_R11_S0_AUTHORITY_QUARANTINE_NOTE_20260915.md)，第一次正式尝试及修复见 [pre-fit integrity repair](docs/JPL_R11_S0_PREFIT_INTEGRITY_REPAIR_20260915.md)。
 
-**S1=`MIXED_STRUCTURED_SIGNAL`；P1/R1/R2/R3-C0 已关闭；R4-I0=`MIXED_STATE_ALIASING_SIGNAL`；R5=`STOP_FUTURE_TRANSITION_GEOMETRY_ROUTE`；R6-O0=`MIXED_COMPONENT_ORACLE_SIGNAL`；R7-C0=`PASS_DEPARTURE_STATE_ARRIVAL_SIGNAL`；R7-D1=`TIMING_DISTRIBUTION_INCREMENTAL_SIGNAL`；R8-C0=`NO_STABLE_HORIZON_ALIGNED_ADVANTAGE`；R9-C0=`STOP_DEPARTURE_REPRESENTATION_REFINEMENT`；R10-R0=`MIXED_DEVELOPMENT_ROBUSTNESS`, COMPLETE。R11-S0 protocol / authoritative implementation / review / CI 已冻结；原先记录但未实际交付的 launcher v1 已退役，新冻结且可恢复的 launcher 为 v1.1；正式 68-fit 本机运行尚未执行。PR #104 为后合并的平行实现，已隔离为 non-authoritative，不得用于正式运行。final holdout 2019-03/06/09/12 继续封存。**
+**R10-R0=`MIXED_DEVELOPMENT_ROBUSTNESS`, COMPLETE。R11-S0 科学协议不变。第一次 formal attempt 在任何 fit 完成前因 `IMPLEMENTATION_DRIFT` fail-closed；本机 RTX 5080 / PyTorch 2.14.0+cu132 / CUDA 13.2 preflight PASS；`fit_count=0`、holdout=false。窄修复 PR #105 已通过完整 CI 并冻结；当前唯一授权执行身份为 repaired executable + launcher v1.2。PR #104 仍为 non-authoritative 平行实现。final holdout 2019-03/06/09/12 继续封存。**
 
 ## 1. Closed R7 line
 
@@ -17,7 +17,7 @@ vs S1              +0.5576% improvement
 vs Equal           +1.6662% improvement
 ```
 
-R9 已永久关闭进一步 departure-representation refinement；R10 不改变该结论，也不授权 final holdout。
+R9 已永久关闭 further departure-representation refinement；R10 不改变该结论，也不授权 final holdout。
 
 ## 2. R10-R0 frozen result
 
@@ -37,7 +37,7 @@ R10 的 READY 唯一失败项是 local-day win rate vs S1：`26/55 = 47.27% < 50
 
 ## 3. R11 research objective
 
-当前主线是 **portable station-level deep forecasting**。最低部署输入合同为：
+当前主线是 **portable station-level deep forecasting**。最低部署输入合同：
 
 ```text
 required at inference
@@ -52,11 +52,11 @@ not required at inference
 - realized future sessions
 ```
 
-选定的后续科学假设仍是：
+后续科学假设仍是：
 
 > **station-level multi-horizon core + session-resolved training-only auxiliary supervision**。
 
-R11-S0 只负责选择稳定的 station-level backbone；真正的 privileged-supervision 假设将在后续 R11-M1 中单独预注册验证。
+R11-S0 只负责选择稳定 station-level backbone；真正 privileged-supervision 假设将在 R11-M1 单独预注册验证。
 
 ## 4. R11-S0 frozen protocol
 
@@ -97,15 +97,15 @@ Formal fit ceiling：
 48 deep fits + 20 Station-HGB fits = 68 fits
 ```
 
-## 5. Sole authoritative R11-S0 implementation identity
+## 5. Original authoritative implementation and first failed attempt
+
+Original reviewed implementation：
 
 ```text
 protocol freeze commit    9dfeb7b1b99d7e99de1b653473742b6c5148be04
 reviewed executable       04b4d0ad5d7c09e84841f438725abb4b25b6f91c
 implementation merge      726ffe8f8c7239152e09f056d0c256e0d1f46cf5
 PR                        #103
-final CI workflow run     34930090477
-final CI                  pytest PASS / compileall PASS / Ruff PASS
 ```
 
 Shape-only parameter counts：
@@ -117,31 +117,51 @@ N-HiTS    116,133
 PatchTST   76,737
 ```
 
-全部位于 frozen `50k–250k` 参数带内，因此未发生 width correction。
+First formal attempt with launcher v1.1：
 
-## 6. Parallel implementation quarantine
+```text
+status file       evcf_r11_s0_status_20260915T061213Z.json
+status SHA256     f29049799cf1536b514d0b20464b30d057224204a6151428fbed437ddd40cd1e
+status            INCOMPLETE
+reason            IMPLEMENTATION_DRIFT
+fit_count         0
+holdout accessed  false
+GPU preflight     PASS
+```
 
-A second R11-S0 implementation was later merged through:
+Root cause was raw-byte implementation identity checking across Git text normalization, not model/data/result failure. No completed fit occurred, so no R11-S0 performance result was observed.
+
+## 6. Frozen pre-fit integrity repair
+
+Only the implementation identity verifier was repaired. Scientific protocol is unchanged.
+
+```text
+repair PR                    #105
+reviewed repaired executable 2107795e817bb8f2b490b98ed78f663f685306c8
+repair implementation merge  384ff65f36c78bcc3cb89aed9e08ade1b5f12260
+final repair CI run           34940555171
+final repair CI               1264 passed, 4 skipped; compileall PASS; Ruff PASS
+```
+
+The repaired verifier requires exact HEAD identity plus Git-normalized clean diffs for every authoritative runtime path. Regression tests confirm CRLF/LF normalization is accepted while semantic content drift still fails closed.
+
+## 7. Parallel implementation quarantine
+
+A second R11-S0 implementation was previously merged through：
 
 ```text
 PR #104 head    6688f9c631b9f03a8f1a995bab913141cedf9905
 merge to main   2433e76b0d1ab3f1d1bfa8feb2cae42bd782ae57
 ```
 
-This parallel path is **non-authoritative for scientific execution**. Its unprefixed `r11_s0_*` modules/scripts must not be used for the formal R11-S0 run and must not alter the frozen model counts, status schema, thresholds, chronology, features, reviewed executable or launcher identity above. It is preserved as historical implementation evidence；do not reset/force-push/delete it to hide the collision。
+This path remains **non-authoritative for scientific execution**. Its unprefixed `r11_s0_*` modules/scripts must not be mixed with the repaired PR #105 execution line. Historical evidence is preserved；no reset/force-push/deletion。
 
-Formal R11-S0 must use reviewed executable `04b4d0ad5d7c09e84841f438725abb4b25b6f91c`。
-
-## 7. Recovered pinned launcher v1.1
-
-The previously documented `evcf_r11_s0_launcher_v1.py` could not be recovered and had not been verified as actually delivered before its hash was recorded. Because formal R11-S0 had not started, that missing execution artifact was retired before any model result was observed. The scientific protocol and reviewed executable did not change.
-
-The only currently authorized launcher is:
+## 8. Sole authorized replacement launcher v1.2
 
 ```text
-filename  evcf_r11_s0_launcher_v1_1.py
-SHA256    fce2ac327ca13af530faf0d2a70a1443b010218b1b3a0abb8826f5f640d6cc00
-schema    evcf-r11-s0-launcher/v1.1
+filename  evcf_r11_s0_launcher_v1_2.py
+SHA256    c990a5dced70a75ac5c5b48615363fdb0e694fc19902d8c58ef13a573f2e7724
+schema    evcf-r11-s0-launcher/v1.2
 ```
 
 Formal preflight remains：
@@ -155,11 +175,11 @@ float32 only
 CUBLAS_WORKSPACE_CONFIG=:4096:8
 ```
 
-v1.1 verifies the authoritative PR #103 reviewed commit, implementation-merge ancestry, frozen R11-S0/source-protocol Git blobs, four development processed-manifest SHA-256 identities, the absence of final-holdout month paths, preserved worktree state, and the authoritative PR #103 environment preflight before starting any fit. No CPU fallback and no automatic cleanup are allowed.
+v1.2 checks out repaired executable `2107795e817bb8f2b490b98ed78f663f685306c8` in a detached preserved worktree, verifies repair-merge ancestry, frozen protocol/config Git blobs, development manifest identities, holdout absence and environment before fitting. No CPU fallback or automatic cleanup。
 
-## 8. Frozen R11-S0 decision
+## 9. Frozen R11-S0 decision
 
-Deep candidate 进入 R11-M1 的 eligibility：
+Deep candidate eligibility：
 
 ```text
 pooled median MAE <= 1.02 * Station-HGB
@@ -169,7 +189,7 @@ pooled seed spread        <= 3%
 all four folds complete
 ```
 
-三类 exhaustive result：
+Exhaustive outcomes：
 
 ```text
 SELECT_STATION_BACKBONE
@@ -177,36 +197,36 @@ MIXED_STATION_BACKBONE
 STOP_DEEP_CORE_ROUTE
 ```
 
-若多个 eligible，按 pooled median MAE 最低选择；top-2 差异 `<0.25%` 时选参数更少者。不得看结果后添加第五模型、额外 seed、Mamba/SSM、ensemble、clipping 或 calibration。
+若多个 eligible，按 pooled median MAE 最低选择；top-2 差异 `<0.25%` 时选参数更少者。不得结果后添加第五模型、额外 seed、Mamba/SSM、ensemble、clipping 或 calibration。
 
-## 9. Current execution state
-
-```text
-R11-S0 formal run        NOT RUN
-R11-S0 formal fit_count  0
-final holdout accessed   false
-session predictors used  false
-```
-
-实现、shape preflight、code review 与 CI 均没有进行 JPL real-label R11-S0 fitting。
-
-## 10. Immediate next action
-
-**现在唯一授权的下一步是用户本机使用 exact v1.1 launcher 执行一次正式 R11-S0。**
-
-Before execution, verify：
+## 10. Current execution state
 
 ```text
-evcf_r11_s0_launcher_v1_1.py
-SHA256 = fce2ac327ca13af530faf0d2a70a1443b010218b1b3a0abb8826f5f640d6cc00
+first formal attempt          INCOMPLETE pre-fit
+completed R11-S0 fits         0
+scientific R11-S0 result      NONE
+replacement formal run        NOT RUN
+final holdout accessed        false
+session predictors used       false
 ```
 
-launcher 完成后，无论 `COMPLETE` 还是 `INCOMPLETE`，只上传最新：
+## 11. Immediate next action
+
+**唯一授权下一步：用户本机使用 exact v1.2 launcher 执行一次 replacement formal R11-S0。**
+
+Before execution verify：
+
+```text
+evcf_r11_s0_launcher_v1_2.py
+SHA256 = c990a5dced70a75ac5c5b48615363fdb0e694fc19902d8c58ef13a573f2e7724
+```
+
+运行结束后，无论 `COMPLETE` 或 `INCOMPLETE`，只上传最新：
 
 ```text
 evcf_r11_s0_status_YYYYMMDDTHHMMSSZ.json
 ```
 
-若为 `INCOMPLETE`，先审 status，不自行改代码、环境或重跑；若为 `COMPLETE`，先按冻结 SELECT/MIXED/STOP 规则审计，再决定是否有资格设计 R11-M1。
+若 `INCOMPLETE`，不自行改代码、环境或重跑；若 `COMPLETE`，先按冻结 SELECT/MIXED/STOP 规则审计，再决定是否设计 R11-M1。
 
 Final JPL holdout `2019-03/06/09/12` 在任何 R11-S0 结果下都继续封存。

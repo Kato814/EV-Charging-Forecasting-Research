@@ -59,15 +59,19 @@ def test_portable_verifier_rejects_semantic_content_drift(tmp_path, monkeypatch)
         runner._portable_verify_r11_s0_implementation_commit(commit, repo_root=tmp_path)
 
 
-def test_r11_runner_installs_accepted_snapshot_compat(monkeypatch):
+def test_r11_runner_installs_runtime_compatibility(monkeypatch):
     sentinel = object()
     monkeypatch.setattr(controller, "load_month_data", sentinel)
     monkeypatch.setattr(controller, "IMPLEMENTATION_PATHS", ("probe.txt",))
 
-    runner._install_development_snapshot_compat()
+    runner._install_runtime_compatibility()
 
     assert controller.load_month_data is expert_compat.load_month_data
-    assert controller.IMPLEMENTATION_PATHS == ("probe.txt", runner.COMPAT_RUNTIME_PATH)
+    assert controller.IMPLEMENTATION_PATHS == (
+        "probe.txt",
+        runner.COMPAT_RUNTIME_PATH,
+        runner.DETERMINISM_RUNTIME_PATH,
+    )
 
 
 def test_accepted_label_reader_handles_sorted_json_horizon_keys(tmp_path):

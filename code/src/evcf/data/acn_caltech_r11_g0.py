@@ -24,6 +24,7 @@ import numpy as np
 import yaml
 
 from evcf.data.acn_api import (
+    ACNAuthenticationError,
     ACNClient,
     DEFAULT_API_BASE_URL,
     DEFAULT_TOKEN_ENV,
@@ -523,7 +524,10 @@ def acquire_caltech_r11_g0(
     if root.exists() and (not root.is_dir() or root.is_symlink()):
         raise R11G0Error("OUTPUT_TOPOLOGY_INVALID")
     root.mkdir(parents=True, exist_ok=True)
-    active_client = client or ACNClient.from_env(DEFAULT_TOKEN_ENV)
+    try:
+        active_client = client or ACNClient.from_env(DEFAULT_TOKEN_ENV)
+    except ACNAuthenticationError as exc:
+        raise R11G0Error("ACN_AUTHENTICATION_FAILED") from exc
 
     results: list[AcquisitionMonthResult] = []
     for month in CALTECH_MONTHS:
@@ -548,6 +552,8 @@ def acquire_caltech_r11_g0(
                 raw,
                 overwrite=False,
             )
+        except ACNAuthenticationError as exc:
+            raise R11G0Error("ACN_AUTHENTICATION_FAILED") from exc
         except Exception as exc:
             raise R11G0Error("ACN_ACQUISITION_FAILED") from exc
         if (

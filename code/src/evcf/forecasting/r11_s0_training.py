@@ -1,11 +1,11 @@
 """Controlled R11-S0 station-level backbone screening implementation.
 
-The public controller is development-only and aggregate-only.  It consumes the
+The public controller is development-only and aggregate-only. It consumes the
 already frozen JPL development snapshots through the accepted artifact reader,
 never traverses final-holdout months, never uses session-resolved predictors,
 and never performs architecture/hyperparameter search.
 
-The formal run is not authorized merely by the presence of this module.  A
+The formal run is not authorized merely by the presence of this module. A
 reviewed executable and pinned external launcher are still required.
 """
 
@@ -14,8 +14,10 @@ from __future__ import annotations
 import copy
 import time
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
 from threadpoolctl import threadpool_limits
@@ -29,7 +31,6 @@ from evcf.forecasting.acn_jpl_gate1_models import make_frozen_estimator
 from evcf.forecasting.r11_s0_contracts import (
     DEEP_SEEDS,
     DEVELOPMENT_MONTHS,
-    EXPECTED_TEST_ORIGINS,
     EXPECTED_TOTAL_FITS,
     HORIZONS_MINUTES,
     R11S0ContractError,
@@ -38,6 +39,8 @@ from evcf.forecasting.r11_s0_contracts import (
 from evcf.forecasting.r11_s0_data import EncodedFold, encode_fold, view_from_month_data
 from evcf.forecasting.r11_s0_models import MODEL_FACTORIES, make_model, trainable_parameter_count
 from evcf.forecasting.r11_s0_screen import CandidateSummary, decide_backbone, validate_formal_device
+
+_ZONE = ZoneInfo("America/Los_Angeles")
 
 
 def _metrics(y_true: np.ndarray, prediction: np.ndarray) -> dict[str, float | int | None]:
@@ -48,12 +51,14 @@ def _metrics(y_true: np.ndarray, prediction: np.ndarray) -> dict[str, float | in
     error = prediction - y_true
     absolute = np.abs(error)
     denominator = float(np.sum(np.abs(y_true)))
+    negative_count = int(np.sum(prediction < 0.0))
     return {
         "n": int(y_true.size),
         "mae_a": float(np.mean(absolute)),
         "rmse_a": float(np.sqrt(np.mean(np.square(error)))),
         "wape_ratio": None if denominator == 0.0 else float(np.sum(absolute) / denominator),
-        "negative_prediction_count": int(np.sum(prediction < 0.0)),
+        "negative_prediction_count": negative_count,
+        "negative_prediction_fraction": float(negative_count / y_true.size),
     }
 
 
@@ -64,6 +69,10 @@ def _feature_matrix(fold: EncodedFold, partition: str, horizon_position: int) ->
     return np.concatenate((history.reshape(history.shape[0], -1), issue, target), axis=1).astype(
         np.float64
     )
+
+
+def _test_issue_times(folds: Mapping[str, EncodedFold]) -> dict[str, np.ndarray]:
+    return {month: folds[month].test_issue_times for month in DEVELOPMENT_MONTHS}
 
 
 def _run_station_hgb(
@@ -91,7 +100,11 @@ def _run_station_hgb(
             fit_count += 1
         predictions_by_month[month] = month_predictions
         truths_by_month[month] = month_truth
-    summary = _aggregate_single_prediction_set(truths_by_month, predictions_by_month)
+    summary = _aggregate_single_prediction_set(
+        truths_by_month,
+        predictions_by_month,
+        _test_issue_times(folds),
+    )
     return summary, fit_count, truths_by_month, predictions_by_month
 
 
@@ -200,9 +213,7 @@ def _fit_deep_fold(
     batches: list[np.ndarray] = []
     with torch.no_grad():
         for history, issue_context, target_context, _target in test_loader:
-            output = model(
-                history.to(device), issue_context.to(device), target_context.to(device)
-            )
+            output = model(history.to(device), issue_context.to(device), target_context.to(device))
             batches.append(output.cpu().numpy().astype(np.float64))
     elapsed = float(time.perf_counter() - start)
     standardized_prediction = np.concatenate(batches, axis=0)
@@ -214,29 +225,80 @@ def _fit_deep_fold(
     return prediction, best_epoch, elapsed, trainable_parameter_count(model)
 
 
+def _local_dates(issue_times: np.ndarray) -> np.ndarray:
+    return np.asarray(
+        [
+            datetime.fromtimestamp(int(issue), timezone.utc).astimezone(_ZONE).date().isoformat()
+            for issue in issue_times
+        ],
+        dtype="U10",
+    )
+
+
 def _aggregate_single_prediction_set(
     truths_by_month: Mapping[str, np.ndarray],
     predictions_by_month: Mapping[str, np.ndarray],
+    issue_times_by_month: Mapping[str, np.ndarray],
 ) -> dict[str, Any]:
-    pooled_truth = np.concatenate([truths_by_month[month].reshape(-1) for month in DEVELOPMENT_MONTHS])
+    for month in DEVELOPMENT_MONTHS:
+        truth = truths_by_month[month]
+        prediction = predictions_by_month[month]
+        issues = issue_times_by_month[month]
+        if truth.shape != prediction.shape or truth.ndim != 2 or truth.shape[1] != len(
+            HORIZONS_MINUTES
+        ):
+            raise R11S0ContractError("AGGREGATE_SHAPE_INVALID")
+        if issues.shape != (truth.shape[0],):
+            raise R11S0ContractError("AGGREGATE_ISSUE_ALIGNMENT_INVALID")
+
+    pooled_truth = np.concatenate(
+        [truths_by_month[month].reshape(-1) for month in DEVELOPMENT_MONTHS]
+    )
     pooled_prediction = np.concatenate(
         [predictions_by_month[month].reshape(-1) for month in DEVELOPMENT_MONTHS]
     )
     by_month = {
-        month: _metrics(truths_by_month[month].reshape(-1), predictions_by_month[month].reshape(-1))
+        month: _metrics(
+            truths_by_month[month].reshape(-1), predictions_by_month[month].reshape(-1)
+        )
         for month in DEVELOPMENT_MONTHS
     }
     by_horizon: dict[int, dict[str, float | int | None]] = {}
+    month_horizon: dict[str, dict[int, dict[str, float | int | None]]] = {}
+    for month in DEVELOPMENT_MONTHS:
+        month_horizon[month] = {}
+        for hpos, horizon in enumerate(HORIZONS_MINUTES):
+            month_horizon[month][horizon] = _metrics(
+                truths_by_month[month][:, hpos], predictions_by_month[month][:, hpos]
+            )
     for hpos, horizon in enumerate(HORIZONS_MINUTES):
         truth = np.concatenate([truths_by_month[month][:, hpos] for month in DEVELOPMENT_MONTHS])
         prediction = np.concatenate(
             [predictions_by_month[month][:, hpos] for month in DEVELOPMENT_MONTHS]
         )
         by_horizon[horizon] = _metrics(truth, prediction)
+
+    local_day_rows: list[dict[str, Any]] = []
+    for month in DEVELOPMENT_MONTHS:
+        dates = _local_dates(issue_times_by_month[month])
+        for date in np.unique(dates):
+            mask = dates == date
+            local_day_rows.append(
+                {
+                    "month": month,
+                    "local_date": str(date),
+                    **_metrics(
+                        truths_by_month[month][mask].reshape(-1),
+                        predictions_by_month[month][mask].reshape(-1),
+                    ),
+                }
+            )
     return {
         "pooled": _metrics(pooled_truth, pooled_prediction),
         "by_month": by_month,
         "by_horizon": by_horizon,
+        "month_horizon": month_horizon,
+        "local_day_pooled_over_horizon": local_day_rows,
     }
 
 
@@ -255,14 +317,20 @@ def _deep_model_summary(
     for horizon in HORIZONS_MINUTES:
         horizon_medians[horizon] = float(
             np.median(
-                [seed_runs[seed]["metrics"]["by_horizon"][horizon]["mae_a"] for seed in DEEP_SEEDS]
+                [
+                    seed_runs[seed]["metrics"]["by_horizon"][horizon]["mae_a"]
+                    for seed in DEEP_SEEDS
+                ]
             )
         )
     month_medians: dict[str, float] = {}
     for month in DEVELOPMENT_MONTHS:
         month_medians[month] = float(
             np.median(
-                [seed_runs[seed]["metrics"]["by_month"][month]["mae_a"] for seed in DEEP_SEEDS]
+                [
+                    seed_runs[seed]["metrics"]["by_month"][month]["mae_a"]
+                    for seed in DEEP_SEEDS
+                ]
             )
         )
     worst_horizon = max(
@@ -324,7 +392,10 @@ def run_r11_s0(
         )
         views[contract.month] = view_from_month_data(month_data)
     folds = {month: encode_fold(views, month) for month in DEVELOPMENT_MONTHS}
-    assert_test_origin_counts({month: int(folds[month].test_issue_times.size) for month in DEVELOPMENT_MONTHS})
+    assert_test_origin_counts(
+        {month: int(folds[month].test_issue_times.size) for month in DEVELOPMENT_MONTHS}
+    )
+    issue_times_by_month = _test_issue_times(folds)
 
     selected_params = load_selected_hgb_parameters(protocol=protocol, repo_root=repo)
     hgb_summary, fit_count, truths_by_month, _hgb_predictions = _run_station_hgb(
@@ -356,7 +427,11 @@ def run_r11_s0(
                 wall_seconds[month] = elapsed
                 fit_count += 1
             seed_runs[seed] = {
-                "metrics": _aggregate_single_prediction_set(truths_by_month, predictions_by_month),
+                "metrics": _aggregate_single_prediction_set(
+                    truths_by_month,
+                    predictions_by_month,
+                    issue_times_by_month,
+                ),
                 "best_epoch_by_month": best_epochs,
                 "wall_seconds_by_month": wall_seconds,
             }

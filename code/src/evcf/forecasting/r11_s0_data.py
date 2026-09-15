@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Iterable
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -12,7 +12,6 @@ import numpy as np
 from evcf.forecasting.r11_s0_contracts import (
     CONTEXT_LENGTH,
     DEVELOPMENT_MONTHS,
-    HISTORY_CHANNELS,
     HORIZONS_MINUTES,
     R11S0ContractError,
     assert_authorized_month,

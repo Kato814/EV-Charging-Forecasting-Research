@@ -6,6 +6,10 @@ import argparse
 import json
 
 from evcf.forecasting.acn_jpl_r11_s0_common import R11S0Error
+from evcf.forecasting.acn_jpl_r11_s0_determinism_compat import (
+    install_deterministic_nhits_compat,
+    validate_deterministic_backward_smoke,
+)
 from evcf.forecasting.acn_jpl_r11_s0_models import (
     import_torch,
     parameter_count_report,
@@ -22,6 +26,7 @@ def main() -> int:
     )
     args = parser.parse_args()
     try:
+        install_deterministic_nhits_compat()
         torch = import_torch()
         counts = dict(parameter_count_report(torch))
         result: dict[str, object] = {
@@ -31,6 +36,7 @@ def main() -> int:
         }
         if not args.shape_only:
             result.update(dict(validate_formal_device()))
+            result.update(dict(validate_deterministic_backward_smoke(torch)))
     except R11S0Error as exc:
         print(json.dumps({"status": "FAIL", "reason_code": exc.reason_code}, sort_keys=True))
         return 2

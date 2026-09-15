@@ -7,9 +7,9 @@ import importlib
 import importlib.metadata
 import math
 import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Callable, Mapping
 
 import numpy as np
 
@@ -27,8 +27,8 @@ from evcf.forecasting.acn_jpl_r11_s0_common import (
     MIN_PARAMETER_COUNT,
     MIN_VALIDATION_IMPROVEMENT,
     PATIENCE,
-    R11S0Error,
     WEIGHT_DECAY,
+    R11S0Error,
 )
 from evcf.forecasting.acn_jpl_r11_s0_data import StationFold
 
@@ -72,7 +72,7 @@ def validate_formal_device() -> Mapping[str, object]:
         x = torch.tensor([[1.0, -2.0]], dtype=torch.float32, device=device, requires_grad=True)
         x.square().mean().backward()
         torch.cuda.synchronize(device)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise R11S0Error("CUDA_SMOKE_TEST_FAILED") from exc
     return MappingProxyType(
         {

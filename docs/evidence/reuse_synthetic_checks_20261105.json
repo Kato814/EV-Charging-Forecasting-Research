@@ -1,0 +1,146 @@
+{
+  "schema_version": "reuse-engineering-report/v1",
+  "scope": "synthetic-engineering-only",
+  "status": "PASS",
+  "started_at_utc": "2026-11-05T13:34:16.046127+00:00",
+  "research_data_accessed": false,
+  "forecast_models_fitted": 0,
+  "services_contacted": false,
+  "environment": {
+    "python": "3.11.16",
+    "packages": {
+      "numpy": "2.4.6",
+      "pandas": "2.3.3",
+      "scipy": "1.17.1",
+      "cvxpy": "1.9.3",
+      "pandapower": "3.5.6",
+      "clarabel": "0.11.1",
+      "scs": "3.3.1",
+      "osqp": "1.1.3"
+    }
+  },
+  "checks": {
+    "contracts": {
+      "status": "PASS",
+      "scenario_count": 2,
+      "horizon_steps": 16,
+      "step_seconds": 900,
+      "rejected_fields": [
+        "actual_departure",
+        "final_kwh"
+      ],
+      "integrated_energy_kwh": 16.0,
+      "one_thousand_kw_in_mw": 1.0,
+      "limitation": "Checks declared metadata; does not prove caller provenance or truthful times."
+    },
+    "soc": {
+      "synthetic_only": true,
+      "solver": "CLARABEL",
+      "is_dcp": true,
+      "is_dpp": true,
+      "cases": [
+        {
+          "a": [
+            3.0,
+            4.0
+          ],
+          "status": "optimal",
+          "objective": 4.999999995784265,
+          "expected_objective": 5.0,
+          "absolute_error": 4.215735316392966e-09,
+          "primal_residual": 4.215735316392966e-09,
+          "action": {
+            "t": 4.999999995784265
+          }
+        },
+        {
+          "a": [
+            6.0,
+            8.0
+          ],
+          "status": "optimal",
+          "objective": 9.999999992617825,
+          "expected_objective": 10.0,
+          "absolute_error": 7.382174871395364e-09,
+          "primal_residual": 7.382174871395364e-09,
+          "action": {
+            "t": 9.999999992617825
+          }
+        }
+      ],
+      "infeasible_case": {
+        "a": [
+          3.0,
+          4.0
+        ],
+        "upper_bound": 4.0,
+        "status": "infeasible",
+        "action": null
+      },
+      "tolerances": {
+        "objective_absolute": 1e-06,
+        "primal_residual": 1e-06
+      }
+    },
+    "powerflow": {
+      "synthetic_only": true,
+      "assumed_parameters": {
+        "bus_voltage_kv": 0.4,
+        "slack_voltage_pu": 1.0,
+        "line_length_km": 0.1,
+        "line_r_ohm_per_km": 0.4,
+        "line_x_ohm_per_km": 0.08,
+        "line_c_nf_per_km": 0.0,
+        "line_max_i_ka": 0.2,
+        "load_cases_kw_kvar": [
+          [
+            5.0,
+            1.0
+          ],
+          [
+            10.0,
+            2.0
+          ]
+        ]
+      },
+      "cases": [
+        {
+          "load_kw": 5.0,
+          "load_kvar": 1.0,
+          "load_p_mw": 0.005,
+          "load_q_mvar": 0.001,
+          "status": "converged",
+          "converged": true,
+          "slack_p_mw": 0.005006516943870665,
+          "line_loss_mw": 6.516955095285659e-06,
+          "receiving_voltage_pu": 0.9986983055947057,
+          "voltage_drop_pu": 0.0013016944052942625,
+          "power_balance_residual_mw": 1.1224621059013895e-11
+        },
+        {
+          "load_kw": 10.0,
+          "load_kvar": 2.0,
+          "load_p_mw": 0.01,
+          "load_q_mvar": 0.002,
+          "status": "converged",
+          "converged": true,
+          "slack_p_mw": 0.010026135903765443,
+          "line_loss_mw": 2.6136084265725862e-05,
+          "receiving_voltage_pu": 0.99739320466682,
+          "voltage_drop_pu": 0.0026067953331799787,
+          "power_balance_residual_mw": 1.8050028312288635e-10
+        }
+      ],
+      "tolerances": {
+        "power_balance_absolute_mw": 1e-08
+      }
+    }
+  },
+  "source_sha256": {
+    "scripts/check_reuse_synthetic.py": "0bebfd202ac1540edfd56191eadfe010ede8eeedce67ed343350e8797a8c47d7",
+    "code/src/evcf/integration/reuse_contracts.py": "4656585ed90f4ef07551250baa1e078dfd5d531a827ab2035186662fb3445580",
+    "code/src/evcf/integration/reuse_numerics.py": "2ff1616a97fb991379f9045bbda1c1be692823834f1c52ff5dc6ca077a9c9d94"
+  },
+  "elapsed_seconds": 1.266548200044781,
+  "finished_at_utc": "2026-11-05T13:34:17.312489+00:00"
+}

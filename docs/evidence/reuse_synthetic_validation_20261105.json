@@ -1,0 +1,119 @@
+{
+  "checked_on": "2026-11-05",
+  "scope": "synthetic engineering only",
+  "checks": [
+    {
+      "name": "targeted_tests",
+      "command": [
+        "python",
+        "-m",
+        "pytest",
+        "code/tests/test_reuse_contracts.py",
+        "code/tests/test_reuse_numerics.py",
+        "code/tests/test_check_reuse_synthetic_cli.py",
+        "-q"
+      ],
+      "exit_code": 0,
+      "output": "..........................                                                           [100%]\n26 passed, 132 subtests passed in 3.15s\n"
+    },
+    {
+      "name": "optional_dependency_absence",
+      "command": [
+        "python",
+        "-S",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "code/tests",
+        "-p",
+        "test_reuse_numerics.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "output": "test_nonfinite_or_missing_optimal_values_cannot_yield_actions (test_reuse_numerics.NumericalApiTests.test_nonfinite_or_missing_optimal_values_cannot_yield_actions) ... ok\ntest_only_exact_optimal_status_can_yield_an_action (test_reuse_numerics.NumericalApiTests.test_only_exact_optimal_status_can_yield_an_action) ... ok\ntest_public_probes_exist (test_reuse_numerics.NumericalApiTests.test_public_probes_exist) ... ok\ntest_handbuilt_feeder_conserves_power_and_load_update_increases_drop (test_reuse_numerics.PowerflowTests.test_handbuilt_feeder_conserves_power_and_load_update_increases_drop) ... skipped 'optional pandapower is absent'\ntest_parameter_update_solves_known_norms_and_infeasible_case (test_reuse_numerics.SocTests.test_parameter_update_solves_known_norms_and_infeasible_case) ... skipped 'optional cvxpy is absent'\ntest_solver_failure_is_reported (test_reuse_numerics.SocTests.test_solver_failure_is_reported) ... skipped 'optional cvxpy is absent'\n\n----------------------------------------------------------------------\nRan 6 tests in 0.000s\n\nOK (skipped=3)\n"
+    },
+    {
+      "name": "cli_optional_dependency_absence",
+      "command": [
+        "python",
+        "-S",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "code/tests",
+        "-p",
+        "test_check_reuse_synthetic_cli.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "output": "test_command_exists (test_check_reuse_synthetic_cli.SyntheticCommandTests.test_command_exists) ... ok\ntest_failed_probe_returns_failure_and_preserves_report (test_check_reuse_synthetic_cli.SyntheticCommandTests.test_failed_probe_returns_failure_and_preserves_report) ... ok\ntest_output_argument_is_required (test_check_reuse_synthetic_cli.SyntheticCommandTests.test_output_argument_is_required) ... ok\ntest_real_command_with_network_connections_blocked (test_check_reuse_synthetic_cli.SyntheticCommandTests.test_real_command_with_network_connections_blocked) ... skipped 'Optional synthetic numerical environment required'\n\n----------------------------------------------------------------------\nRan 4 tests in 0.177s\n\nOK (skipped=1)\n"
+    },
+    {
+      "name": "ruff",
+      "command": [
+        "python",
+        "-m",
+        "ruff",
+        "check",
+        "code/src/evcf/integration/__init__.py",
+        "code/src/evcf/integration/reuse_contracts.py",
+        "code/src/evcf/integration/reuse_numerics.py",
+        "code/tests/test_reuse_contracts.py",
+        "code/tests/test_reuse_numerics.py",
+        "code/tests/test_check_reuse_synthetic_cli.py",
+        "scripts/check_reuse_synthetic.py"
+      ],
+      "exit_code": 0,
+      "output": "All checks passed!\n"
+    },
+    {
+      "name": "syntax_in_memory",
+      "status": "PASS",
+      "files": [
+        "code/src/evcf/integration/__init__.py",
+        "code/src/evcf/integration/reuse_contracts.py",
+        "code/src/evcf/integration/reuse_numerics.py",
+        "code/tests/test_reuse_contracts.py",
+        "code/tests/test_reuse_numerics.py",
+        "code/tests/test_check_reuse_synthetic_cli.py",
+        "scripts/check_reuse_synthetic.py"
+      ]
+    }
+  ],
+  "protected_environment_package_metadata": {
+    "default": {
+      "count": 398,
+      "before_sha256": "b950c13052575107322ddabc0462e354c56de11387f072d4a92cb885ea2c51c0",
+      "after_sha256": "b950c13052575107322ddabc0462e354c56de11387f072d4a92cb885ea2c51c0",
+      "unchanged": true
+    },
+    "evcf-gate1-pilot": {
+      "count": 39,
+      "before_sha256": "7f27265fb5150e2214cc7359037bf02b0c06055c848e9392583db40605089fa5",
+      "after_sha256": "7f27265fb5150e2214cc7359037bf02b0c06055c848e9392583db40605089fa5",
+      "unchanged": true
+    },
+    "evcf-r2-set": {
+      "count": 33,
+      "before_sha256": "a196d2f41537ef2e44c0c1cb1d199ec383a5251345abe4c7ff28d06821d12ea2",
+      "after_sha256": "a196d2f41537ef2e44c0c1cb1d199ec383a5251345abe4c7ff28d06821d12ea2",
+      "unchanged": true
+    }
+  },
+  "source_sha256": {
+    "code/src/evcf/integration/__init__.py": "5d9abf8bad7d011e4e3bd706f841e94111cd10d48d8a2cdadabd061fea1936e1",
+    "code/src/evcf/integration/reuse_contracts.py": "4656585ed90f4ef07551250baa1e078dfd5d531a827ab2035186662fb3445580",
+    "code/src/evcf/integration/reuse_numerics.py": "2ff1616a97fb991379f9045bbda1c1be692823834f1c52ff5dc6ca077a9c9d94",
+    "code/tests/test_reuse_contracts.py": "f6b7d6932ec6eab5dd1a3089fab61e5f63ba5548d6fb1a4f19334e3b351c2d38",
+    "code/tests/test_reuse_numerics.py": "7cc179e880d317998bebeb92604585f7bb98f6c996090cb53413cdad3dda0ec0",
+    "code/tests/test_check_reuse_synthetic_cli.py": "230c9cfbd6ed6699a63f50d0545b4bab8411070cf8d4f205d95386c22209af7c",
+    "scripts/check_reuse_synthetic.py": "0bebfd202ac1540edfd56191eadfe010ede8eeedce67ed343350e8797a8c47d7"
+  },
+  "limitations": [
+    "No whole-repository local test run.",
+    "Package metadata comparison is not an installed-file hash audit.",
+    "Python socket blocking is not an operating-system network sandbox."
+  ]
+}

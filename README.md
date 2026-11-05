@@ -14,6 +14,7 @@
 | [数据用途台账](docs/DATA_USAGE_LEDGER.md) | 探索、开发与最终保留集分区 |
 | [ROADMAP](ROADMAP.md) | 阶段依赖，不授权运行 |
 | [硕士论文总体研究框架](research/THESIS_RESEARCH_PLAN.md) | 当前拟完成的总体目标；暂定可调整，不是冻结协议或运行授权 |
+| [开源复用与接口审计](research/OPEN_SOURCE_REUSE_AUDIT_20261105.md) | 已核对的复用基础、接口缺口与环境准备度；不授权实验 |
 | [代码说明](code/README.md) | 实现组织与运行保护要求 |
 | [开源参考台账](docs/OPEN_SOURCE_IDEA_LEDGER.md) | 成熟实现、相邻工作与创新边界；候选不等于授权 |
 

@@ -1,0 +1,133 @@
+{
+  "schema_version": "synthetic-charging-loop/v1",
+  "status": "PASS",
+  "scope": "hand-authored-engineering-only",
+  "real_dispatch_authorized": false,
+  "research_data_accessed": false,
+  "forecast_models_fitted": 0,
+  "network_constraints_evaluated": false,
+  "optimizer_used": false,
+  "device": "CPU; standard-library rule and arithmetic, no GPU backend",
+  "python": "3.11.16",
+  "cases": [
+    {
+      "case_id": "L01",
+      "status": "PASS",
+      "observed": {
+        "powers_kw": [
+          [
+            2.0,
+            2.0
+          ],
+          [
+            4.0
+          ]
+        ],
+        "delivered_kwh": 2.0,
+        "shortfall_kwh": 0.0
+      }
+    },
+    {
+      "case_id": "L02",
+      "status": "PASS",
+      "observed": {
+        "delivered_kwh": 2.0,
+        "shortfall_kwh": 2.0,
+        "general_infeasibility_proved": false
+      }
+    },
+    {
+      "case_id": "L03",
+      "status": "PASS",
+      "observed": {
+        "edf_shortfall_kwh": 1.0,
+        "witness_shortfall_kwh": 0.0,
+        "witness_delivered_kwh": 5.0,
+        "optimizer_used": false
+      }
+    },
+    {
+      "case_id": "L04",
+      "status": "PASS",
+      "observed": {
+        "commanded_kw": [
+          6.0,
+          6.0,
+          0.0
+        ],
+        "delivered_per_step_kwh": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "shortfall_kwh": 2.0
+      }
+    },
+    {
+      "case_id": "L05",
+      "status": "PASS",
+      "observed": {
+        "blocked": [
+          [
+            "A",
+            "UNKNOWN_REQUEST_BASIS"
+          ]
+        ],
+        "delivered_kwh": 0.0,
+        "shortfall_kwh": 1.0
+      }
+    },
+    {
+      "case_id": "L06",
+      "status": "PASS",
+      "observed": {
+        "target_change_actions_equal": true,
+        "target_change_delivery_equal": true,
+        "changed_target_overdelivery_kwh": 2.0,
+        "future_departure_prefix_equal": true,
+        "later_feedback_may_differ": true
+      }
+    },
+    {
+      "case_id": "L07",
+      "status": "PASS",
+      "observed": {
+        "invalid_action_rejected": "DEVICE_LIMIT",
+        "repeat_rejected": "INVALID_CURSOR",
+        "state_preserved_on_rejection": true,
+        "valid_delivered_kwh": 1.0
+      }
+    },
+    {
+      "case_id": "L08",
+      "status": "PASS",
+      "observed": {
+        "commanded_kw": [
+          8.0,
+          8.0,
+          8.0,
+          4.0
+        ],
+        "delivered_kwh": 7.0,
+        "shortfall_kwh": 0.0
+      }
+    }
+  ],
+  "started_at_utc": "2026-11-06T09:03:53.380221+00:00",
+  "source_sha256": {
+    "code/src/evcf/integration/reuse_contracts.py": "4656585ed90f4ef07551250baa1e078dfd5d531a827ab2035186662fb3445580",
+    "code/src/evcf/integration/controller_common.py": "9e860e64ee6bd7864fed3ba7af555690dee31109229ad9eac3c7f7eba8ee728f",
+    "code/src/evcf/integration/controller_visibility.py": "1ad7b03e880245ea3ddd865647d6dcee2a603ef54e78d889f50ff04d8da970a2",
+    "code/src/evcf/integration/controller_quantities.py": "82f5ec3bb1eabea60d3f0b33b6f4af6bf940f52fb60f753280d19d045fb3141f",
+    "code/src/evcf/integration/controller_adapter.py": "5b02916dcf683d6ac45c4846d565260e56fd4d0bec2177f2907e8dc3c5fd58d3",
+    "code/src/evcf/integration/charging_types.py": "cff6646104994c90b450484af9edc02dc7443fc7d9811de14e1ce6062ffc2151",
+    "code/src/evcf/integration/charging_policy.py": "4172b03afcd3e0b96eadf6ad6c9738562a8e84405e6dfc3805fb5ac1f3664e46",
+    "code/src/evcf/integration/charging_plant.py": "40b4cd5987aa5f2752442e85cb155594e7d6b6283e25b86850c73c7d784b3cc4",
+    "code/src/evcf/integration/charging_loop.py": "a9d72dfa786cce8212c92aefd83d3288a024e37d5914802bc173526091a5893e",
+    "scripts/check_charging_loop.py": "a3210a2ec8c305d6e735d44f986b2b864e73403ebdcf8c9b08ab5f08b4387311"
+  },
+  "passed": 8,
+  "failed": 0,
+  "elapsed_seconds": 0.025992200011387467,
+  "finished_at_utc": "2026-11-06T09:03:53.399203+00:00"
+}

@@ -1,0 +1,139 @@
+{
+  "schema_version": "controller-adapter-validation/v1",
+  "recorded_at_utc": "2026-11-06T08:07:07.686208+00:00",
+  "scope": "synthetic-engineering-only",
+  "base_main": "ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c",
+  "parent_engineering_commit": "56514745918ba5a73c5560bf5a6bdadd3a4d10a2",
+  "versions": {
+    "python": "3.11.16",
+    "pytest": "9.2.0",
+    "ruff": "0.17.3"
+  },
+  "new_tests": 79,
+  "new_test_files": 6,
+  "all_pr_engineering_tests": {
+    "passed": 105,
+    "subtests_passed": 277,
+    "skipped": 0
+  },
+  "stdlib_only_new_tests_passed": 79,
+  "new_python_syntax_files": 12,
+  "new_python_sha256": {
+    "code/src/evcf/integration/controller_acceptance.py": "a261b3645c773ba4598e1f5c20409a908d90d1a1b6b888d3f9b58fbee3199132",
+    "code/src/evcf/integration/controller_adapter.py": "5b02916dcf683d6ac45c4846d565260e56fd4d0bec2177f2907e8dc3c5fd58d3",
+    "code/src/evcf/integration/controller_common.py": "9e860e64ee6bd7864fed3ba7af555690dee31109229ad9eac3c7f7eba8ee728f",
+    "code/src/evcf/integration/controller_quantities.py": "82f5ec3bb1eabea60d3f0b33b6f4af6bf940f52fb60f753280d19d045fb3141f",
+    "code/src/evcf/integration/controller_visibility.py": "1ad7b03e880245ea3ddd865647d6dcee2a603ef54e78d889f50ff04d8da970a2",
+    "code/tests/test_check_controller_adapter_cli.py": "0306508270d9e128a469302d9aff85d7db0e393eabd3f25d86863d51f5972e65",
+    "code/tests/test_controller_acceptance.py": "7be904358b6c7a680a9fa030dcae10a4d1ed38d8a34cea5c7a793e1b1a5ffcae",
+    "code/tests/test_controller_adapter.py": "60ae3d258d31ec3c7e1cb2ac1a2e55803ae8701419140aed1b5416bcad555535",
+    "code/tests/test_controller_common.py": "6d35ae3a5bafc6eadd84cdb681ad32da9d896fff71d9cb877576e870370ffe3f",
+    "code/tests/test_controller_quantities.py": "3b1d9cf03240153820c86ffeccefc003648006978a78ee1634ec58fdaa1c8472",
+    "code/tests/test_controller_visibility.py": "a8c1e7f689f0b516985d70439610708e6dfdd4e3bb7de0f32f6bada917ca7b89",
+    "scripts/check_controller_adapter.py": "518dcb56ddbc302c525ff5d749c15403f7a02ee170b9365fac19d898f3954185"
+  },
+  "protected_package_metadata_unchanged": true,
+  "protected_environments": {
+    "default": {
+      "count": 398,
+      "sha256": "b950c13052575107322ddabc0462e354c56de11387f072d4a92cb885ea2c51c0"
+    },
+    "evcf-gate1-pilot": {
+      "count": 39,
+      "sha256": "7f27265fb5150e2214cc7359037bf02b0c06055c848e9392583db40605089fa5"
+    },
+    "evcf-r2-set": {
+      "count": 33,
+      "sha256": "a196d2f41537ef2e44c0c1cb1d199ec383a5251345abe4c7ff28d06821d12ea2"
+    }
+  },
+  "protected_environment_check_limit": "Package names/versions only, not every installed byte.",
+  "checks": [
+    {
+      "check": "all-pr-engineering-tests",
+      "command": [
+        "python",
+        "-m",
+        "pytest",
+        "code/tests",
+        "-q"
+      ],
+      "exit_code": 0,
+      "output": ".................................... [ 34%]\n................................... [ 67%]\n..................................                                                   [100%]\n105 passed, 277 subtests passed in 3.86s"
+    },
+    {
+      "check": "new-tests-without-site-packages",
+      "command": [
+        "python",
+        "-S",
+        "-m",
+        "unittest",
+        "test_check_controller_adapter_cli",
+        "test_controller_acceptance",
+        "test_controller_adapter",
+        "test_controller_common",
+        "test_controller_quantities",
+        "test_controller_visibility"
+      ],
+      "exit_code": 0,
+      "output": "...............................................................................\n----------------------------------------------------------------------\nRan 79 tests in 0.468s\n\nOK"
+    },
+    {
+      "check": "new-python-ruff",
+      "command": [
+        "python",
+        "-m",
+        "ruff",
+        "check",
+        "code/src/evcf/integration/controller_acceptance.py",
+        "code/src/evcf/integration/controller_adapter.py",
+        "code/src/evcf/integration/controller_common.py",
+        "code/src/evcf/integration/controller_quantities.py",
+        "code/src/evcf/integration/controller_visibility.py",
+        "code/tests/test_check_controller_adapter_cli.py",
+        "code/tests/test_controller_acceptance.py",
+        "code/tests/test_controller_adapter.py",
+        "code/tests/test_controller_common.py",
+        "code/tests/test_controller_quantities.py",
+        "code/tests/test_controller_visibility.py",
+        "scripts/check_controller_adapter.py"
+      ],
+      "exit_code": 0,
+      "output": "All checks passed!"
+    },
+    {
+      "check": "actual-c01-c15",
+      "command": [
+        "python",
+        "-S",
+        "scripts/check_controller_adapter.py",
+        "--output",
+        "docs/evidence/controller_adapter_checks_20261106.json"
+      ],
+      "exit_code": 0,
+      "output": "{\"status\": \"PASS\", \"passed\": 15, \"failed\": 0, \"scope\": \"hand-authored-engineering-only\"}\n[C01/C15] synthetic controller check\n[C02/C15] synthetic controller check\n[C03/C15] synthetic controller check\n[C04/C15] synthetic controller check\n[C05/C15] synthetic controller check\n[C06/C15] synthetic controller check\n[C07/C15] synthetic controller check\n[C08/C15] synthetic controller check\n[C09/C15] synthetic controller check\n[C10/C15] synthetic controller check\n[C11/C15] synthetic controller check\n[C12/C15] synthetic controller check\n[C13/C15] synthetic controller check\n[C14/C15] synthetic controller check\n[C15/C15] synthetic controller check"
+    }
+  ],
+  "reviews": {
+    "spec_review": {
+      "scope": "Approved artificial admission draft, five modules, six test files, CLI and outcome claims",
+      "initial_major": "Unavailable mapping content was validated before time filtering and could reject the current view.",
+      "resolution": "Required clocks are validated first, unavailable or ineffective mappings are filtered before content validation; regression covers helper, integrated view and C07.",
+      "final_blocker_or_major_findings": 0,
+      "independent_stdlib_network_blocked_tests_passed": 79
+    },
+    "code_quality_review": {
+      "scope": "Five modules, six test files, CLI, outcome document, and targeted event order probes",
+      "final_blocker_or_major_findings": 0,
+      "remaining_nonblocking_limit": "Same-device cross-session handoff at identical event time and some cross-kind revision ordering are conservatively rejected; semantics remain undefined and are documented.",
+      "full_test_suite_rerun_by_reviewer": false
+    },
+    "review_limits": "Reviewers did not verify real data, physical measurements, source label truth, legacy scientific protocols or remote delivery. Root records source hashes and final verification separately."
+  },
+  "research_data_accessed": false,
+  "forecast_models_fitted": 0,
+  "scientific_protocols_launched": false,
+  "real_dispatch_authorized": false,
+  "dependencies_installed_or_upgraded_this_round": false,
+  "ci_scope": "Exact remote HEAD CI is recorded separately in the PR body."
+}

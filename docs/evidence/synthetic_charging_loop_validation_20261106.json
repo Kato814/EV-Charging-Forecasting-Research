@@ -1,0 +1,140 @@
+{
+  "schema_version": "synthetic-charging-loop-validation/v1",
+  "recorded_at_utc": "2026-11-06T09:03:53.510828+00:00",
+  "scope": "synthetic-engineering-only",
+  "base_main": "ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c",
+  "parent_engineering_commit": "2bc213ed0ddc0f4dc09591671643192409f899f7",
+  "versions": {
+    "python": "3.11.16",
+    "pytest": "9.2.0",
+    "ruff": "0.17.3"
+  },
+  "new_tests": 70,
+  "new_test_files": 5,
+  "all_pr_engineering_tests": {
+    "passed": 175,
+    "subtests_passed": 487,
+    "skipped": 0
+  },
+  "stdlib_only_new_tests_passed": 70,
+  "new_python_syntax_files": 10,
+  "new_python_sha256": {
+    "code/src/evcf/integration/charging_loop.py": "a9d72dfa786cce8212c92aefd83d3288a024e37d5914802bc173526091a5893e",
+    "code/src/evcf/integration/charging_plant.py": "40b4cd5987aa5f2752442e85cb155594e7d6b6283e25b86850c73c7d784b3cc4",
+    "code/src/evcf/integration/charging_policy.py": "4172b03afcd3e0b96eadf6ad6c9738562a8e84405e6dfc3805fb5ac1f3664e46",
+    "code/src/evcf/integration/charging_types.py": "cff6646104994c90b450484af9edc02dc7443fc7d9811de14e1ce6062ffc2151",
+    "code/tests/test_charging_loop.py": "d8b950982886b08225536eb7c4ee35a73abcfa8bca417bb3e453f2b044359b73",
+    "code/tests/test_charging_plant.py": "bf98d099b4c6c90f6bcf3fdaaf6aca282e5d2707da706015bfaf06e11e58965f",
+    "code/tests/test_charging_policy.py": "dff0977098408be1a0e981b129f662102979009e2bfa27ec25c3003a1b6ca750",
+    "code/tests/test_charging_types.py": "3f68def993de6b9758ff915f7c5937b80376802af7987bfb681b0b8cbe629546",
+    "code/tests/test_check_charging_loop_cli.py": "9d4f7d96f97ead5d1db0563890abe9027d0801e683a4bda015f4824a1b108d09",
+    "scripts/check_charging_loop.py": "a3210a2ec8c305d6e735d44f986b2b864e73403ebdcf8c9b08ab5f08b4387311"
+  },
+  "protected_package_metadata_unchanged": true,
+  "protected_environments": {
+    "default": {
+      "count": 398,
+      "sha256": "b950c13052575107322ddabc0462e354c56de11387f072d4a92cb885ea2c51c0"
+    },
+    "evcf-gate1-pilot": {
+      "count": 39,
+      "sha256": "7f27265fb5150e2214cc7359037bf02b0c06055c848e9392583db40605089fa5"
+    },
+    "evcf-r2-set": {
+      "count": 33,
+      "sha256": "a196d2f41537ef2e44c0c1cb1d199ec383a5251345abe4c7ff28d06821d12ea2"
+    }
+  },
+  "protected_environment_check_limit": "Package names/versions only, not every installed byte.",
+  "checks": [
+    {
+      "check": "all-pr-engineering-tests",
+      "command": [
+        "python",
+        "-m",
+        "pytest",
+        "code/tests",
+        "-q"
+      ],
+      "exit_code": 0,
+      "output": "................. [  9%]\n............................................................. [ 44%]\n....................................................................... [ 85%]\n..........................                                                           [100%]\n175 passed, 487 subtests passed in 4.45s"
+    },
+    {
+      "check": "new-tests-without-site-packages",
+      "command": [
+        "python",
+        "-S",
+        "-m",
+        "unittest",
+        "test_charging_loop",
+        "test_charging_plant",
+        "test_charging_policy",
+        "test_charging_types",
+        "test_check_charging_loop_cli"
+      ],
+      "exit_code": 0,
+      "output": "......................................................................\n----------------------------------------------------------------------\nRan 70 tests in 0.418s\n\nOK"
+    },
+    {
+      "check": "new-python-ruff",
+      "command": [
+        "python",
+        "-m",
+        "ruff",
+        "check",
+        "code/src/evcf/integration/charging_loop.py",
+        "code/src/evcf/integration/charging_plant.py",
+        "code/src/evcf/integration/charging_policy.py",
+        "code/src/evcf/integration/charging_types.py",
+        "code/tests/test_charging_loop.py",
+        "code/tests/test_charging_plant.py",
+        "code/tests/test_charging_policy.py",
+        "code/tests/test_charging_types.py",
+        "code/tests/test_check_charging_loop_cli.py",
+        "scripts/check_charging_loop.py"
+      ],
+      "exit_code": 0,
+      "output": "All checks passed!"
+    },
+    {
+      "check": "actual-l01-l08",
+      "command": [
+        "python",
+        "-S",
+        "scripts/check_charging_loop.py",
+        "--output",
+        "docs/evidence/synthetic_charging_loop_checks_20261106.json"
+      ],
+      "exit_code": 0,
+      "output": "{\"status\": \"PASS\", \"passed\": 8, \"failed\": 0, \"scope\": \"hand-authored-engineering-only\"}\n[CPU] artificial rule and energy accounting; no GPU backend\n[L01/L08] artificial charging case\n[L02/L08] artificial charging case\n[L03/L08] artificial charging case\n[L04/L08] artificial charging case\n[L05/L08] artificial charging case\n[L06/L08] artificial charging case\n[L07/L08] artificial charging case\n[L08/L08] artificial charging case"
+    }
+  ],
+  "reviews": {
+    "spec_review": {
+      "scope": "Four charging modules, five test files, CLI, provisional design and outcome claims",
+      "initial_finding": "Repeated float subtraction in policy could produce actions exceeding the plant's strict fsum capacity check for six 6.4 kW devices with 38.4 kW capacity.",
+      "resolution": "Policy now tracks exact binary-float capacity with Fraction and rounds available power downward at most once. Added decimal, many-small-value, large-finite and policy-to-plant regression tests.",
+      "final_blocker_or_major_findings": 0,
+      "independent_policy_and_loop_tests_passed": 39,
+      "also_passed_with_optimized_python": true,
+      "reproduced_decimal_case": {
+        "capacity_kw": 38.4,
+        "commanded_kw": 38.4,
+        "delivered_kwh": 9.6
+      }
+    },
+    "code_quality_review": {
+      "scope": "Four modules, five test files, CLI and outcome document; transaction, accounting, information separation and report failures",
+      "final_blocker_or_major_findings": 0,
+      "independent_stdlib_core_tests_passed": 66,
+      "cli_tests_reviewed_not_rerun_by_reviewer": true
+    },
+    "review_limits": "Artificial synchronous feedback and constant-power rules only. No real data, calibration, battery physics, network constraints, optimization-benefit proof or legacy protocol execution. Root verifies final hashes and remote delivery."
+  },
+  "research_data_accessed": false,
+  "forecast_models_fitted": 0,
+  "scientific_protocols_launched": false,
+  "real_dispatch_authorized": false,
+  "dependencies_installed_or_upgraded_this_round": false,
+  "ci_scope": "Exact remote HEAD CI is recorded separately in the PR body."
+}

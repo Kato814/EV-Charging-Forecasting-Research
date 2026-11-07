@@ -1,0 +1,1332 @@
+{
+  "schema_version": "synthetic-charging-optimizer/v1",
+  "scope": "hand-authored-engineering-only",
+  "research_data_accessed": false,
+  "forecast_models_fitted": 0,
+  "real_dispatch_authorized": false,
+  "network_constraints_evaluated": false,
+  "device": "CPU",
+  "energy_tolerance_kwh": 1e-07,
+  "service_definition": "All sessions departed and each realized shortfall <= tolerance.",
+  "assumptions": [
+    "15-minute constant commands",
+    "unit efficiency",
+    "one aggregate site/cluster budget and fixed device limits",
+    "synchronous cumulative energy",
+    "assumed event reception times"
+  ],
+  "started_at_utc": "2026-11-07T11:30:23.733005+00:00",
+  "python": "3.11.16",
+  "status": "PASS",
+  "cases": [
+    {
+      "case_id": "L01",
+      "description": "Feasible visible requests totaling 2 kWh.",
+      "variants": {
+        "base": {
+          "paired_input_sha256": "036c45c84f90b3f2fa92b4ae85f86616a21c7fb9ad22c737f9a2715ff4f0d437",
+          "policies": {
+            "edf": {
+              "evaluation_complete": true,
+              "service_met": true,
+              "delivered_kwh": 2.0,
+              "shortfall_kwh": 0.0,
+              "overdelivery_kwh": 0.0,
+              "sessions": [
+                {
+                  "session_id": "A",
+                  "departed": true,
+                  "required_kwh": 0.5,
+                  "delivered_kwh": 0.5,
+                  "shortfall_kwh": 0.0,
+                  "overdelivery_kwh": 0.0
+                },
+                {
+                  "session_id": "B",
+                  "departed": true,
+                  "required_kwh": 1.5,
+                  "delivered_kwh": 1.5,
+                  "shortfall_kwh": 0.0,
+                  "overdelivery_kwh": 0.0
+                }
+              ],
+              "steps": [
+                {
+                  "issue_time_utc": "2026-11-06T00:00:00+00:00",
+                  "actions_kw": {
+                    "A": 2.0,
+                    "B": 2.0
+                  },
+                  "remaining_kwh": {
+                    "A": 0.5,
+                    "B": 1.5
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 0.5,
+                    "B": 0.5
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:15:00+00:00",
+                  "actions_kw": {
+                    "B": 4.0
+                  },
+                  "remaining_kwh": {
+                    "B": 1.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "B": 1.0
+                  }
+                }
+              ]
+            },
+            "lp": {
+              "evaluation_complete": true,
+              "service_met": true,
+              "delivered_kwh": 2.0,
+              "shortfall_kwh": 0.0,
+              "overdelivery_kwh": 0.0,
+              "sessions": [
+                {
+                  "session_id": "A",
+                  "departed": true,
+                  "required_kwh": 0.5,
+                  "delivered_kwh": 0.5,
+                  "shortfall_kwh": 0.0,
+                  "overdelivery_kwh": 0.0
+                },
+                {
+                  "session_id": "B",
+                  "departed": true,
+                  "required_kwh": 1.5,
+                  "delivered_kwh": 1.5,
+                  "shortfall_kwh": 0.0,
+                  "overdelivery_kwh": 0.0
+                }
+              ],
+              "steps": [
+                {
+                  "issue_time_utc": "2026-11-06T00:00:00+00:00",
+                  "actions_kw": {
+                    "A": 2.0,
+                    "B": 2.0
+                  },
+                  "remaining_kwh": {
+                    "A": 0.5,
+                    "B": 1.5
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 0.5,
+                    "B": 0.5
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:15:00+00:00",
+                  "actions_kw": {
+                    "B": 4.0
+                  },
+                  "remaining_kwh": {
+                    "B": 1.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "B": 1.0
+                  }
+                }
+              ]
+            }
+          },
+          "edf_minus_lp_shortfall_kwh": 0.0
+        }
+      },
+      "status": "PASS"
+    },
+    {
+      "case_id": "L02",
+      "description": "4 kWh required; 4 kW for 30 minutes can deliver at most 2 kWh.",
+      "variants": {
+        "base": {
+          "paired_input_sha256": "e71f8157d4f8e37e3e3e7b37cddbd4c7c3c40594879d3a0ff2093a39d4074c7f",
+          "policies": {
+            "edf": {
+              "evaluation_complete": true,
+              "service_met": false,
+              "delivered_kwh": 2.0,
+              "shortfall_kwh": 2.0,
+              "overdelivery_kwh": 0.0,
+              "sessions": [
+                {
+                  "session_id": "A",
+                  "departed": true,
+                  "required_kwh": 2.0,
+                  "delivered_kwh": 2.0,
+                  "shortfall_kwh": 0.0,
+                  "overdelivery_kwh": 0.0
+                },
+                {
+                  "session_id": "B",
+                  "departed": true,
+                  "required_kwh": 2.0,
+                  "delivered_kwh": 0.0,
+                  "shortfall_kwh": 2.0,
+                  "overdelivery_kwh": 0.0
+                }
+              ],
+              "steps": [
+                {
+                  "issue_time_utc": "2026-11-06T00:00:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 2.0,
+                    "B": 2.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:15:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 1.0,
+                    "B": 2.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                }
+              ]
+            },
+            "lp": {
+              "evaluation_complete": true,
+              "service_met": false,
+              "delivered_kwh": 2.0,
+              "shortfall_kwh": 2.0,
+              "overdelivery_kwh": 0.0,
+              "sessions": [
+                {
+                  "session_id": "A",
+                  "departed": true,
+                  "required_kwh": 2.0,
+                  "delivered_kwh": 2.0,
+                  "shortfall_kwh": 0.0,
+                  "overdelivery_kwh": 0.0
+                },
+                {
+                  "session_id": "B",
+                  "departed": true,
+                  "required_kwh": 2.0,
+                  "delivered_kwh": 0.0,
+                  "shortfall_kwh": 2.0,
+                  "overdelivery_kwh": 0.0
+                }
+              ],
+              "steps": [
+                {
+                  "issue_time_utc": "2026-11-06T00:00:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 2.0,
+                    "B": 2.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:15:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 1.0,
+                    "B": 2.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                }
+              ]
+            }
+          },
+          "edf_minus_lp_shortfall_kwh": 0.0
+        }
+      },
+      "status": "PASS"
+    },
+    {
+      "case_id": "L03",
+      "description": "Device B needs every 15-minute slot at 4 kW to receive its 3 kWh.",
+      "variants": {
+        "base": {
+          "paired_input_sha256": "3d2532c52a740571cc527d25e28c29985598085c13d4f9e6adbf715383ea7622",
+          "policies": {
+            "edf": {
+              "evaluation_complete": true,
+              "service_met": false,
+              "delivered_kwh": 4.0,
+              "shortfall_kwh": 1.0,
+              "overdelivery_kwh": 0.0,
+              "sessions": [
+                {
+                  "session_id": "A",
+                  "departed": true,
+                  "required_kwh": 2.0,
+                  "delivered_kwh": 2.0,
+                  "shortfall_kwh": 0.0,
+                  "overdelivery_kwh": 0.0
+                },
+                {
+                  "session_id": "B",
+                  "departed": true,
+                  "required_kwh": 3.0,
+                  "delivered_kwh": 2.0,
+                  "shortfall_kwh": 1.0,
+                  "overdelivery_kwh": 0.0
+                }
+              ],
+              "steps": [
+                {
+                  "issue_time_utc": "2026-11-06T00:00:00+00:00",
+                  "actions_kw": {
+                    "A": 8.0
+                  },
+                  "remaining_kwh": {
+                    "A": 2.0,
+                    "B": 3.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 8.0,
+                  "delivered_kwh": 2.0,
+                  "executed_kwh": {
+                    "A": 2.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:15:00+00:00",
+                  "actions_kw": {
+                    "B": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 0.0,
+                    "B": 3.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "B": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:30:00+00:00",
+                  "actions_kw": {
+                    "B": 4.0
+                  },
+                  "remaining_kwh": {
+                    "B": 2.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "B": 1.0
+                  }
+                }
+              ]
+            },
+            "lp": {
+              "evaluation_complete": true,
+              "service_met": true,
+              "delivered_kwh": 5.0,
+              "shortfall_kwh": 0.0,
+              "overdelivery_kwh": 0.0,
+              "sessions": [
+                {
+                  "session_id": "A",
+                  "departed": true,
+                  "required_kwh": 2.0,
+                  "delivered_kwh": 2.0,
+                  "shortfall_kwh": 0.0,
+                  "overdelivery_kwh": 0.0
+                },
+                {
+                  "session_id": "B",
+                  "departed": true,
+                  "required_kwh": 3.0,
+                  "delivered_kwh": 3.0,
+                  "shortfall_kwh": 0.0,
+                  "overdelivery_kwh": 0.0
+                }
+              ],
+              "steps": [
+                {
+                  "issue_time_utc": "2026-11-06T00:00:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0,
+                    "B": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 2.0,
+                    "B": 3.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 8.0,
+                  "delivered_kwh": 2.0,
+                  "executed_kwh": {
+                    "A": 1.0,
+                    "B": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:15:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0,
+                    "B": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 1.0,
+                    "B": 2.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 8.0,
+                  "delivered_kwh": 2.0,
+                  "executed_kwh": {
+                    "A": 1.0,
+                    "B": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:30:00+00:00",
+                  "actions_kw": {
+                    "B": 4.0
+                  },
+                  "remaining_kwh": {
+                    "B": 1.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "B": 1.0
+                  }
+                }
+              ]
+            }
+          },
+          "edf_minus_lp_shortfall_kwh": 1.0
+        }
+      },
+      "status": "PASS"
+    },
+    {
+      "case_id": "L04",
+      "description": "Actual departure at minute 10, notice at minute 30, declared departure at minute 45.",
+      "variants": {
+        "base": {
+          "paired_input_sha256": "2ed01d7e2127a3fc886752a6661eaaaefd5ccc641f872028d1546fe281484c1b",
+          "policies": {
+            "edf": {
+              "evaluation_complete": true,
+              "service_met": false,
+              "delivered_kwh": 1.0,
+              "shortfall_kwh": 2.0,
+              "overdelivery_kwh": 0.0,
+              "sessions": [
+                {
+                  "session_id": "A",
+                  "departed": true,
+                  "required_kwh": 3.0,
+                  "delivered_kwh": 1.0,
+                  "shortfall_kwh": 2.0,
+                  "overdelivery_kwh": 0.0
+                }
+              ],
+              "steps": [
+                {
+                  "issue_time_utc": "2026-11-06T00:00:00+00:00",
+                  "actions_kw": {
+                    "A": 6.0
+                  },
+                  "remaining_kwh": {
+                    "A": 3.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 6.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:15:00+00:00",
+                  "actions_kw": {
+                    "A": 6.0
+                  },
+                  "remaining_kwh": {
+                    "A": 2.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 6.0,
+                  "delivered_kwh": 0.0,
+                  "executed_kwh": {
+                    "A": 0.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:30:00+00:00",
+                  "actions_kw": {},
+                  "remaining_kwh": {},
+                  "blocked": {},
+                  "commanded_kw": 0.0,
+                  "delivered_kwh": 0.0,
+                  "executed_kwh": {}
+                }
+              ]
+            },
+            "lp": {
+              "evaluation_complete": true,
+              "service_met": false,
+              "delivered_kwh": 0.0,
+              "shortfall_kwh": 3.0,
+              "overdelivery_kwh": 0.0,
+              "sessions": [
+                {
+                  "session_id": "A",
+                  "departed": true,
+                  "required_kwh": 3.0,
+                  "delivered_kwh": 0.0,
+                  "shortfall_kwh": 3.0,
+                  "overdelivery_kwh": 0.0
+                }
+              ],
+              "steps": [
+                {
+                  "issue_time_utc": "2026-11-06T00:00:00+00:00",
+                  "actions_kw": {},
+                  "remaining_kwh": {
+                    "A": 3.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 0.0,
+                  "delivered_kwh": 0.0,
+                  "executed_kwh": {}
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:15:00+00:00",
+                  "actions_kw": {
+                    "A": 6.0
+                  },
+                  "remaining_kwh": {
+                    "A": 3.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 6.0,
+                  "delivered_kwh": 0.0,
+                  "executed_kwh": {
+                    "A": 0.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:30:00+00:00",
+                  "actions_kw": {},
+                  "remaining_kwh": {},
+                  "blocked": {},
+                  "commanded_kw": 0.0,
+                  "delivered_kwh": 0.0,
+                  "executed_kwh": {}
+                }
+              ]
+            }
+          },
+          "edf_minus_lp_shortfall_kwh": -1.0
+        }
+      },
+      "status": "PASS"
+    },
+    {
+      "case_id": "L05",
+      "description": "Unknown request basis blocks dispatch.",
+      "variants": {
+        "base": {
+          "paired_input_sha256": "a2e9837f067553f777c059e1f9eb4d5ea98494d32772e5c2325d0f4e10141e16",
+          "policies": {
+            "edf": {
+              "evaluation_complete": true,
+              "service_met": false,
+              "delivered_kwh": 0.0,
+              "shortfall_kwh": 1.0,
+              "overdelivery_kwh": 0.0,
+              "sessions": [
+                {
+                  "session_id": "A",
+                  "departed": true,
+                  "required_kwh": 1.0,
+                  "delivered_kwh": 0.0,
+                  "shortfall_kwh": 1.0,
+                  "overdelivery_kwh": 0.0
+                }
+              ],
+              "steps": [
+                {
+                  "issue_time_utc": "2026-11-06T00:00:00+00:00",
+                  "actions_kw": {},
+                  "remaining_kwh": {},
+                  "blocked": {
+                    "A": "UNKNOWN_REQUEST_BASIS"
+                  },
+                  "commanded_kw": 0.0,
+                  "delivered_kwh": 0.0,
+                  "executed_kwh": {}
+                }
+              ]
+            },
+            "lp": {
+              "evaluation_complete": true,
+              "service_met": false,
+              "delivered_kwh": 0.0,
+              "shortfall_kwh": 1.0,
+              "overdelivery_kwh": 0.0,
+              "sessions": [
+                {
+                  "session_id": "A",
+                  "departed": true,
+                  "required_kwh": 1.0,
+                  "delivered_kwh": 0.0,
+                  "shortfall_kwh": 1.0,
+                  "overdelivery_kwh": 0.0
+                }
+              ],
+              "steps": [
+                {
+                  "issue_time_utc": "2026-11-06T00:00:00+00:00",
+                  "actions_kw": {},
+                  "remaining_kwh": {},
+                  "blocked": {
+                    "A": "UNKNOWN_REQUEST_BASIS"
+                  },
+                  "commanded_kw": 0.0,
+                  "delivered_kwh": 0.0,
+                  "executed_kwh": {}
+                }
+              ]
+            }
+          },
+          "edf_minus_lp_shortfall_kwh": 0.0
+        }
+      },
+      "status": "PASS"
+    },
+    {
+      "case_id": "L06",
+      "description": "Perturb only the hidden goal or shorten actual departure to minute 45.",
+      "variants": {
+        "base": {
+          "paired_input_sha256": "1f6b37061d79b2e28f8dc6a0d3059d6a67d4cacf850a3fc1d1dee552842fd32a",
+          "policies": {
+            "edf": {
+              "evaluation_complete": true,
+              "service_met": true,
+              "delivered_kwh": 4.0,
+              "shortfall_kwh": 0.0,
+              "overdelivery_kwh": 0.0,
+              "sessions": [
+                {
+                  "session_id": "A",
+                  "departed": true,
+                  "required_kwh": 4.0,
+                  "delivered_kwh": 4.0,
+                  "shortfall_kwh": 0.0,
+                  "overdelivery_kwh": 0.0
+                }
+              ],
+              "steps": [
+                {
+                  "issue_time_utc": "2026-11-06T00:00:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 4.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:15:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 3.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:30:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 2.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:45:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 1.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                }
+              ]
+            },
+            "lp": {
+              "evaluation_complete": true,
+              "service_met": true,
+              "delivered_kwh": 4.0,
+              "shortfall_kwh": 0.0,
+              "overdelivery_kwh": 0.0,
+              "sessions": [
+                {
+                  "session_id": "A",
+                  "departed": true,
+                  "required_kwh": 4.0,
+                  "delivered_kwh": 4.0,
+                  "shortfall_kwh": 0.0,
+                  "overdelivery_kwh": 0.0
+                }
+              ],
+              "steps": [
+                {
+                  "issue_time_utc": "2026-11-06T00:00:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 4.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:15:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 3.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:30:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 2.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:45:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 1.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                }
+              ]
+            }
+          },
+          "edf_minus_lp_shortfall_kwh": 0.0
+        },
+        "changed_goal": {
+          "paired_input_sha256": "27b76683e5a9e732c83fb30f85fc8103fc12ab427831cb8c7ccbc5eb30dac4fe",
+          "policies": {
+            "edf": {
+              "evaluation_complete": true,
+              "service_met": true,
+              "delivered_kwh": 4.0,
+              "shortfall_kwh": 0.0,
+              "overdelivery_kwh": 2.0,
+              "sessions": [
+                {
+                  "session_id": "A",
+                  "departed": true,
+                  "required_kwh": 2.0,
+                  "delivered_kwh": 4.0,
+                  "shortfall_kwh": 0.0,
+                  "overdelivery_kwh": 2.0
+                }
+              ],
+              "steps": [
+                {
+                  "issue_time_utc": "2026-11-06T00:00:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 4.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:15:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 3.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:30:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 2.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:45:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 1.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                }
+              ]
+            },
+            "lp": {
+              "evaluation_complete": true,
+              "service_met": true,
+              "delivered_kwh": 4.0,
+              "shortfall_kwh": 0.0,
+              "overdelivery_kwh": 2.0,
+              "sessions": [
+                {
+                  "session_id": "A",
+                  "departed": true,
+                  "required_kwh": 2.0,
+                  "delivered_kwh": 4.0,
+                  "shortfall_kwh": 0.0,
+                  "overdelivery_kwh": 2.0
+                }
+              ],
+              "steps": [
+                {
+                  "issue_time_utc": "2026-11-06T00:00:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 4.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:15:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 3.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:30:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 2.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:45:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 1.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                }
+              ]
+            }
+          },
+          "edf_minus_lp_shortfall_kwh": 0.0
+        },
+        "changed_departure": {
+          "paired_input_sha256": "43cbdab9ae7f229145ad76b54518f2184c3279186c954e3d7b39ff42ae215b43",
+          "policies": {
+            "edf": {
+              "evaluation_complete": true,
+              "service_met": false,
+              "delivered_kwh": 3.0,
+              "shortfall_kwh": 1.0,
+              "overdelivery_kwh": 0.0,
+              "sessions": [
+                {
+                  "session_id": "A",
+                  "departed": true,
+                  "required_kwh": 4.0,
+                  "delivered_kwh": 3.0,
+                  "shortfall_kwh": 1.0,
+                  "overdelivery_kwh": 0.0
+                }
+              ],
+              "steps": [
+                {
+                  "issue_time_utc": "2026-11-06T00:00:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 4.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:15:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 3.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:30:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 2.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:45:00+00:00",
+                  "actions_kw": {},
+                  "remaining_kwh": {},
+                  "blocked": {},
+                  "commanded_kw": 0.0,
+                  "delivered_kwh": 0.0,
+                  "executed_kwh": {}
+                }
+              ]
+            },
+            "lp": {
+              "evaluation_complete": true,
+              "service_met": false,
+              "delivered_kwh": 3.0,
+              "shortfall_kwh": 1.0,
+              "overdelivery_kwh": 0.0,
+              "sessions": [
+                {
+                  "session_id": "A",
+                  "departed": true,
+                  "required_kwh": 4.0,
+                  "delivered_kwh": 3.0,
+                  "shortfall_kwh": 1.0,
+                  "overdelivery_kwh": 0.0
+                }
+              ],
+              "steps": [
+                {
+                  "issue_time_utc": "2026-11-06T00:00:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 4.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:15:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 3.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:30:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 2.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:45:00+00:00",
+                  "actions_kw": {},
+                  "remaining_kwh": {},
+                  "blocked": {},
+                  "commanded_kw": 0.0,
+                  "delivered_kwh": 0.0,
+                  "executed_kwh": {}
+                }
+              ]
+            }
+          },
+          "edf_minus_lp_shortfall_kwh": 0.0
+        }
+      },
+      "status": "PASS"
+    },
+    {
+      "case_id": "L08",
+      "description": "Matched L08 variant: initial 2 kWh due at minute 15. At minute 15 the declaration adds 5 kWh, with a 2 kWh baseline and revised deadline at minute 60.",
+      "variants": {
+        "base": {
+          "paired_input_sha256": "2d0019b9f088375ba42d297ab14b5a61090c89f3300526fa7d2fed6efc1f0cea",
+          "policies": {
+            "edf": {
+              "evaluation_complete": true,
+              "service_met": true,
+              "delivered_kwh": 7.0,
+              "shortfall_kwh": 0.0,
+              "overdelivery_kwh": 0.0,
+              "sessions": [
+                {
+                  "session_id": "A",
+                  "departed": true,
+                  "required_kwh": 7.0,
+                  "delivered_kwh": 7.0,
+                  "shortfall_kwh": 0.0,
+                  "overdelivery_kwh": 0.0
+                }
+              ],
+              "steps": [
+                {
+                  "issue_time_utc": "2026-11-06T00:00:00+00:00",
+                  "actions_kw": {
+                    "A": 8.0
+                  },
+                  "remaining_kwh": {
+                    "A": 2.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 8.0,
+                  "delivered_kwh": 2.0,
+                  "executed_kwh": {
+                    "A": 2.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:15:00+00:00",
+                  "actions_kw": {
+                    "A": 8.0
+                  },
+                  "remaining_kwh": {
+                    "A": 5.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 8.0,
+                  "delivered_kwh": 2.0,
+                  "executed_kwh": {
+                    "A": 2.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:30:00+00:00",
+                  "actions_kw": {
+                    "A": 8.0
+                  },
+                  "remaining_kwh": {
+                    "A": 3.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 8.0,
+                  "delivered_kwh": 2.0,
+                  "executed_kwh": {
+                    "A": 2.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:45:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 1.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                }
+              ]
+            },
+            "lp": {
+              "evaluation_complete": true,
+              "service_met": true,
+              "delivered_kwh": 7.0,
+              "shortfall_kwh": 0.0,
+              "overdelivery_kwh": 0.0,
+              "sessions": [
+                {
+                  "session_id": "A",
+                  "departed": true,
+                  "required_kwh": 7.0,
+                  "delivered_kwh": 7.0,
+                  "shortfall_kwh": 0.0,
+                  "overdelivery_kwh": 0.0
+                }
+              ],
+              "steps": [
+                {
+                  "issue_time_utc": "2026-11-06T00:00:00+00:00",
+                  "actions_kw": {
+                    "A": 8.0
+                  },
+                  "remaining_kwh": {
+                    "A": 2.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 8.0,
+                  "delivered_kwh": 2.0,
+                  "executed_kwh": {
+                    "A": 2.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:15:00+00:00",
+                  "actions_kw": {
+                    "A": 4.0
+                  },
+                  "remaining_kwh": {
+                    "A": 5.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 4.0,
+                  "delivered_kwh": 1.0,
+                  "executed_kwh": {
+                    "A": 1.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:30:00+00:00",
+                  "actions_kw": {
+                    "A": 8.0
+                  },
+                  "remaining_kwh": {
+                    "A": 4.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 8.0,
+                  "delivered_kwh": 2.0,
+                  "executed_kwh": {
+                    "A": 2.0
+                  }
+                },
+                {
+                  "issue_time_utc": "2026-11-06T00:45:00+00:00",
+                  "actions_kw": {
+                    "A": 8.0
+                  },
+                  "remaining_kwh": {
+                    "A": 2.0
+                  },
+                  "blocked": {},
+                  "commanded_kw": 8.0,
+                  "delivered_kwh": 2.0,
+                  "executed_kwh": {
+                    "A": 2.0
+                  }
+                }
+              ]
+            }
+          },
+          "edf_minus_lp_shortfall_kwh": 0.0
+        }
+      },
+      "status": "PASS"
+    }
+  ],
+  "solver": {
+    "entrypoint": "scipy.optimize.linprog",
+    "method": "highs",
+    "scipy_version": "1.17.1",
+    "bundled_highs_version": "1.12.0",
+    "max_horizon_steps": 16
+  },
+  "source_sha256": {
+    "code/src/evcf/integration/reuse_contracts.py": "4656585ed90f4ef07551250baa1e078dfd5d531a827ab2035186662fb3445580",
+    "code/src/evcf/integration/controller_common.py": "9e860e64ee6bd7864fed3ba7af555690dee31109229ad9eac3c7f7eba8ee728f",
+    "code/src/evcf/integration/controller_quantities.py": "82f5ec3bb1eabea60d3f0b33b6f4af6bf940f52fb60f753280d19d045fb3141f",
+    "code/src/evcf/integration/controller_visibility.py": "1ad7b03e880245ea3ddd865647d6dcee2a603ef54e78d889f50ff04d8da970a2",
+    "code/src/evcf/integration/controller_adapter.py": "5b02916dcf683d6ac45c4846d565260e56fd4d0bec2177f2907e8dc3c5fd58d3",
+    "code/src/evcf/integration/charging_types.py": "cff6646104994c90b450484af9edc02dc7443fc7d9811de14e1ce6062ffc2151",
+    "code/src/evcf/integration/charging_policy.py": "4172b03afcd3e0b96eadf6ad6c9738562a8e84405e6dfc3805fb5ac1f3664e46",
+    "code/src/evcf/integration/charging_loop.py": "fdc46010e70b7962ea71ae63ac997b0541f64c9b18e49ff124b8bcd78df47235",
+    "code/src/evcf/integration/charging_plant.py": "40b4cd5987aa5f2752442e85cb155594e7d6b6283e25b86850c73c7d784b3cc4",
+    "code/src/evcf/integration/charging_optimizer.py": "f68fc9355e69dcef1d893b379a2cf9b509cce3e4eefb53eaa73a35f8621be96c",
+    "scripts/check_charging_optimizer.py": "75ac566c2d70b8a42cdda3f24b7532de739b6578e1b4f346cfec57e3e35f7a7a"
+  },
+  "passed": 7,
+  "failed": 0,
+  "elapsed_seconds": 0.3905575000680983,
+  "finished_at_utc": "2026-11-07T11:30:24.122981+00:00"
+}

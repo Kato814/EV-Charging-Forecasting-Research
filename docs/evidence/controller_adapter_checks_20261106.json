@@ -1,0 +1,157 @@
+{
+  "schema_version": "controller-adapter-checks/v1",
+  "scope": "hand-authored-engineering-only",
+  "status": "PASS",
+  "synthetic_only": true,
+  "real_dispatch_authorized": false,
+  "research_data_accessed": false,
+  "forecast_models_fitted": 0,
+  "services_contacted": false,
+  "started_at_utc": "2026-11-06T08:07:07.567026+00:00",
+  "python": "3.11.16",
+  "cases": [
+    {
+      "case_id": "C01",
+      "status": "PASS",
+      "observed": {
+        "before_receipt_a": 3.0,
+        "after_receipt_a": 9.0
+      }
+    },
+    {
+      "case_id": "C02",
+      "status": "PASS",
+      "observed": {
+        "unknown_rejected": "UNKNOWN_AVAILABILITY",
+        "replay_basis": "assumed_replay"
+      }
+    },
+    {
+      "case_id": "C03",
+      "status": "PASS",
+      "observed": {
+        "selected_request_kwh": 12,
+        "conflict_rejected": "CONFLICTING_REVISION",
+        "permutation_invariant": true
+      }
+    },
+    {
+      "case_id": "C04",
+      "status": "PASS",
+      "observed": {
+        "connected_before_receipt": 1,
+        "connected_after_receipt": 0,
+        "visible_event_age_seconds": 1200.0
+      }
+    },
+    {
+      "case_id": "C05",
+      "status": "PASS",
+      "observed": {
+        "current_a": 3.0,
+        "pilot_a": 8.0
+      }
+    },
+    {
+      "case_id": "C06",
+      "status": "PASS",
+      "observed": {
+        "sparse_rejected": "INSUFFICIENT_FORECAST_SUPPORT",
+        "dense_intervals": 16,
+        "probabilistic_forecast_validated": false
+      }
+    },
+    {
+      "case_id": "C07",
+      "status": "PASS",
+      "observed": {
+        "future_mutation_invariant": true,
+        "future_mapping_invariant": true,
+        "whole_truth_container_rejected": "INVALID_SCHEMA"
+      }
+    },
+    {
+      "case_id": "C08",
+      "status": "PASS",
+      "observed": {
+        "phase_angle_pf_rejected": "INVALID_POWER_ASSUMPTION",
+        "extra_line_multiplier_rejected": "INVALID_POWER_ASSUMPTION"
+      }
+    },
+    {
+      "case_id": "C09",
+      "status": "PASS",
+      "observed": {
+        "equal_strings_not_a_mapping": "UNKNOWN_DEVICE_MAPPING"
+      }
+    },
+    {
+      "case_id": "C10",
+      "status": "PASS",
+      "observed": {
+        "partial_fixed_mean_a": 1.0,
+        "partial_covered_mean_a": 3.0,
+        "complete_fixed_mean_a": 1.0,
+        "partial_coverage": 0.3333333333333333
+      }
+    },
+    {
+      "case_id": "C11",
+      "status": "PASS",
+      "observed": {
+        "reset_rejected": "ENERGY_COUNTER_RESET",
+        "epoch_change_rejected": "ENERGY_COUNTER_BOUNDARY",
+        "valid_increment_kwh": 1.0
+      }
+    },
+    {
+      "case_id": "C12",
+      "status": "PASS",
+      "observed": {
+        "unknown_basis_rejected": "UNKNOWN_REQUEST_BASIS",
+        "wrong_unit_rejected": "UNIT_MISMATCH",
+        "total_remaining_kwh": 7.0,
+        "additional_remaining_kwh": 4.0
+      }
+    },
+    {
+      "case_id": "C13",
+      "status": "PASS",
+      "observed": {
+        "archive_to_measured_rejected": "POWER_BASIS_MISMATCH",
+        "proxy_relabel_rejected": "POWER_BASIS_MISMATCH"
+      }
+    },
+    {
+      "case_id": "C14",
+      "status": "PASS",
+      "observed": {
+        "power_kw": 0.832,
+        "power_basis": "assumed_proxy",
+        "measured_power_admitted": false
+      }
+    },
+    {
+      "case_id": "C15",
+      "status": "PASS",
+      "observed": {
+        "unequal_scope_rejected": "MEASUREMENT_BOUNDARY_MISMATCH",
+        "same_scope_accepted": true,
+        "meter_calibration_validated": false
+      }
+    }
+  ],
+  "source_sha256": {
+    "code/src/evcf/integration/reuse_contracts.py": "4656585ed90f4ef07551250baa1e078dfd5d531a827ab2035186662fb3445580",
+    "code/src/evcf/integration/controller_common.py": "9e860e64ee6bd7864fed3ba7af555690dee31109229ad9eac3c7f7eba8ee728f",
+    "code/src/evcf/integration/controller_visibility.py": "1ad7b03e880245ea3ddd865647d6dcee2a603ef54e78d889f50ff04d8da970a2",
+    "code/src/evcf/integration/controller_quantities.py": "82f5ec3bb1eabea60d3f0b33b6f4af6bf940f52fb60f753280d19d045fb3141f",
+    "code/src/evcf/integration/controller_adapter.py": "5b02916dcf683d6ac45c4846d565260e56fd4d0bec2177f2907e8dc3c5fd58d3",
+    "code/src/evcf/integration/controller_acceptance.py": "a261b3645c773ba4598e1f5c20409a908d90d1a1b6b888d3f9b58fbee3199132",
+    "scripts/check_controller_adapter.py": "518dcb56ddbc302c525ff5d749c15403f7a02ee170b9365fac19d898f3954185"
+  },
+  "passed": 15,
+  "failed": 0,
+  "finished_at_utc": "2026-11-06T08:07:07.589814+00:00",
+  "elapsed_seconds": 0.0229396999347955
+}

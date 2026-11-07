@@ -19,7 +19,7 @@ class LoopResult:
 
 
 def run_loop(envelope, plant, *, site_id, cluster_id, device_limits_kw,
-             capacity_kw, steps, step_seconds=900):
+             capacity_kw, steps, step_seconds=900, policy=dispatch_edf):
     """Only realized feedback reaches policy; evaluation happens after execution."""
     if type(steps) is not int or steps <= 0 or not isinstance(envelope, dict):
         raise AdmissionError('INVALID_LOOP_CONFIG', 'Positive integer steps and envelope required')
@@ -35,9 +35,9 @@ def run_loop(envelope, plant, *, site_id, cluster_id, device_limits_kw,
         view = build_synthetic_controller_view(template)
         feedback = plant.feedback(tuple(s.state.session_id for s in view.sessions),
                                   issue_time_utc=issue)
-        decision = dispatch_edf(view, feedback, site_id=site_id, cluster_id=cluster_id,
-                                device_limits_kw=device_limits_kw, capacity_kw=capacity_kw,
-                                step_seconds=step_seconds)
+        decision = policy(view, feedback, site_id=site_id, cluster_id=cluster_id,
+                          device_limits_kw=device_limits_kw, capacity_kw=capacity_kw,
+                          step_seconds=step_seconds)
         execution = plant.execute(decision.actions, issue_time_utc=issue, step_seconds=step_seconds)
         decisions.append(decision)
         executions.append(execution)

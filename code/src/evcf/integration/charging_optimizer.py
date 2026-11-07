@@ -16,7 +16,7 @@ SOLVER_METHOD = 'highs'
 _TOLERANCE = 1e-7
 
 
-def _checked_solution(result, matrix, row_limits, upper_kw):
+def _checked_solution(result, matrix, row_limits, upper_kw, costs):
     if (getattr(result, 'success', None) is not True
             or type(getattr(result, 'status', None)) is not int or result.status != 0):
         raise AdmissionError('OPTIMIZER_FAILED', 'HiGHS did not report an optimal solution')
@@ -30,7 +30,7 @@ def _checked_solution(result, matrix, row_limits, upper_kw):
             or not np.isfinite(powers).all() or not np.isfinite(objective)):
         raise AdmissionError('INVALID_OPTIMIZER_SOLUTION', 'invalid solution shape or values')
     powers = powers.astype(float)
-    achieved = -powers.sum()
+    achieved = costs @ powers
     used = matrix @ powers
     if (not np.isfinite(used).all() or not np.isfinite(achieved)
             or np.any(powers < -_TOLERANCE) or np.any(powers - upper_kw > _TOLERANCE)
@@ -40,7 +40,7 @@ def _checked_solution(result, matrix, row_limits, upper_kw):
     return powers
 
 
-def _solve_first_step(deadlines, requests_kwh, limits_kw, capacity_kw, hours):
+def _solve_first_step(deadlines, requests_kwh, limits_kw, capacity_kw, hours, prefer_early):
     try:
         from scipy.optimize import linprog
         from scipy.sparse import coo_matrix
@@ -59,15 +59,36 @@ def _solve_first_step(deadlines, requests_kwh, limits_kw, capacity_kw, hours):
     row_limits = np.concatenate((requests_kwh, np.full(horizon, capacity_kw)))
     upper_kw = np.asarray(limits_kw)[session]
     bounds = np.column_stack((np.zeros(len(period)), upper_kw))
-    try:
-        # A common positive duration makes maximizing sum(kW) equivalent to
-        # maximizing delivered kWh. Equal-service plans have no secondary score.
-        result = linprog(-np.ones(len(period)), A_ub=matrix, b_ub=row_limits,
-                         bounds=bounds, method=SOLVER_METHOD,
-                         options={'primal_feasibility_tolerance': _TOLERANCE})
-    except (RuntimeError, ValueError, TypeError, OverflowError) as exc:
-        raise AdmissionError('OPTIMIZER_FAILED', 'HiGHS could not solve the charging plan') from exc
-    return _checked_solution(result, matrix, row_limits, upper_kw)[period == 0]
+
+    def solve(costs, **equalities):
+        try:
+            result = linprog(costs, A_ub=matrix, b_ub=row_limits, bounds=bounds,
+                             method=SOLVER_METHOD, options={'primal_feasibility_tolerance': _TOLERANCE},
+                             **equalities)
+        except (RuntimeError, ValueError, TypeError, OverflowError) as exc:
+            raise AdmissionError('OPTIMIZER_FAILED', 'HiGHS could not solve the charging plan') from exc
+        return _checked_solution(result, matrix, row_limits, upper_kw, costs)
+
+    # The common duration makes maximizing summed power equivalent to maximizing energy.
+    primary = solve(-np.ones(len(period)))
+    if not prefer_early or not any(requests_kwh):
+        return primary[period == 0]
+
+    energy_rows = matrix[:len(deadlines)]
+    shortfalls = np.maximum(0., requests_kwh - energy_rows @ primary)
+    if shortfalls.sum() > _TOLERANCE:
+        return primary[period == 0]
+
+    # Fix the first optimum in kWh, then minimize the energy-weighted delivery
+    # period (common hours can be factored out). Only the first interval executes.
+    total_row = np.full((1, len(period)), hours)
+    target_kwh = total_row @ primary
+    early = solve(period, A_eq=total_row, b_eq=target_kwh)
+    if (abs((total_row @ early)[0] - target_kwh[0]) > _TOLERANCE
+            or np.maximum(0., requests_kwh - energy_rows @ early).sum() > _TOLERANCE
+            or period @ early > period @ primary + _TOLERANCE):
+        raise AdmissionError('INVALID_OPTIMIZER_SOLUTION', 'secondary plan lost service or delayed delivery')
+    return early[period == 0]
 
 
 def dispatch_optimized(view, feedback, *, site_id, cluster_id, device_limits_kw,
@@ -77,6 +98,23 @@ def dispatch_optimized(view, feedback, *, site_id, cluster_id, device_limits_kw,
     Recompute at each issue with the same admission, feedback, and uncertainty
     diagnostics as EDF. All admitted deadlines must fit the 16-interval horizon.
     """
+    return _dispatch(view, feedback, site_id, cluster_id, device_limits_kw, capacity_kw,
+                     step_seconds, prefer_early=False)
+
+
+def dispatch_early(view, feedback, *, site_id, cluster_id, device_limits_kw,
+                   capacity_kw, step_seconds=900) -> DispatchDecision:
+    """Prefer earlier aggregate delivery among plans serving all admitted requests.
+
+    At each issue, retain the primary-only allocation if those requests cannot
+    all be met by their currently declared deadlines.
+    """
+    return _dispatch(view, feedback, site_id, cluster_id, device_limits_kw, capacity_kw,
+                     step_seconds, prefer_early=True)
+
+
+def _dispatch(view, feedback, site_id, cluster_id, device_limits_kw, capacity_kw,
+              step_seconds, *, prefer_early):
     admitted = dispatch_edf(view, feedback, site_id=site_id, cluster_id=cluster_id,
                             device_limits_kw=device_limits_kw, capacity_kw=capacity_kw,
                             step_seconds=step_seconds)
@@ -92,7 +130,7 @@ def dispatch_optimized(view, feedback, *, site_id, cluster_id, device_limits_kw,
         raise AdmissionError('OPTIMIZER_HORIZON', 'declared departure exceeds 16 steps')
     limits = [float(device_limits_kw[s.device_id]) for s in states]
     hours = step_seconds / 3600.0
-    planned = _solve_first_step(deadlines, requests, limits, float(capacity_kw), hours)
+    planned = _solve_first_step(deadlines, requests, limits, float(capacity_kw), hours, prefer_early)
 
     # Remove accepted solver roundoff before emitting a command. Exact binary
     # headroom prevents a series of decimal kW values from exceeding the site

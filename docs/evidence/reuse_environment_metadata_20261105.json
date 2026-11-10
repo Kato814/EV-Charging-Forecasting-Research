@@ -1,0 +1,56 @@
+{
+  "checked_on": "2026-11-05",
+  "scope": "read-only package metadata; no scientific imports, installs, data access or model runs",
+  "environments": {
+    "default": {
+      "python": "3.12.7",
+      "packages": {
+        "numpy": "1.26.4",
+        "scipy": "1.13.1",
+        "pandas": "2.2.2",
+        "pandapower": null,
+        "cvxpy": null,
+        "acnportal": null,
+        "clarabel": null,
+        "scs": null,
+        "osqp": null,
+        "ecos": null
+      }
+    },
+    "evcf-gate1-pilot": {
+      "python": "3.11.16",
+      "packages": {
+        "numpy": "2.4.6",
+        "scipy": "1.17.1",
+        "pandas": "3.0.5",
+        "pandapower": null,
+        "cvxpy": null,
+        "acnportal": null,
+        "clarabel": null,
+        "scs": null,
+        "osqp": null,
+        "ecos": null
+      }
+    },
+    "evcf-r2-set": {
+      "python": "3.11.16",
+      "packages": {
+        "numpy": "2.4.6",
+        "scipy": "1.17.1",
+        "pandas": "3.0.5",
+        "pandapower": null,
+        "cvxpy": null,
+        "acnportal": null,
+        "clarabel": null,
+        "scs": null,
+        "osqp": null,
+        "ecos": null
+      }
+    }
+  },
+  "docker_on_path": false,
+  "wsl_status": {
+    "exit_code": 50,
+    "message": "未安装适用于 Linux 的 Windows 子系统。可通过运行 “wsl.exe --install” 进行安装。\r\r\n有关详细信息，请访问 https://aka.ms/wslinstall"
+  }
+}

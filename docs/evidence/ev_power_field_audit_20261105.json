@@ -1,0 +1,320 @@
+{
+  "schema_version": "ev-power-field-audit/v1",
+  "checked_on": "2026-11-05",
+  "status": "SOURCE_MAPPING_REVIEWED_REAL_POWER_ADMISSION_NOT_ESTABLISHED",
+  "scope": "official documentation and pinned source review; no empirical dataset audit",
+  "provisional": true,
+  "repository": {
+    "full_name": "Kato814/EV-Charging-Forecasting-Research",
+    "base_commit": "ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c",
+    "base_tree": "ee5c9953956c6df85618cb9b0df72cb116405aaf"
+  },
+  "upstream_acnportal_commit": "14e723b11339e56ca3afd2bf4969f9e4bc8c2623",
+  "field_map": {
+    "path": "research/ev_dispatch_field_map_20261105.csv",
+    "rows": 30,
+    "is_executable_allowlist": false,
+    "coverage_measured": false
+  },
+  "admission_draft": {
+    "path": "research/EV_DISPATCH_ADMISSION_DRAFT_20261105.md",
+    "gate_ids": [
+      "G1",
+      "G2",
+      "G3",
+      "G4",
+      "G5",
+      "G6",
+      "G7",
+      "G8",
+      "G9"
+    ],
+    "planned_cases": [
+      "C01",
+      "C02",
+      "C03",
+      "C04",
+      "C05",
+      "C06",
+      "C07",
+      "C08",
+      "C09",
+      "C10",
+      "C11",
+      "C12",
+      "C13",
+      "C14",
+      "C15"
+    ],
+    "cases_executed_this_audit": 0,
+    "adapter_implemented_this_audit": false
+  },
+  "execution_boundary": {
+    "dataset_api_called": false,
+    "research_data_downloaded": false,
+    "research_assets_opened": false,
+    "holdouts_accessed": false,
+    "models_run": false,
+    "packages_installed": false,
+    "scientific_protocols_changed": false,
+    "e208_authorization_changed": false
+  },
+  "preserved_months": {
+    "explored": [
+      "2019-02",
+      "2019-05",
+      "2019-08",
+      "2019-11"
+    ],
+    "development": [
+      "2019-01",
+      "2019-04",
+      "2019-07",
+      "2019-10"
+    ],
+    "sealed_holdout": [
+      "2019-03",
+      "2019-06",
+      "2019-09",
+      "2019-12"
+    ]
+  },
+  "sources": [
+    {
+      "id": "R1",
+      "repository": "Kato814/EV-Charging-Forecasting-Research",
+      "path": "code/src/evcf/data/acn_jpl_cleaning.py",
+      "ref": "ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c",
+      "blob_sha": "908578aada227d6f054d4b004bacdce7731f52b9",
+      "url": "https://github.com/Kato814/EV-Charging-Forecasting-Research/blob/ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c/code/src/evcf/data/acn_jpl_cleaning.py",
+      "review_level": "source_read_only",
+      "relevant_lines": "48-53;260-272;470-516;566-617;687-707;742-767"
+    },
+    {
+      "id": "R2",
+      "repository": "Kato814/EV-Charging-Forecasting-Research",
+      "path": "code/src/evcf/data/acn_jpl_15min.py",
+      "ref": "ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c",
+      "blob_sha": "d5e16037293b59deb0282768bbd41f29942255fe",
+      "url": "https://github.com/Kato814/EV-Charging-Forecasting-Research/blob/ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c/code/src/evcf/data/acn_jpl_15min.py",
+      "review_level": "source_read_only",
+      "relevant_lines": "378-427"
+    },
+    {
+      "id": "R3",
+      "repository": "Kato814/EV-Charging-Forecasting-Research",
+      "path": "code/src/evcf/data/acn_jpl_issue_snapshots.py",
+      "ref": "ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c",
+      "blob_sha": "76116a5b473d046edcc58b531e581d35920bca76",
+      "url": "https://github.com/Kato814/EV-Charging-Forecasting-Research/blob/ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c/code/src/evcf/data/acn_jpl_issue_snapshots.py",
+      "review_level": "source_read_only",
+      "relevant_lines": "457-515;539-548;887-904;920-924;984-1055"
+    },
+    {
+      "id": "R4",
+      "repository": "Kato814/EV-Charging-Forecasting-Research",
+      "path": "code/src/evcf/data/acn_jpl_power_semantics.py",
+      "ref": "ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c",
+      "blob_sha": "b70ceca9f2c81788e6a1afc06695c22f9bd46af6",
+      "url": "https://github.com/Kato814/EV-Charging-Forecasting-Research/blob/ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c/code/src/evcf/data/acn_jpl_power_semantics.py",
+      "review_level": "source_read_only",
+      "relevant_lines": "46-81;150-215;567-573"
+    },
+    {
+      "id": "A1",
+      "repository": "zach401/acnportal",
+      "path": "acnportal/acnsim/events/acndata_events.py",
+      "ref": "14e723b11339e56ca3afd2bf4969f9e4bc8c2623",
+      "blob_sha": "347fb67c13b2daceac2ad04ca60dcc920c3b970b",
+      "url": "https://github.com/zach401/acnportal/blob/14e723b11339e56ca3afd2bf4969f9e4bc8c2623/acnportal/acnsim/events/acndata_events.py",
+      "review_level": "source_read_only",
+      "relevant_lines": "102-133"
+    },
+    {
+      "id": "A2",
+      "repository": "zach401/acnportal",
+      "path": "acnportal/acnsim/models/evse.py",
+      "ref": "14e723b11339e56ca3afd2bf4969f9e4bc8c2623",
+      "blob_sha": "2d1aa0fbf9cb594075a29cda077b5e7e2955f832",
+      "url": "https://github.com/zach401/acnportal/blob/14e723b11339e56ca3afd2bf4969f9e4bc8c2623/acnportal/acnsim/models/evse.py",
+      "review_level": "source_read_only",
+      "relevant_lines": "12-30;110-136;442-499"
+    },
+    {
+      "id": "A3",
+      "repository": "zach401/acnportal",
+      "path": "acnportal/acnsim/analysis/__init__.py",
+      "ref": "14e723b11339e56ca3afd2bf4969f9e4bc8c2623",
+      "blob_sha": "4cf824d2dbb0c124a435e211fef6fd86389d9772",
+      "url": "https://github.com/zach401/acnportal/blob/14e723b11339e56ca3afd2bf4969f9e4bc8c2623/acnportal/acnsim/analysis/__init__.py",
+      "review_level": "source_read_only",
+      "relevant_lines": "18-27"
+    },
+    {
+      "id": "R5",
+      "repository": "Kato814/EV-Charging-Forecasting-Research",
+      "ref": "ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c",
+      "path": "CURRENT_STATUS.md",
+      "url": "https://github.com/Kato814/EV-Charging-Forecasting-Research/blob/ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c/CURRENT_STATUS.md",
+      "relevant_lines": "57-59",
+      "review_level": "source_read_only"
+    },
+    {
+      "id": "R6",
+      "repository": "Kato814/EV-Charging-Forecasting-Research",
+      "ref": "ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c",
+      "path": "code/configs/acn_jpl_development_prep_2019.yaml",
+      "url": "https://github.com/Kato814/EV-Charging-Forecasting-Research/blob/ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c/code/configs/acn_jpl_development_prep_2019.yaml",
+      "relevant_lines": "41-53",
+      "review_level": "source_read_only"
+    },
+    {
+      "id": "R7",
+      "repository": "Kato814/EV-Charging-Forecasting-Research",
+      "ref": "ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c",
+      "path": "code/src/evcf/data/acn_audit.py",
+      "url": "https://github.com/Kato814/EV-Charging-Forecasting-Research/blob/ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c/code/src/evcf/data/acn_audit.py",
+      "relevant_lines": "261-274;313-320",
+      "review_level": "source_read_only"
+    },
+    {
+      "id": "R8",
+      "repository": "Kato814/EV-Charging-Forecasting-Research",
+      "ref": "ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c",
+      "path": "code/src/evcf/data/acn_api.py",
+      "url": "https://github.com/Kato814/EV-Charging-Forecasting-Research/blob/ba9bbc894fd5b2dc3183ef1adb0aa3205578c85c/code/src/evcf/data/acn_api.py",
+      "relevant_lines": "76;106-112",
+      "review_level": "source_read_only"
+    },
+    {
+      "id": "A4",
+      "repository": "zach401/acnportal",
+      "ref": "14e723b11339e56ca3afd2bf4969f9e4bc8c2623",
+      "path": "acnportal/acnsim/models/ev.py",
+      "url": "https://github.com/zach401/acnportal/blob/14e723b11339e56ca3afd2bf4969f9e4bc8c2623/acnportal/acnsim/models/ev.py",
+      "relevant_lines": "19-39;130-144",
+      "review_level": "source_read_only"
+    },
+    {
+      "id": "A5",
+      "repository": "zach401/acnportal",
+      "ref": "14e723b11339e56ca3afd2bf4969f9e4bc8c2623",
+      "path": "acnportal/acnsim/network/charging_network.py",
+      "url": "https://github.com/zach401/acnportal/blob/14e723b11339e56ca3afd2bf4969f9e4bc8c2623/acnportal/acnsim/network/charging_network.py",
+      "relevant_lines": "430-484;530-540",
+      "review_level": "source_read_only"
+    },
+    {
+      "id": "A6",
+      "repository": "zach401/acnportal",
+      "ref": "14e723b11339e56ca3afd2bf4969f9e4bc8c2623",
+      "path": "acnportal/acnsim/network/sites/jpl_acn.py",
+      "url": "https://github.com/zach401/acnportal/blob/14e723b11339e56ca3afd2bf4969f9e4bc8c2623/acnportal/acnsim/network/sites/jpl_acn.py",
+      "relevant_lines": "12-56",
+      "review_level": "source_read_only"
+    },
+    {
+      "id": "A7",
+      "repository": "zach401/acnportal",
+      "ref": "14e723b11339e56ca3afd2bf4969f9e4bc8c2623",
+      "path": "acnportal/acnsim/models/battery.py",
+      "url": "https://github.com/zach401/acnportal/blob/14e723b11339e56ca3afd2bf4969f9e4bc8c2623/acnportal/acnsim/models/battery.py",
+      "relevant_lines": "45-70;207-222;283-286",
+      "review_level": "source_read_only"
+    },
+    {
+      "id": "D1",
+      "title": "Official ACN-Data field documentation",
+      "url": "https://ev.caltech.edu/dataset",
+      "section_reviewed": "Fields; User Inputs; Time Series",
+      "accessed_on": "2026-11-05",
+      "review_level": "relevant_sections_only",
+      "availability_note": "Documentation read; dataset access and field coverage not tested."
+    },
+    {
+      "id": "D2",
+      "title": "ACN-Data: Analysis and Applications of an Open EV Charging Dataset (2019)",
+      "url": "https://ev.caltech.edu/assets/pub/ACN_Data_Analysis_and_Applications.pdf",
+      "section_reviewed": "Page 1, privacy-release-delay footnote",
+      "accessed_on": "2026-11-05",
+      "review_level": "relevant_sections_only",
+      "availability_note": "Documentation read; dataset access and field coverage not tested."
+    },
+    {
+      "id": "D3",
+      "title": "The Adaptive Charging Network Research Portal: Systems, Tools, and Algorithms (2021)",
+      "url": "https://thesis.caltech.edu/14191/1/Lee_Zachary_J_2021_Thesis.pdf",
+      "section_reviewed": "Chapter 3; Tables 3.4-3.8 and 3.11; sections 3.3-3.4",
+      "accessed_on": "2026-11-05",
+      "review_level": "relevant_sections_only",
+      "availability_note": "Documentation read; dataset access and field coverage not tested."
+    }
+  ],
+  "observations": [
+    {
+      "id": "O1",
+      "source_ids": [
+        "R1",
+        "R2",
+        "R3"
+      ],
+      "fact": "Bounded left-hold integration; fixed-window and covered-time means have different denominators."
+    },
+    {
+      "id": "O2",
+      "source_ids": [
+        "R3"
+      ],
+      "fact": "Horizon h targets interval [issue+h-15min, issue+h); five targets do not supply 16 dense scenario steps."
+    },
+    {
+      "id": "O3",
+      "source_ids": [
+        "R1",
+        "R3",
+        "D2"
+      ],
+      "fact": "Inspected schemas preserve event/modification time without independent receive-time evidence; historical public release delay is not current availability proof."
+    },
+    {
+      "id": "O4",
+      "source_ids": [
+        "A1",
+        "A4"
+      ],
+      "fact": "Default offline conversion uses final delivered energy, actual departure and spaceID; estimated departure defaults to actual departure."
+    },
+    {
+      "id": "O5",
+      "source_ids": [
+        "D3"
+      ],
+      "fact": "Richer power/voltage/energy and cluster-meter exports are described; their availability and coverage in this project were not checked."
+    },
+    {
+      "id": "O6",
+      "source_ids": [
+        "A2",
+        "D3"
+      ],
+      "fact": "Pinned AV simulation minimum nonzero pilot is 6A; the 2021 equipment table lists 8A. Do not equate versions or use pilot minima as measured-current cutoffs."
+    },
+    {
+      "id": "O7",
+      "source_ids": [
+        "R4",
+        "A3",
+        "A5",
+        "A6"
+      ],
+      "fact": "208V and connection phase angles are model metadata, not measured active-power calibration or true power-factor evidence."
+    }
+  ],
+  "decision": {
+    "real_power_admission": "blocked_missing_evidence",
+    "frozen_current_pipeline": "preserve",
+    "synthetic_adapter_work": "proposed_next_step",
+    "auxiliary_resource": "undecided",
+    "historical_experiment_leakage_claim": "not_established_by_this_review"
+  }
+}
